@@ -4,38 +4,13 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The built-in model processor: converts glTF 2.0 and OBJ sources into a
-/// <see cref="ModelAssetDescriptor"/> plus one <see cref="MeshAssetDescriptor"/> and mesh payload per
-/// part.
-/// </summary>
+/// <summary>The built-in model processor: converts glTF 2.0 and OBJ sources into a
+/// <see cref="ModelAssetDescriptor"/> and one <see cref="MeshAssetDescriptor"/> per part.</summary>
 /// <remarks>
-/// <para>
-/// The optional <c>[model]</c> sidecar supplies a positive uniform <c>scale</c>, the source's
-/// <c>front</c> axis, an optional canonical <c>shader</c> path, and a <c>collisions</c> toggle.
-/// <c>front</c> is the source's forward direction; the processor applies the rotation that maps it to
-/// RayBork's <c>-Z</c> forward direction. The exact axis table is documented on
-/// <see cref="ModelOrientation"/>: <c>-z</c> is identity, <c>+z</c> is 180 degrees about <c>+Y</c>,
-/// <c>+x</c> is +90 degrees about <c>+Y</c>, <c>-x</c> is -90 degrees about <c>+Y</c>, <c>+y</c> is
-/// -90 degrees about <c>+X</c>, and <c>-y</c> is +90 degrees about <c>+X</c>.
-/// </para>
-/// <para>
-/// The scale and rotation correct the mesh geometry, normals, and tangents before bounds and payloads
-/// are written. Node-chain transforms remain on each part as ten floats (position, rotation
-/// quaternion, scale), so <c>world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()</c>
-/// reproduces the authored placement. Part and payload paths are canonical and deterministic;
-/// duplicate names receive numeric suffixes. A part with no <c>[model] shader</c> defaults to the
-/// built-in canonical path <c>shaders/mesh</c>. Every error is <c>RB4009</c> and emits no outputs.
-/// </para>
-/// <para>
-/// Collision baking is on by default for triangle parts. The processor builds the BVH from the exact
-/// finalized geometry it writes to the mesh payload, encodes it as the sibling raw entry
-/// <c>&lt;mesh path&gt;-collision</c>, and records that path on the mesh descriptor. Line and point
-/// parts and parts with no non-degenerate triangle get no collision entry. <c>collisions = false</c>
-/// in the sidecar disables collision baking for every part of the source. A collision payload above
-/// <see cref="COLLISION_PAYLOAD_WARNING_BYTES"/> emits an <c>RB4009</c> warning that names the part
-/// and the opt-out.
-/// </para>
+/// The optional <c>[model]</c> sidecar sets <c>scale</c>, the <c>front</c> axis (rotated onto
+/// <c>-Z</c>), a <c>shader</c> path (default <c>shaders/mesh</c>), and <c>collisions</c>. A
+/// collision payload is the sibling <c>&lt;mesh path&gt;-collision</c> entry, and every error
+/// is <c>RB4009</c> with no outputs.
 /// </remarks>
 internal sealed class ModelProcessor : AssetProcessor<ModelSidecar>
 {

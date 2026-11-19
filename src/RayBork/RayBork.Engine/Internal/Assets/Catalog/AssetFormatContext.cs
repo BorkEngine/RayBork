@@ -2,37 +2,17 @@ using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The inputs for one engine asset decode: the canonical path, the descriptor bytes, the visible pack
-/// stack used to resolve sibling payload entries, and the app-lifetime font services.
-/// </summary>
+/// <summary>The inputs for one engine asset decode.</summary>
 /// <remarks>
-/// <para>
-/// The context is immutable and only valid for the duration of one decode on the catalog loader
-/// thread. The visible stack is the catalog's mounted snapshot; it is published atomically on start
-/// and never mutated by a loader, so a decode may read it without locking.
-/// </para>
-/// <para>
-/// The glyph generation service and the glyph texture factory are provided for
-/// <see cref="FontAssetFormat"/>, which creates one <see cref="FontGlyphPipeline"/> per decoded face.
-/// The factory uploads a generated MSDF bitmap as a procedural texture; the service runs the
-/// generation on the app-lifetime font thread. Other formats ignore them.
-/// </para>
+/// A context carries the canonical descriptor path, its payload bytes, the visible pack stack, and
+/// the app-lifetime font services. It is immutable and valid only for one decode on the loader
+/// thread; the glyph services are used only by <see cref="FontAssetFormat"/>.
 /// </remarks>
 internal sealed class AssetFormatContext
 {
     private readonly Dictionary<string, VisibleAsset> _visibleStack;
 
-    /// <summary>
-    /// Initializes a decode context.
-    /// </summary>
-    /// <param name="canonicalPath">The canonical descriptor path, without a leading slash.</param>
-    /// <param name="descriptorPayload">The complete descriptor payload bytes.</param>
-    /// <param name="visibleStack">The visible pack stack that resolves sibling payload entries.</param>
-    /// <param name="glyphService">The app-lifetime glyph generation service.</param>
-    /// <param name="glyphTextureFactory">The factory that uploads a generated glyph bitmap.</param>
-    /// <param name="fontLogger">The font logger category for per-glyph diagnostics.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes a decode context.</summary>
     internal AssetFormatContext(
         string canonicalPath,
         byte[] descriptorPayload,
@@ -57,42 +37,25 @@ internal sealed class AssetFormatContext
         _visibleStack = visibleStack;
     }
 
-    /// <summary>
-    /// Gets the canonical descriptor path, without a leading slash.
-    /// </summary>
+    /// <summary>Gets the canonical descriptor path, without a leading slash.</summary>
     internal string CanonicalPath { get; }
 
-    /// <summary>
-    /// Gets the complete descriptor payload bytes. A format must treat the array as read-only.
-    /// </summary>
+    /// <summary>Gets the descriptor payload bytes; formats must not modify them.</summary>
     internal byte[] DescriptorPayload { get; }
 
-    /// <summary>
-    /// Gets the app-lifetime glyph generation service. <see cref="FontAssetFormat"/> passes it to the
-    /// per-font pipeline it creates.
-    /// </summary>
+    /// <summary>Gets the app-lifetime glyph generation service.</summary>
     internal GlyphGenerationService GlyphService { get; }
 
-    /// <summary>
-    /// Gets the factory that uploads a generated MSDF glyph bitmap as a procedural texture.
-    /// </summary>
+    /// <summary>Gets the factory that uploads a generated glyph bitmap.</summary>
     internal IGlyphTextureFactory GlyphTextureFactory { get; }
 
-    /// <summary>
-    /// Gets the <c>RayBork.Font</c> logger that receives the per-glyph pipeline diagnostics.
-    /// </summary>
+    /// <summary>Gets the font logger category for per-glyph diagnostics.</summary>
     internal ILogger FontLogger { get; }
 
-    /// <summary>
-    /// Reads one sibling payload entry from the visible pack stack.
-    /// </summary>
-    /// <remarks>
-    /// The path must be canonical, resolve in the visible stack, and name a raw entry. Every rejection
-    /// is an <see cref="AssetLoadException"/> naming the descriptor path and the payload kind.
-    /// </remarks>
+    /// <summary>Reads one sibling raw payload entry.</summary>
     /// <param name="payloadPath">The payload path named by the descriptor.</param>
     /// <param name="payloadKind">The payload kind used in diagnostics, such as <c>mesh</c>.</param>
-    /// <returns>The decompressed payload bytes.</returns>
+    /// <exception cref="AssetLoadException">The payload is invalid or missing.</exception>
     internal byte[] ReadRawPayload(string payloadPath, string payloadKind)
     {
         if (!AssetPath.TryValidateCanonical(payloadPath, out string? reason))

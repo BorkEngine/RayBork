@@ -5,41 +5,20 @@ using RayBork.Internal;
 
 namespace RayBork;
 
-/// <summary>
-/// A frame-scoped recorder that captures one camera pass into the frame being recorded.
-/// </summary>
+/// <summary>A frame-scoped, tick-thread-only recorder for one camera pass in a frame.</summary>
 /// <remarks>
-/// <para>
-/// A camera is not a GPU object and not a reusable scene camera. Create it with
-/// <see cref="EngineContext.CreateCamera"/> during <see cref="IGame.Tick"/>, record draws, and dispose
-/// it before the callback returns. Cameras are sequential: creating one while another is active throws
-/// <see cref="InvalidOperationException"/>, and a camera left undisposed when the tick ends is an
-/// <see cref="InvalidOperationException"/> that names it.
-/// </para>
-/// <para>
-/// Each draw copies value snapshots of the mesh, material cursor state, tint, and transforms into the
-/// frame packet. The renderer never reads a live game object. Every recorded frame retains each mesh,
-/// internal shader program, and bound texture until the render thread releases the frame slot after
-/// presentation; a material object is not an engine asset and is never retained.
-/// </para>
-/// <para>
-/// The camera looks down local <c>-Z</c> in a right-handed, Y-up world. The projection uses Vulkan's
-/// <c>[0, 1]</c> reverse-Z depth range and already contains the Y-flip that maps world <c>+Y</c> to the
-/// top of the screen. <see cref="Dispose"/> seals the pass and is idempotent; after disposal every
-/// property and every draw throws <see cref="ObjectDisposedException"/>, while <see cref="IsDisposed"/>
-/// stays readable. All members are tick-thread only.
-/// </para>
-/// <para>
-/// The camera transform must have unit scale. A scaled camera transform is not a supported camera
-/// configuration, and <see cref="ScreenToWorldTransform"/> does not compensate for it.
-/// </para>
-/// <para>
-/// A camera records into the app's linear HDR scene target by default, or into the
-/// <see cref="RenderTexture"/> passed as the <c>target</c> parameter. A camera that targets a render
-/// texture writes that target; a later camera in the same tick can sample its
-/// <see cref="RenderTexture.ColorTexture"/>, and a camera that samples the target it writes is
-/// rejected.
-/// </para>
+/// Create it during <see cref="IGame.Tick"/> and dispose it before the callback returns: cameras
+/// are sequential, a second active camera or an undisposed one throws
+/// <see cref="InvalidOperationException"/>, and after the idempotent <see cref="Dispose"/> every
+/// other public member throws <see cref="ObjectDisposedException"/> while <see cref="IsDisposed"/>
+/// stays readable; a disposed asset argument also throws <see cref="ObjectDisposedException"/>.
+/// Draws snapshot mesh, material, tint, and transform values and retain each mesh, program, and
+/// bound texture in the frame (never a material object) until the render thread releases the frame
+/// slot; matrices compose as <c>local * transform</c> under the row-vector convention. The camera
+/// looks down local <c>-Z</c> in a right-handed Y-up world, uses a <c>[0, 1]</c> reverse-Z
+/// projection with a baked-in Y-flip, requires unit scale, and writes the app's linear HDR scene
+/// target unless created with a <see cref="RenderTexture"/> (a later camera may sample it, but a
+/// camera that samples the target it writes is rejected).
 /// </remarks>
 public sealed class Camera : IDisposable
 {
@@ -68,12 +47,7 @@ public sealed class Camera : IDisposable
     private static readonly Rect _fullTextureRect = new(0f, 0f, 1f, 1f);
     private static readonly Vector2 _centerOrigin = new(0.5f, 0.5f);
 
-    /// <summary>
-    /// The state every text draw records: source-over blending, no face culling, reverse-Z
-    /// greater-or-equal depth testing, and no depth writes. It matches the declared state of the
-    /// built-in <c>/shaders/msdf</c> program. Text records that program, so a text record never merges
-    /// with a billboard record over the mesh program.
-    /// </summary>
+    /// <summary>Text render state: alpha blending, no culling, reverse-Z, and no depth writes.</summary>
     private static readonly RenderState _textRenderState = new()
     {
         Blend = BlendMode.Alpha,
@@ -102,9 +76,7 @@ public sealed class Camera : IDisposable
     private readonly long _targetId;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a camera for a pass that <see cref="CameraService"/> already appended to the frame.
-    /// </summary>
+    /// <summary>Initializes a camera for a pass already appended to the frame.</summary>
     internal Camera(
         CameraService service,
         RenderFramePacket packet,
@@ -150,11 +122,10 @@ public sealed class Camera : IDisposable
         _targetId = target?.TargetId ?? 0;
     }
 
-    /// <summary>Gets the one-based camera number used to name the camera in leak diagnostics.</summary>
+    /// <summary>One-based camera number used to name the camera in leak diagnostics.</summary>
     internal int Number { get; }
 
-    /// <summary>Gets the world-space camera transform. The camera looks down its local <c>-Z</c>.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The world-space camera transform; the camera looks down its local <c>-Z</c>.</summary>
     public Transform Transform
     {
         get
@@ -164,8 +135,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the projection kind.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The projection kind.</summary>
     public CameraProjection Projection
     {
         get
@@ -175,9 +145,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the vertical field of view in degrees for a perspective camera, or <c>0</c> for an
-    /// orthographic camera.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>Vertical field of view in degrees for a perspective camera, or <c>0</c> otherwise.</summary>
     public float FieldOfView
     {
         get
@@ -187,9 +155,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the visible world-space height for an orthographic camera, or <c>0</c> for a
-    /// perspective camera.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>Visible world-space height for an orthographic camera, or <c>0</c> otherwise.</summary>
     public float OrthographicHeight
     {
         get
@@ -199,8 +165,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the near clip distance.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The near clip distance in world units.</summary>
     public float Near
     {
         get
@@ -210,8 +175,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the far clip distance. A perspective camera may report positive infinity.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The far clip distance; a perspective camera may report positive infinity.</summary>
     public float Far
     {
         get
@@ -221,8 +185,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the buffers this pass clears before it draws.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The buffers this pass clears before it draws.</summary>
     public ClearMode ClearMode
     {
         get
@@ -232,9 +195,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the linear color written when color is cleared. HDR components above <c>1</c> are
-    /// allowed.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The linear clear color; HDR components above <c>1</c> are allowed.</summary>
     public Color ClearColor
     {
         get
@@ -244,11 +205,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the render texture this pass writes, or <see langword="null"/> when the pass writes the
-    /// app's linear HDR scene target.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The render texture this pass writes, or <see langword="null"/> for the HDR target.</summary>
     public RenderTexture? Target
     {
         get
@@ -258,11 +215,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the pixel viewport in the render target, clamped to the target when the camera was created.
-    /// The origin is the top-left corner.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The pixel viewport, clamped to the target at creation, with top-left origin.</summary>
     public Rect Viewport
     {
         get
@@ -272,8 +225,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the world-to-view matrix.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The world-to-view matrix.</summary>
     public Matrix4x4 ViewMatrix
     {
         get
@@ -283,11 +235,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the view-to-clip matrix. It uses Vulkan's <c>[0, 1]</c> reverse-Z depth range and already
-    /// contains the Y-flip.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The view-to-clip matrix; it uses <c>[0, 1]</c> reverse-Z and contains the Y-flip.</summary>
     public Matrix4x4 ProjectionMatrix
     {
         get
@@ -297,8 +245,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets the combined <c>ViewMatrix * ProjectionMatrix</c> matrix.</summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The combined <c>ViewMatrix * ProjectionMatrix</c> matrix (world to clip).</summary>
     public Matrix4x4 ViewProjectionMatrix
     {
         get
@@ -308,11 +255,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the world-space frustum derived from <see cref="ViewProjectionMatrix"/>. The plane names
-    /// follow the engine's Y-flipped NDC; see <see cref="BoundingFrustum"/>.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <summary>The world-space frustum; plane names follow the engine's Y-flipped NDC.</summary>
     public BoundingFrustum Frustum
     {
         get
@@ -322,34 +265,19 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>Gets whether the camera was disposed. Stays readable after disposal.</summary>
+    /// <summary>Whether the camera was disposed; stays readable after disposal.</summary>
     public bool IsDisposed => _disposed;
 
-    /// <summary>
-    /// Records a model with each part's material snapshot, render state, and local transform.
-    /// </summary>
-    /// <param name="model">The model to draw.</param>
-    /// <param name="transform">The model instance transform applied after each part's local transform.</param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <summary>Records a model with per-part material, render state, and transform.</summary>
     /// <remarks>
-    /// <para>
-    /// Each part uses its own material. The draw snapshots that material's current uniform cursor and
-    /// texture bindings at the call and uses the part's <see cref="ModelPart.RenderState"/>. Different
-    /// parts may therefore use different programs, render states, uniform values, and textures in one
-    /// model draw.
-    /// </para>
-    /// <para>
-    /// <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the row-vector
-    /// convention. The recorded frame retains the internal program of every part material and every
-    /// bound texture; a material object itself is not an engine asset and is not retained.
-    /// </para>
+    /// World is <c>part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the row-vector
+    /// convention; each part uses its own material snapshot and
+    /// <see cref="ModelPart.RenderState"/>; an omitted tint is opaque white.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <see langword="null"/>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// A part material lacks a stage, or the caller is not the tick thread.
+    /// <exception cref="InvalidOperationException">A part material lacks a
+    /// vertex or fragment stage.
     /// </exception>
     public void DrawModel(Model model, Transform transform, Color? tint = null)
     {
@@ -376,44 +304,16 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a model as wireframe: every part is drawn with its own material and the polygon-mode-line
-    /// state.
-    /// </summary>
-    /// <param name="model">The model to draw.</param>
-    /// <param name="transform">The model instance transform applied after each part's local transform.</param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <summary>Records a model as wireframe through the polygon-mode-line pipeline.</summary>
     /// <remarks>
-    /// <para>
-    /// This is the raylib <c>DrawModelWires</c>/<c>DrawModelWiresEx</c> equivalent. It is
-    /// Transform-only by design: the transform supplies the position, rotation, and scale, and there
-    /// are no position, scale, or axis-angle overloads and no <c>Ex</c>/<c>Wires</c> suffix names.
-    /// </para>
-    /// <para>
-    /// The draw is <see cref="DrawModel"/> with a polygon-mode-line geometry pipeline: every part still
-    /// uses its own material snapshot (program, uniform cursor, and texture bindings at the call) and
-    /// its <see cref="ModelPart.RenderState"/>. Culling, depth test, depth write, and blending are
-    /// unchanged, so back faces stay culled and the visible triangle edges of front-facing geometry are
-    /// drawn. The tint, textures, and alpha behave exactly as in <see cref="DrawModel"/>: built-in
-    /// shaders multiply the tint into their output and sample the bound textures on the line
-    /// fragments. <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the
-    /// row-vector convention, and the transform scale and rotation apply to the part geometry.
-    /// </para>
-    /// <para>
-    /// The wireframe pipeline needs the device's <c>fillModeNonSolid</c> feature, which the renderer
-    /// enables when the device supports it. A device without the feature reports the draw as an
-    /// unsupported <see cref="GraphicsException"/> (<c>RB3001</c>) instead of silently drawing nothing;
-    /// M5 has no line-geometry fallback. Every wireframe pipeline is cached and keyed by the shader,
-    /// render state, mesh topology, and polygon mode, so it never merges with a filled draw over the
-    /// same mesh, program, and state.
-    /// </para>
+    /// Materials, render state, and the world matrix follow <see cref="DrawModel"/>. Requires the
+    /// device <c>fillModeNonSolid</c> feature; without it the draw reports
+    /// <see cref="GraphicsException"/> (<c>RB3001</c>) instead of falling back.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <see langword="null"/>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// A part material lacks a stage, or the caller is not the tick thread.
+    /// <exception cref="InvalidOperationException">A part material lacks a
+    /// vertex or fragment stage.
     /// </exception>
     public void DrawWireModel(Model model, Transform transform, Color? tint = null)
     {
@@ -440,21 +340,14 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one mesh with the shader cursor state captured at the call.
-    /// </summary>
-    /// <param name="mesh">The mesh to draw.</param>
-    /// <param name="transform">The instance transform; it maps mesh space to world space.</param>
-    /// <param name="shader">The shader used for the draw.</param>
-    /// <param name="renderState">
-    /// The render state override, or <see langword="null"/> for <see cref="Shader.DefaultRenderState"/>.
-    /// </param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The camera, mesh, shader, or a bound texture is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The shader lacks a stage, or the caller is not the tick thread.
-    /// </exception>
+    /// <summary>Records one mesh with the shader cursor state captured at the call.</summary>
+    /// <remarks>
+    /// An omitted tint is opaque white; an omitted render state uses
+    /// <see cref="Shader.DefaultRenderState"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The shader lacks a vertex or
+    /// fragment stage.</exception>
     public void DrawMesh(
         Mesh mesh,
         Transform transform,
@@ -487,22 +380,14 @@ public sealed class Camera : IDisposable
         record.BeginInstances(1)[0] = transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one instanced mesh draw. Every transform uses the shader cursor state captured once at
-    /// the call.
-    /// </summary>
-    /// <param name="mesh">The mesh to draw.</param>
-    /// <param name="shader">The shader used for every instance.</param>
-    /// <param name="transforms">The instance transforms; they map mesh space to world space.</param>
-    /// <param name="renderState">
-    /// The render state override, or <see langword="null"/> for <see cref="Shader.DefaultRenderState"/>.
-    /// </param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The camera, mesh, shader, or a bound texture is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The shader lacks a stage, or the caller is not the tick thread.
-    /// </exception>
+    /// <summary>Records one instanced mesh draw; an empty span records nothing.</summary>
+    /// <remarks>
+    /// An omitted tint is opaque white; an omitted render state uses
+    /// <see cref="Shader.DefaultRenderState"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The shader lacks a vertex or
+    /// fragment stage.</exception>
     public void DrawInstanced(
         Mesh mesh,
         Shader shader,
@@ -543,23 +428,16 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one instanced model draw with each part's material snapshot and render state.
-    /// </summary>
-    /// <param name="model">The model to draw.</param>
-    /// <param name="transforms">The model instance transforms applied after each part's local transform.</param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <summary>Records each model part instanced across every transform; empty spans draw nothing.</summary>
     /// <remarks>
-    /// Each part uses its own material snapshot and <see cref="ModelPart.RenderState"/> for every
-    /// transform. Different parts may use different programs. The recorded frame retains the internal
-    /// program of every part material and every bound texture; a material object itself is not retained.
+    /// Every part uses its own material snapshot and <see cref="ModelPart.RenderState"/> for all
+    /// instances, with <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c>; an
+    /// omitted tint is opaque white.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <see langword="null"/>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// A part material lacks a stage, or the caller is not the tick thread.
+    /// <exception cref="InvalidOperationException">A part material lacks a
+    /// vertex or fragment stage.
     /// </exception>
     public void DrawModelInstanced(
         Model model,
@@ -648,25 +526,12 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one world-space line segment with the engine line mesh.
-    /// </summary>
-    /// <param name="start">The world-space segment start.</param>
-    /// <param name="end">The world-space segment end.</param>
-    /// <param name="color">The linear line color.</param>
+    /// <summary>Records one world-space line segment, one pixel wide.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine line mesh mapped from its unit <c>(0, 0, 0)</c>–<c>(1, 0, 0)</c>
-    /// reference segment to <paramref name="start"/>–<paramref name="end"/>. It participates in the
-    /// normal batching, sorting, culling, and statistics path and contributes no triangles. A
-    /// zero-length segment records nothing. The line is one pixel wide; thick lines are not supported.
+    /// One instance of the engine line mesh; a zero-length segment records nothing and thick
+    /// lines are not supported.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="start"/> or <paramref name="end"/> is not finite.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A component of an endpoint is not finite.</exception>
     public void DrawLine(Vector3 start, Vector3 end, Color color)
     {
         EnsureDrawable(nameof(DrawLine));
@@ -689,21 +554,12 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateLineMatrix(start, end);
     }
 
-    /// <summary>
-    /// Records a world-space polyline as one instanced line draw.
-    /// </summary>
-    /// <param name="points">The world-space polyline points in order.</param>
-    /// <param name="color">The linear line color.</param>
+    /// <summary>Records a world-space polyline as one instanced line draw.</summary>
     /// <remarks>
-    /// Every consecutive point pair is one instance of the engine line mesh, so the polyline is
-    /// recorded as a strip that shares its interior vertices. Fewer than two points records nothing,
-    /// and a pair whose endpoints coincide is skipped. The draw contributes no triangles.
+    /// Every consecutive point pair is one line instance, sharing interior vertices; coincident
+    /// pairs and fewer than two points record nothing.
     /// </remarks>
     /// <exception cref="ArgumentException">A component of a point is not finite.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawLines(ReadOnlySpan<Vector3> points, Color color)
     {
         EnsureDrawable(nameof(DrawLines));
@@ -752,25 +608,17 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one camera-facing square of <paramref name="size"/> world units.
-    /// </summary>
-    /// <param name="position">The world-space center.</param>
-    /// <param name="color">The linear point color.</param>
-    /// <param name="size">The world-space width and height of the quad.</param>
+    /// <summary>Records one camera-facing square of <paramref name="size"/> world units.</summary>
     /// <remarks>
-    /// The point is an engine quad oriented with the camera basis, which avoids Vulkan point-size
-    /// limits. The default <paramref name="size"/> of one world unit gives a one-unit square. A size
-    /// of zero records nothing.
+    /// The point is an engine quad oriented with the camera basis, avoiding Vulkan point-size
+    /// limits; the size is the quad width and height, one world unit by default,
+    /// and zero records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
+    /// <exception cref="ArgumentException">A component of <paramref name="position"/> or
+    /// <paramref name="size"/> is not finite.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/>
+    /// is negative.</exception>
     public void DrawPoint(Vector3 position, Color color, float size = 1f)
     {
         EnsureDrawable(nameof(DrawPoint));
@@ -795,25 +643,13 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateBillboardMatrix(position, size, size, right, up, front);
     }
 
-    /// <summary>
-    /// Records one world-space triangle with the engine triangle mesh.
-    /// </summary>
-    /// <param name="a">The first world-space vertex.</param>
-    /// <param name="b">The second world-space vertex.</param>
-    /// <param name="c">The third world-space vertex.</param>
-    /// <param name="color">The linear triangle color.</param>
+    /// <summary>Records one world-space triangle.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine reference triangle under the affine map that sends
-    /// <c>(0, 0, 0)</c>, <c>(1, 0, 0)</c>, and <c>(0, 1, 0)</c> to <paramref name="a"/>,
-    /// <paramref name="b"/>, and <paramref name="c"/>. The map preserves the reference orientation, so
-    /// a triangle that is counter-clockwise as seen by the camera keeps its front face and a clockwise
-    /// one is culled. A degenerate or collinear triangle records nothing.
+    /// The engine reference triangle is mapped affinely with its orientation preserved:
+    /// counter-clockwise triangles as seen by the camera stay front-facing and clockwise ones are
+    /// culled. A degenerate or collinear triangle records nothing.
     /// </remarks>
     /// <exception cref="ArgumentException">A component of a vertex is not finite.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawTriangle(Vector3 a, Vector3 b, Vector3 c, Color color)
     {
         EnsureDrawable(nameof(DrawTriangle));
@@ -838,28 +674,13 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateTriangleMatrix(a, b, c, normal, Vector3.UnitZ);
     }
 
-    /// <summary>
-    /// Records a triangle strip as one instanced triangle draw.
-    /// </summary>
-    /// <param name="points">The world-space strip vertices in order.</param>
-    /// <param name="color">The linear triangle color.</param>
+    /// <summary>Records a world-space triangle strip as one instanced triangle draw.</summary>
     /// <remarks>
-    /// <para>
-    /// The strip is decomposed into <c>points.Length - 2</c> triangles. The first triangle uses the
-    /// first three points; every following triangle swaps its first two corners, which is the sliding
-    /// window of <see cref="PrimitiveTopology.TriangleStrip"/>. Each triangle keeps the same winding
-    /// and front-face culling as <see cref="DrawTriangle"/>.
-    /// </para>
-    /// <para>
-    /// A degenerate (zero-area) triangle records no instance, and fewer than three points records
-    /// nothing.
-    /// </para>
+    /// Decomposes <c>points.Length - 2</c> triangles with the sliding-window winding of
+    /// <see cref="PrimitiveTopology.TriangleStrip"/>; degenerate triangles and fewer than three
+    /// points record nothing.
     /// </remarks>
     /// <exception cref="ArgumentException">A component of a point is not finite.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawTriangleStrip(ReadOnlySpan<Vector3> points, Color color)
     {
         EnsureDrawable(nameof(DrawTriangleStrip));
@@ -913,28 +734,15 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a ray as a long world-space line segment along its unit direction.
-    /// </summary>
-    /// <param name="ray">The world-space ray.</param>
-    /// <param name="color">The linear line color.</param>
+    /// <summary>Records a ray as a long world-space line along its unit direction.</summary>
     /// <remarks>
-    /// <para>
-    /// A ray is infinite; the draw approximates it with the segment from <see cref="Ray.Origin"/> to
-    /// <see cref="Ray.Origin"/> plus <see cref="Ray.Direction"/> times <c>1,000,000</c> world units.
-    /// The segment is clipped by the view and the depth range like any other world-space line, so it
-    /// reads as an infinite ray while every buffer coordinate stays finite. The ray stores a unit
-    /// direction, so the far endpoint is exactly that distance away.
-    /// </para>
-    /// <para>A <c>default(Ray)</c> has a zero direction and records nothing.</para>
+    /// The infinite ray is approximated by a segment from <see cref="Ray.Origin"/> to
+    /// <see cref="Ray.Origin"/> plus <see cref="Ray.Direction"/> times <c>1,000,000</c> world
+    /// units, so every buffer coordinate stays finite. A <c>default(Ray)</c> with a zero
+    /// direction records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of the origin is not finite, or the far endpoint is not finite.
+    /// <exception cref="ArgumentException">A component of the origin or far endpoint is not finite.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawRay(Ray ray, Color color)
     {
         EnsureDrawable(nameof(DrawRay));
@@ -960,23 +768,14 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateLineMatrix(ray.Origin, end);
     }
 
-    /// <summary>
-    /// Records the twelve edges of a box as one instanced line draw.
-    /// </summary>
-    /// <param name="box">The box; its corners come from <see cref="BoundingBox.Min"/> and
-    /// <see cref="BoundingBox.Max"/>.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records the twelve edges of a box as one instanced line draw.</summary>
     /// <remarks>
-    /// Each edge is one engine line instance. An edge whose endpoints coincide records no instance, so
-    /// a box with a zero extent draws only its non-degenerate edges. An inverted box is drawn as
-    /// given.
+    /// Coincident endpoints record no instance, so a zero-extent box draws only its non-degenerate
+    /// edges; an inverted box is drawn as given.
     /// </remarks>
     /// <exception cref="ArgumentException">A component of <see cref="BoundingBox.Min"/> or
-    /// <see cref="BoundingBox.Max"/> is not finite.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <see cref="BoundingBox.Max"/> is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawBoundingBox(BoundingBox box, Color color)
     {
         EnsureDrawable(nameof(DrawBoundingBox));
@@ -1026,25 +825,17 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one solid box centered at <paramref name="position"/> with <paramref name="size"/>
-    /// extents.
-    /// </summary>
-    /// <param name="position">The world-space center.</param>
-    /// <param name="size">The world-space width, height, and depth.</param>
-    /// <param name="color">The linear box color.</param>
+    /// <summary>Records one solid box at <paramref name="position"/> with the given size.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine cube mesh scaled by <paramref name="size"/>. A size
-    /// component of zero records nothing.
+    /// One instance of the engine cube mesh scaled by <paramref name="size"/>; a zero size
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
+    /// <exception cref="ArgumentException">A component of <paramref name="position"/> or
+    /// <paramref name="size"/> is not finite.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A component of
+    /// <paramref name="size"/> is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCube(Vector3 position, Vector3 size, Color color)
     {
         EnsureDrawable(nameof(DrawCube));
@@ -1068,26 +859,14 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateTranslationScaleMatrix(position, size);
     }
 
-    /// <summary>
-    /// Records one solid box centered at <paramref name="position"/> with explicit width, height, and
-    /// depth.
-    /// </summary>
-    /// <param name="position">The world-space center.</param>
-    /// <param name="width">The world-space width along <c>X</c>.</param>
-    /// <param name="height">The world-space height along <c>Y</c>.</param>
-    /// <param name="length">The world-space depth along <c>Z</c>.</param>
-    /// <param name="color">The linear box color.</param>
+    /// <summary>Records one solid box with explicit width, height, and depth.</summary>
     /// <remarks>
-    /// This is the scalar convenience form of <see cref="DrawCube(Vector3, Vector3, Color)"/>: the
-    /// dimensions map to <c>(X, Y, Z)</c> size. A zero component records nothing.
+    /// Scalar convenience form of <see cref="DrawCube(Vector3, Vector3, Color)"/>; dimensions map
+    /// to <c>(X, Y, Z)</c> and a zero dimension records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of a dimension or of
-    /// <paramref name="position"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A dimension or a position component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A dimension
+    /// is negative.</exception>
     public void DrawCube(Vector3 position, float width, float height, float length, Color color)
     {
         EnsureDrawable(nameof(DrawCube));
@@ -1100,31 +879,15 @@ public sealed class Camera : IDisposable
         DrawCube(position, new Vector3(width, height, length), color);
     }
 
-    /// <summary>
-    /// Records one solid box at a transform with the transform's scale applied to
-    /// <paramref name="size"/>.
-    /// </summary>
-    /// <param name="transform">The box transform; its position is the box center.</param>
-    /// <param name="size">The local-space width, height, and depth before the transform scale.</param>
-    /// <param name="color">The linear box color.</param>
+    /// <summary>Records one solid box at <paramref name="transform"/>, scaled by the transform.</summary>
     /// <remarks>
-    /// <para>
-    /// The instance matrix is <c>Matrix4x4.CreateScale(size) * transform.ToMatrix()</c> under the
-    /// row-vector convention. The transform position is the box center, the transform rotation orients
-    /// the box, and the transform scale multiplies <paramref name="size"/> on each local axis. Identity
-    /// rotation and unit scale reproduce <see cref="DrawCube(Vector3, Vector3, Color)"/> at
-    /// <see cref="Transform.Position"/>.
-    /// </para>
-    /// <para>A zero size component or a zero transform scale component records nothing.</para>
+    /// The transform position is the box center and its rotation orients the box; a zero size or
+    /// transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of the transform or
-    /// <paramref name="size"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
-    /// is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCube(Transform transform, Vector3 size, Color color)
     {
         EnsureDrawable(nameof(DrawCube));
@@ -1148,25 +911,14 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(size) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one solid UV sphere centered at <paramref name="center"/>.
-    /// </summary>
-    /// <param name="center">The world-space center.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="color">The linear sphere color.</param>
+    /// <summary>Records one solid sphere scaled from the engine unit sphere.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine unit-radius sphere scaled by <paramref name="radius"/>.
-    /// The sphere uses the engine's default tessellation and has no LOD. A radius of zero records
-    /// nothing.
+    /// The engine sphere uses fixed default tessellation and has no LOD; a zero
+    /// radius records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="center"/> or <paramref name="radius"/> is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A center component or the radius is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius
+    /// is negative.</exception>
     public void DrawSphere(Vector3 center, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawSphere));
@@ -1190,30 +942,15 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateTranslationScaleMatrix(center, new Vector3(radius));
     }
 
-    /// <summary>
-    /// Records one solid sphere at a transform with the transform's scale applied to
-    /// <paramref name="radius"/>.
-    /// </summary>
-    /// <param name="transform">The sphere transform; its position is the sphere center.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="color">The linear sphere color.</param>
+    /// <summary>Records one solid sphere transformed and scaled by <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// <para>
-    /// The instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c> under the
-    /// row-vector convention. The transform position is the sphere center, the rotation orients it, and
-    /// the scale multiplies the radius on each local axis, so a non-uniform scale produces an
-    /// ellipsoid. Identity rotation and unit scale reproduce
-    /// <see cref="DrawSphere(Vector3, float, Color)"/> at <see cref="Transform.Position"/>.
-    /// </para>
-    /// <para>A zero radius or a zero transform scale component records nothing.</para>
+    /// A non-uniform transform scale produces an ellipsoid; a zero radius or transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
-    /// negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">The radius or a transform component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or a transform
+    /// scale component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawSphere(Transform transform, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawSphere));
@@ -1237,30 +974,15 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one solid tessellated sphere centered at <paramref name="center"/>.
-    /// </summary>
-    /// <param name="center">The world-space center.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="rings">The number of latitude bands; at least two.</param>
-    /// <param name="slices">The number of longitude segments; at least three.</param>
-    /// <param name="color">The linear sphere color.</param>
+    /// <summary>Records one solid tessellated sphere.</summary>
     /// <remarks>
-    /// Unlike <see cref="DrawSphere(Vector3, float, Color)"/>, which instances the fixed engine sphere
-    /// mesh, this overload composes the requested surface as one instanced triangle draw with
-    /// <c>2 * slices * (rings - 1)</c> triangles. The two poles are triangle fans and the seam closes
-    /// without a duplicated meridian. A zero radius records nothing.
+    /// The surface is composed directly with pole fans and a welded seam instead of the fixed
+    /// engine mesh; a zero radius records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of <paramref name="center"/> or
-    /// <paramref name="radius"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
-    /// <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">A center component or the radius is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius is negative,
+    /// <paramref name="rings"/> is less than two, or <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawSphere(Vector3 center, float radius, int rings, int slices, Color color)
     {
         EnsureDrawable(nameof(DrawSphere));
@@ -1281,30 +1003,16 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one solid tessellated sphere at a transform with the transform's scale applied to
-    /// <paramref name="radius"/>.
-    /// </summary>
-    /// <param name="transform">The sphere transform; its position is the sphere center.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="rings">The number of latitude bands; at least two.</param>
-    /// <param name="slices">The number of longitude segments; at least three.</param>
-    /// <param name="color">The linear sphere color.</param>
+    /// <summary>Records one solid tessellated sphere at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The surface is composed as in <see cref="DrawSphere(Vector3, float, int, int, Color)"/> and its
-    /// instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the transform
-    /// position is the center, the rotation orients the surface, and the scale multiplies the radius on
-    /// each local axis. A zero radius or a zero transform scale component records nothing.
+    /// A non-uniform transform scale produces an ellipsoid; a zero radius or transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The radius or a transform scale component is negative, <paramref name="rings"/> is less than
-    /// two, or <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">The radius or a transform component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or a transform
+    /// scale component is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawSphere(Transform transform, float radius, int rings, int slices, Color color)
     {
         EnsureDrawable(nameof(DrawSphere));
@@ -1325,62 +1033,27 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one capped equal-radius cylinder whose base is at <paramref name="position"/> and whose
-    /// axis points up world <c>+Y</c>, using the default 16 side segments.
-    /// </summary>
-    /// <param name="position">The world-space center of the base cap.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="height">The world-space height above the base.</param>
-    /// <param name="color">The linear cylinder color.</param>
+    /// <summary>Records a capped cylinder with 16 side segments.</summary>
     /// <remarks>
-    /// This is the convenience overload for callers that do not need a tessellation argument; it calls
-    /// <see cref="DrawCylinder(Vector3, float, float, Color, int)"/> with <c>16</c> sides. A radius or
-    /// height of zero records nothing.
+    /// Convenience form of the <c>sides</c> overload; a zero radius or height records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/>, <paramref name="radius"/>, or
-    /// <paramref name="height"/> is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="height"/> is negative.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A position component, radius, or height is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or height
+    /// is negative.</exception>
     public void DrawCylinder(Vector3 position, float radius, float height, Color color)
     {
         DrawCylinder(position, radius, height, color, sides: 16);
     }
 
-    /// <summary>
-    /// Records one capped equal-radius cylinder whose base is at <paramref name="position"/> and whose
-    /// axis points up world <c>+Y</c>.
-    /// </summary>
-    /// <param name="position">The world-space center of the base cap.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="height">The world-space height above the base.</param>
-    /// <param name="color">The linear cylinder color.</param>
-    /// <param name="sides">The number of side quads; must be at least three.</param>
+    /// <summary>Records a capped cylinder with the given side count.</summary>
     /// <remarks>
-    /// The cylinder is recorded as two instanced draws: <paramref name="sides"/> engine quads for the
-    /// sides and <c>2 * sides</c> engine triangles for the two caps, with outward-facing winding. The
-    /// side quads share their ring vertices exactly, so the silhouette is exact for any
-    /// <paramref name="sides"/> of at least three. A radius or height of zero records nothing.
+    /// Two instanced draws: <paramref name="sides"/> quads for the wall and <c>2 * sides</c>
+    /// triangles for the caps, wound outward; a zero radius or height records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/>, <paramref name="radius"/>, or
-    /// <paramref name="height"/> is not finite.
+    /// <exception cref="ArgumentException">A position component, radius, or height is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or height is
+    /// negative, or <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="height"/> is negative, or <paramref name="sides"/>
-    /// is less than three.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCylinder(Vector3 position, float radius, float height, Color color, int sides)
     {
         EnsureDrawable(nameof(DrawCylinder));
@@ -1405,41 +1078,17 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one capped cylinder or cone with unequal cap radii whose base is at
-    /// <paramref name="position"/> and whose axis points up world <c>+Y</c>.
-    /// </summary>
-    /// <param name="position">The world-space center of the bottom cap.</param>
-    /// <param name="radiusTop">The radius of the top cap; zero makes a cone apex.</param>
-    /// <param name="radiusBottom">The radius of the bottom cap; zero makes an inverted cone apex.</param>
-    /// <param name="height">The world-space height above the bottom cap.</param>
-    /// <param name="sides">The number of side segments; must be at least three.</param>
-    /// <param name="color">The linear cylinder color.</param>
+    /// <summary>Records a capped cylinder or cone with unequal cap radii.</summary>
     /// <remarks>
-    /// <para>
-    /// <paramref name="radiusBottom"/> is the cap at <paramref name="position"/> and
-    /// <paramref name="radiusTop"/> is the cap <paramref name="height"/> above it. Equal positive radii
-    /// are recorded as two instanced draws: <paramref name="sides"/> side quads and <c>2 * sides</c>
-    /// cap triangles with outward-facing winding. Unequal positive radii are a tapered cylinder that
-    /// needs two triangles per side segment, so it is recorded as one instanced triangle draw with
-    /// <c>4 * sides</c> triangles: two sides and one triangle per cap for each segment. When exactly
-    /// one radius is zero the shape is a cone and is recorded as one instanced triangle draw with
-    /// <c>2 * sides</c> triangles: <paramref name="sides"/> sides and <paramref name="sides"/> base-cap
-    /// triangles; the degenerate cap at the apex records nothing.
-    /// </para>
-    /// <para>A zero height or two zero radii records nothing.</para>
+    /// <paramref name="radiusBottom"/> is the cap at the position and <paramref name="radiusTop"/>
+    /// the cap <paramref name="height"/> above; equal positive radii make a cylinder, unequal radii
+    /// a tapered cylinder, and one zero radius a cone whose degenerate apex cap is skipped. A zero
+    /// height or two zero radii records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/>, <paramref name="radiusTop"/>,
-    /// <paramref name="radiusBottom"/>, or <paramref name="height"/> is not finite.
+    /// <exception cref="ArgumentException">A position, radius, or height component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A radius or the height is
+    /// negative, or <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius or the height is negative, or <paramref name="sides"/> is less than three.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCylinder(
         Vector3 position,
         float radiusTop,
@@ -1473,29 +1122,16 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one capped cylinder between two axis endpoints.
-    /// </summary>
-    /// <param name="start">The world-space center of the start cap.</param>
-    /// <param name="end">The world-space center of the end cap.</param>
-    /// <param name="startRadius">The radius of the cap at <paramref name="start"/>.</param>
-    /// <param name="endRadius">The radius of the cap at <paramref name="end"/>.</param>
-    /// <param name="sides">The number of side segments; must be at least three.</param>
-    /// <param name="color">The linear cylinder color.</param>
+    /// <summary>Records one capped cylinder between two axis endpoints.</summary>
     /// <remarks>
-    /// The local <c>+Y</c> axis is oriented from <paramref name="start"/> to <paramref name="end"/> and
-    /// the height is the segment length, so the cap radii apply at the matching endpoints. A zero
-    /// radius on one end makes a cone. The roll around the segment is deterministic. A zero-length
-    /// segment or two zero radii records nothing.
+    /// The local <c>+Y</c> axis runs from <paramref name="start"/> to <paramref name="end"/>, with
+    /// each cap taking its matching radius; the roll around the segment is deterministic. A
+    /// zero-length segment or two zero radii records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of an endpoint or radius is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius is negative, or <paramref name="sides"/> is less than three.
+    /// <exception cref="ArgumentException">An endpoint or radius component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A radius is negative, or
+    /// <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCylinder(
         Vector3 start,
         Vector3 end,
@@ -1529,37 +1165,17 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a capped cylinder at a transform with the transform's scale applied to its dimensions.
-    /// </summary>
-    /// <param name="transform">The cylinder transform; its position is the center of the bottom cap.</param>
-    /// <param name="radiusTop">The local-space top radius before the transform scale.</param>
-    /// <param name="radiusBottom">The local-space bottom radius before the transform scale.</param>
-    /// <param name="height">The local-space height above the bottom cap before the transform scale.</param>
-    /// <param name="sides">The number of side segments; must be at least three.</param>
-    /// <param name="color">The linear cylinder color.</param>
+    /// <summary>Records a capped cylinder scaled by <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// <para>
-    /// The cylinder's local axis is <c>+Y</c> and its bottom cap is at the local origin, so the
-    /// transform position is the bottom-cap center, <see cref="Transform.Up"/> is the axis, and
-    /// <see cref="Transform.Position"/> plus <c>Up * height * Scale.Y</c> is the top-cap center. The
-    /// instance matrices are composed as <c>local * transform.ToMatrix()</c>, so the transform scale
-    /// multiplies the radii on the local X/Z axes and the height on the local Y axis. Identity rotation
-    /// and unit scale reproduce <see cref="DrawCylinder(Vector3, float, float, Color, int)"/> at
-    /// <see cref="Transform.Position"/>.
-    /// </para>
-    /// <para>A zero height, two zero radii, or a zero transform scale component records nothing.</para>
+    /// The local axis is <c>+Y</c> with the bottom cap at the origin, so the transform position is
+    /// the bottom-cap center; a zero height, two zero radii, or a zero transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A radius, the height, or a transform component is not
-    /// finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius, the height, or a transform scale component is negative, or <paramref name="sides"/>
-    /// is less than three.
+    /// <exception cref="ArgumentException">A radius, height, or transform component is not finite.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A radius, height, or transform scale component
+    /// is negative, or <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCylinder(
         Transform transform,
         float radiusTop,
@@ -1586,31 +1202,16 @@ public sealed class Camera : IDisposable
         DrawCylinderCore(transform.ToMatrix(), radiusTop, radiusBottom, height, sides, color);
     }
 
-    /// <summary>
-    /// Records a wire cylinder whose base is at <paramref name="position"/> and whose axis points up
-    /// world <c>+Y</c>.
-    /// </summary>
-    /// <param name="position">The world-space center of the bottom cap.</param>
-    /// <param name="radiusTop">The radius of the top ring; zero omits the ring.</param>
-    /// <param name="radiusBottom">The radius of the bottom ring; zero omits the ring.</param>
-    /// <param name="height">The world-space height above the bottom cap.</param>
-    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a wire cylinder with its base at a position and axis <c>+Y</c>.</summary>
     /// <remarks>
-    /// The wire is one instanced line draw with <paramref name="sides"/> vertical edges plus one ring
-    /// of <paramref name="sides"/> segments for each non-zero radius, so
-    /// <c>sides * (1 + nonZeroRadiusCount)</c> line instances. It contributes no triangles. A zero
-    /// height or two zero radii records nothing.
+    /// One instanced line draw with <paramref name="sides"/> vertical edges plus one ring per
+    /// non-zero radius; it contributes no triangles, and a zero height or two zero
+    /// radii records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of <paramref name="position"/> or a radius or
-    /// the height is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius or the height is negative, or <paramref name="sides"/> is less than three.
+    /// <exception cref="ArgumentException">A position, radius, or height component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A radius or the height is
+    /// negative, or <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCylinder(
         Vector3 position,
         float radiusTop,
@@ -1644,29 +1245,16 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a wire cylinder between two axis endpoints.
-    /// </summary>
-    /// <param name="start">The world-space center of the start ring.</param>
-    /// <param name="end">The world-space center of the end ring.</param>
-    /// <param name="startRadius">The radius of the ring at <paramref name="start"/>.</param>
-    /// <param name="endRadius">The radius of the ring at <paramref name="end"/>.</param>
-    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a wire cylinder between two axis endpoints.</summary>
     /// <remarks>
-    /// The local <c>+Y</c> axis is oriented from <paramref name="start"/> to <paramref name="end"/> and
-    /// the height is the segment length. The instance count follows
-    /// <see cref="DrawWireCylinder(Vector3, float, float, float, int, Color)"/>. A zero-length segment
-    /// or two zero radii records nothing.
+    /// The local <c>+Y</c> axis runs from <paramref name="start"/> to <paramref name="end"/>;
+    /// instance count follows the position overload, and a zero-length segment or two zero
+    /// radii records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of an endpoint or radius is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius is negative, or <paramref name="sides"/> is less than three.
+    /// <exception cref="ArgumentException">An endpoint or radius component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A radius is negative, or
+    /// <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCylinder(
         Vector3 start,
         Vector3 end,
@@ -1700,30 +1288,16 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a wire cylinder at a transform with the transform's scale applied to its dimensions.
-    /// </summary>
-    /// <param name="transform">The cylinder transform; its position is the bottom-ring center.</param>
-    /// <param name="radiusTop">The local-space top radius before the transform scale.</param>
-    /// <param name="radiusBottom">The local-space bottom radius before the transform scale.</param>
-    /// <param name="height">The local-space height above the bottom ring before the transform scale.</param>
-    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a wire cylinder scaled by <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The local axis is <c>+Y</c> with the bottom ring at the local origin, so the transform position
-    /// is the bottom-ring center and the transform scale multiplies the radii and height. A zero
-    /// height, two zero radii, or a zero transform scale component records nothing.
+    /// The bottom ring is at the local origin and the axis is local <c>+Y</c>; a zero height, two
+    /// zero radii, or a zero transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A radius, the height, or a transform component is not
-    /// finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A radius, the height, or a transform scale component is negative, or <paramref name="sides"/>
-    /// is less than three.
+    /// <exception cref="ArgumentException">A radius, height, or transform component is not finite.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A radius, height, or transform scale component
+    /// is negative, or <paramref name="sides"/> is less than three.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCylinder(
         Transform transform,
         float radiusTop,
@@ -1750,24 +1324,13 @@ public sealed class Camera : IDisposable
         DrawWireCylinderCore(transform.ToMatrix(), radiusTop, radiusBottom, height, sides, color);
     }
 
-    /// <summary>
-    /// Records one horizontal plane centered at <paramref name="center"/>.
-    /// </summary>
-    /// <param name="center">The world-space center.</param>
-    /// <param name="size">The world-space width along <c>X</c> and depth along <c>Z</c>.</param>
-    /// <param name="color">The linear plane color.</param>
+    /// <summary>Records a horizontal plane centered at <paramref name="center"/>.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine plane mesh, which lies in the <c>XZ</c> plane and faces
-    /// world <c>+Y</c>. A size component of zero records nothing.
+    /// One instance of the engine plane mesh, which lies in <c>XZ</c> and faces world <c>+Y</c>; a
+    /// zero size component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="center"/> or <paramref name="size"/> is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A center or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component is negative.</exception>
     public void DrawPlane(Vector3 center, Vector2 size, Color color)
     {
         EnsureDrawable(nameof(DrawPlane));
@@ -1792,31 +1355,15 @@ public sealed class Camera : IDisposable
             Matrix4x4.CreateScale(size.X, 1f, size.Y) * Matrix4x4.CreateTranslation(center);
     }
 
-    /// <summary>
-    /// Records one horizontal plane at a transform with the transform's scale applied to
-    /// <paramref name="size"/>.
-    /// </summary>
-    /// <param name="transform">The plane transform; its position is the plane center.</param>
-    /// <param name="size">The local-space width along <c>X</c> and depth along <c>Z</c> before the
-    /// transform scale.</param>
-    /// <param name="color">The linear plane color.</param>
+    /// <summary>Records one plane at <paramref name="transform"/>, scaling the size by its scale.</summary>
     /// <remarks>
-    /// The plane's local surface is the <c>XZ</c> plane facing local <c>+Y</c>, so the instance matrix
-    /// is <c>Matrix4x4.CreateScale(size.X, 1, size.Y) * transform.ToMatrix()</c> under the row-vector
-    /// convention: the transform position is the plane center, the rotation orients the surface, and
-    /// the transform's X and Z scale components multiply the width and depth. Identity rotation and
-    /// unit scale reproduce <see cref="DrawPlane(Vector3, Vector2, Color)"/> at
-    /// <see cref="Transform.Position"/>. A zero size component or a zero transform scale component
-    /// records nothing.
+    /// The local surface is <c>XZ</c> facing local <c>+Y</c>, so the transform position is the
+    /// plane center; a zero size or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of the transform or
-    /// <paramref name="size"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
-    /// is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawPlane(Transform transform, Vector2 size, Color color)
     {
         EnsureDrawable(nameof(DrawPlane));
@@ -1840,39 +1387,16 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(size.X, 1f, size.Y) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one solid quad of <paramref name="size"/> in the transform's local <c>XY</c> plane.
-    /// </summary>
-    /// <param name="transform">The quad transform; its position is the quad center.</param>
-    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
-    /// transform scale.</param>
-    /// <param name="color">The linear quad color.</param>
-    /// <param name="renderState">
-    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
-    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
-    /// </param>
+    /// <summary>Records one solid quad in the transform's local <c>XY</c> plane.</summary>
     /// <remarks>
-    /// <para>
-    /// The quad's local surface is the <c>XY</c> plane facing local <c>+Z</c>, so the instance matrix is
-    /// <c>Matrix4x4.CreateScale(size.X, size.Y, 1) * transform.ToMatrix()</c> under the row-vector
-    /// convention: the transform position is the quad center, the rotation orients the surface, and
-    /// the transform's X and Y scale components multiply the width and height. The draw is one
-    /// instance of the engine quad mesh over the built-in <c>/shaders/primitive</c> material.
-    /// </para>
-    /// <para>
-    /// The effective render state is written to the draw record and is part of the batch key, so an
-    /// alpha-blended quad never merges with an opaque quad. A zero size component or a zero transform
-    /// scale component records nothing.
-    /// </para>
+    /// The quad faces local <c>+Z</c>; an omitted render state is <see cref="RenderState.Opaque"/>,
+    /// and the render state is part of the batch key, so blended and opaque quads never merge. A
+    /// zero size or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A transform or size component, or a color component, is not
-    /// finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
-    /// is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform, size, or color component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     [SuppressMessage(
         "ApiDesign",
         "RS0026:Do not add multiple overloads with optional parameters",
@@ -1907,46 +1431,19 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(size.X, size.Y, 1f) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one textured quad of <paramref name="size"/> in the transform's local <c>XY</c> plane,
-    /// sampling the full texture.
-    /// </summary>
-    /// <param name="transform">The quad transform; its position is the quad center.</param>
-    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
-    /// transform scale.</param>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
-    /// <param name="renderState">
-    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
-    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
-    /// </param>
+    /// <summary>Records one textured quad in local XY, sampling the full texture.</summary>
     /// <remarks>
-    /// <para>
-    /// This is the full-texture form of
-    /// <see cref="DrawQuad(Transform, Vector2, Texture, Rect, Color?, RenderState?)"/>: it samples the
-    /// normalized <c>(0, 0, 1, 1)</c> rectangle and records the per-instance UV rectangle as
-    /// <c>(0, 0, 1, 1)</c>. The quad's local surface is the <c>XY</c> plane facing local <c>+Z</c>, and
-    /// the instance matrix is <c>Matrix4x4.CreateScale(size.X, size.Y, 1) * transform.ToMatrix()</c>.
-    /// </para>
-    /// <para>
-    /// The draw is one instance of the engine quad mesh over the built-in <c>/shaders/mesh</c>
-    /// material. The shared material's <c>mainTexture</c> binding is set immediately before the draw
-    /// is recorded and cleared immediately afterwards, so it never keeps a game texture past the call;
-    /// the recorded frame retains the texture until the renderer releases the frame slot. A zero size
-    /// component or a zero transform scale component records nothing.
-    /// </para>
+    /// One engine quad instance over the built-in <c>/shaders/mesh</c> material; the shared
+    /// <c>mainTexture</c> binding exists only around the call. An omitted tint is opaque white, an
+    /// omitted render state is <see cref="RenderState.Opaque"/>, and a zero size or transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A transform or size component, or <paramref name="tint"/>, is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
-    /// is negative.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform, size, or tint component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
     [SuppressMessage(
         "ApiDesign",
@@ -1964,54 +1461,23 @@ public sealed class Camera : IDisposable
         DrawTexturedQuad(transform, size, texture, _fullTextureRect, tint, renderState);
     }
 
-    /// <summary>
-    /// Records one textured quad of <paramref name="size"/> in the transform's local <c>XY</c> plane,
-    /// sampling a normalized sub-rectangle of the texture.
-    /// </summary>
-    /// <param name="transform">The quad transform; its position is the quad center.</param>
-    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
-    /// transform scale.</param>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="source">
-    /// The normalized source rectangle: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are the top-left
-    /// corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the extents in the
-    /// <c>[0, 1]</c> texture rectangle.
-    /// </param>
-    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
-    /// <param name="renderState">
-    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
-    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
-    /// </param>
+    /// <summary>Records one textured quad in local XY, sampling a sub-rectangle.</summary>
     /// <remarks>
-    /// <para>
-    /// The draw is one instance of the engine quad mesh over the built-in <c>/shaders/mesh</c>
-    /// material, like <see cref="DrawQuad(Transform, Vector2, Texture, Color?, RenderState?)"/>. The
-    /// normalized rectangle is recorded as the per-instance UV rectangle
-    /// <c>(source.X, source.Y, source.Width, source.Height)</c>; the built-in mesh shader computes
-    /// <c>UvRect.xy + uv * UvRect.zw</c>, so the shared material still samples the bound
-    /// <c>mainTexture</c>. The rectangle is per-instance data and never splits a batch.
-    /// </para>
-    /// <para>
-    /// The shared material's <c>mainTexture</c> binding is set immediately before the draw is recorded
-    /// and cleared immediately afterwards, so it never keeps a game texture past the call; the recorded
-    /// frame retains the texture until the renderer releases the frame slot. A zero size component or a
-    /// zero transform scale component records nothing.
-    /// </para>
+    /// The source rectangle is the normalized top-left corner plus positive extents inside
+    /// <c>[0, 1]</c>; <c>(0, 0, 1, 1)</c> samples the full texture and the rectangle never splits a
+    /// batch. An omitted tint is opaque white, an omitted render state is
+    /// <see cref="RenderState.Opaque"/>, and a zero size or transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A transform or size component, a source rectangle component, or <paramref name="tint"/> is not
-    /// finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A size or transform scale component is negative, or <paramref name="source"/> has a non-positive
-    /// width or height or lies outside the normalized <c>[0, 1]</c> texture rectangle.
+    /// <exception cref="ArgumentException">A transform, size, source, or tint
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale component is
+    /// negative, or the source rectangle is not positive and inside the
+    /// normalized texture rectangle.
     /// </exception>
     [SuppressMessage(
         "ApiDesign",
@@ -2030,60 +1496,31 @@ public sealed class Camera : IDisposable
         DrawTexturedQuad(transform, size, texture, source, tint, renderState);
     }
 
-    /// <summary>
-    /// Records a uniform XZ grid centered at the world origin.
-    /// </summary>
-    /// <param name="slices">The number of grid cells per axis; must be at least one.</param>
-    /// <param name="spacing">The world-space distance between adjacent lines; must be positive.</param>
-    /// <param name="color">The linear grid color.</param>
+    /// <summary>Records a uniform XZ grid centered at the world origin.</summary>
     /// <remarks>
-    /// The grid has <c>slices + 1</c> lines per axis, so it is recorded as one instanced line draw
-    /// with <c>2 * (slices + 1)</c> instances. Every line is horizontal and <paramref name="spacing"/>
-    /// world units from its neighbor; the grid spans <c>slices * spacing</c> world units per axis. It
-    /// contributes no triangles. This overload is
-    /// <see cref="DrawGrid(Transform, int, float, Color)"/> with <see cref="Transform.Identity"/>.
+    /// <c>2 * (slices + 1)</c> line instances spanning <c>slices * spacing</c> units per axis;
+    /// equivalent to the transform overload with <see cref="Transform.Identity"/> and
+    /// contributes no triangles.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="spacing"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="slices"/> is less than one, or <paramref name="spacing"/> is not positive.
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slices"/> is less than one, or
+    /// <paramref name="spacing"/> is not positive.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawGrid(int slices, float spacing, Color color) =>
         DrawGrid(Transform.Identity, slices, spacing, color);
 
-    /// <summary>
-    /// Records a uniform XZ grid in the transform's local <c>XZ</c> plane.
-    /// </summary>
-    /// <param name="transform">The grid transform; its position is the grid center and its local
-    /// <c>+Y</c> is the grid normal.</param>
-    /// <param name="slices">The number of grid cells per axis; must be at least one.</param>
-    /// <param name="spacing">The local-space distance between adjacent lines before the transform
-    /// scale; must be positive.</param>
-    /// <param name="color">The linear grid color.</param>
+    /// <summary>Records a uniform XZ grid in the transform's local <c>XZ</c> plane.</summary>
     /// <remarks>
-    /// The grid has <c>slices + 1</c> lines per axis, so it is recorded as one instanced line draw
-    /// with <c>2 * (slices + 1)</c> instances. The base grid is the local <c>XZ</c> plane with local
-    /// <c>+Y</c> as its normal, matching <see cref="DrawPlane(Transform, Vector2, Color)"/> and
-    /// <see cref="DrawCircle(Transform, float, Color)"/>. Every line instance is composed as
-    /// <c>CreateLineMatrix(localStart, localEnd) * transform.ToMatrix()</c>, so the transform position
-    /// is the grid center, the rotation orients the plane, and the scale multiplies both the local
-    /// <paramref name="spacing"/> and the line extents. The grid contributes no triangles. A zero
-    /// transform scale component records nothing.
+    /// <c>2 * (slices + 1)</c> line instances with local <c>+Y</c> as the normal; the transform
+    /// scale multiplies both spacing and line extents. A zero transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="spacing"/> or a transform component is not finite.
+    /// <exception cref="ArgumentException"><paramref name="spacing"/> or a transform
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="slices"/> is less than one, <paramref name="spacing"/> is not positive, or a
-    /// transform scale component is negative.
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slices"/> is less than one,
+    /// <paramref name="spacing"/> is not positive, or a transform scale component is negative.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawGrid(Transform transform, int slices, float spacing, Color color)
     {
         EnsureDrawable(nameof(DrawGrid));
@@ -2137,26 +1574,13 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records the twelve edges of a box centered at <paramref name="position"/> with
-    /// <paramref name="size"/> extents.
-    /// </summary>
-    /// <param name="position">The world-space center.</param>
-    /// <param name="size">The world-space width, height, and depth.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records the twelve edges of a box.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine wire-cube mesh scaled by <paramref name="size"/>, so it
-    /// needs no polygon-mode support and contributes no triangles. A size component of zero records
-    /// nothing.
+    /// One engine wire-cube mesh instance, so no polygon-mode feature is needed; a zero size
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A position or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component is negative.</exception>
     public void DrawWireCube(Vector3 position, Vector3 size, Color color)
     {
         EnsureDrawable(nameof(DrawWireCube));
@@ -2180,26 +1604,14 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateTranslationScaleMatrix(position, size);
     }
 
-    /// <summary>
-    /// Records the twelve edges of a box centered at <paramref name="position"/> with explicit width,
-    /// height, and depth.
-    /// </summary>
-    /// <param name="position">The world-space center.</param>
-    /// <param name="width">The world-space width along <c>X</c>.</param>
-    /// <param name="height">The world-space height along <c>Y</c>.</param>
-    /// <param name="length">The world-space depth along <c>Z</c>.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a box wireframe with explicit width, height, and depth.</summary>
     /// <remarks>
-    /// This is the scalar convenience form of <see cref="DrawWireCube(Vector3, Vector3, Color)"/>: the
-    /// dimensions map to <c>(X, Y, Z)</c> size. A zero component records nothing.
+    /// Scalar convenience form of the size overload; dimensions map to <c>(X, Y, Z)</c> and a zero
+    /// dimension records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of a dimension or of
-    /// <paramref name="position"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A dimension or position component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A dimension
+    /// is negative.</exception>
     public void DrawWireCube(Vector3 position, float width, float height, float length, Color color)
     {
         EnsureDrawable(nameof(DrawWireCube));
@@ -2212,29 +1624,14 @@ public sealed class Camera : IDisposable
         DrawWireCube(position, new Vector3(width, height, length), color);
     }
 
-    /// <summary>
-    /// Records the twelve edges of a box at a transform with the transform's scale applied to
-    /// <paramref name="size"/>.
-    /// </summary>
-    /// <param name="transform">The box transform; its position is the box center.</param>
-    /// <param name="size">The local-space width, height, and depth before the transform scale.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a box wireframe at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The instance matrix is <c>Matrix4x4.CreateScale(size) * transform.ToMatrix()</c> under the
-    /// row-vector convention, so the transform position is the box center, the rotation orients the
-    /// edges, and the scale multiplies <paramref name="size"/>. Identity rotation and unit scale
-    /// reproduce <see cref="DrawWireCube(Vector3, Vector3, Color)"/> at
-    /// <see cref="Transform.Position"/>. A zero size component or a zero transform scale component
-    /// records nothing.
+    /// A zero size or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of the transform or
-    /// <paramref name="size"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
-    /// is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCube(Transform transform, Vector3 size, Color color)
     {
         EnsureDrawable(nameof(DrawWireCube));
@@ -2258,25 +1655,14 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(size) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records three great circles around <paramref name="center"/> with <paramref name="radius"/>
-    /// world units.
-    /// </summary>
-    /// <param name="center">The world-space center.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records three great circles of a wire sphere centered at <paramref name="center"/>.</summary>
     /// <remarks>
-    /// The draw is one instance of the engine wire-sphere mesh scaled by <paramref name="radius"/> and
-    /// contributes no triangles. A radius of zero records nothing.
+    /// One engine wire-sphere mesh instance; it contributes no triangles, and a zero
+    /// radius records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="center"/> or <paramref name="radius"/> is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentException">A center component or the radius is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius
+    /// is negative.</exception>
     public void DrawWireSphere(Vector3 center, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawWireSphere));
@@ -2300,27 +1686,14 @@ public sealed class Camera : IDisposable
         matrices[0] = CreateTranslationScaleMatrix(center, new Vector3(radius));
     }
 
-    /// <summary>
-    /// Records three great circles at a transform with the transform's scale applied to
-    /// <paramref name="radius"/>.
-    /// </summary>
-    /// <param name="transform">The wire-sphere transform; its position is the center.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a wire sphere scaled by <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the
-    /// transform position is the center, the rotation orients the great circles, and the scale
-    /// multiplies the radius on each local axis. Identity rotation and unit scale reproduce
-    /// <see cref="DrawWireSphere(Vector3, float, Color)"/> at <see cref="Transform.Position"/>. A zero
-    /// radius or a zero transform scale component records nothing.
+    /// A zero radius or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
-    /// negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">The radius or a transform component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or a transform
+    /// scale component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireSphere(Transform transform, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawWireSphere));
@@ -2344,32 +1717,15 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records a tessellated wire sphere centered at <paramref name="center"/>.
-    /// </summary>
-    /// <param name="center">The world-space center.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="rings">The number of latitude bands; at least two.</param>
-    /// <param name="slices">The number of longitude segments; at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a tessellated wire sphere.</summary>
     /// <remarks>
-    /// Unlike <see cref="DrawWireSphere(Vector3, float, Color)"/>, which instances the fixed
-    /// wire-sphere mesh, this overload composes <paramref name="slices"/> meridians of
-    /// <paramref name="rings"/> segments each plus <c>rings - 1</c> latitude circles of
-    /// <paramref name="slices"/> segments each, for <c>slices * (2 * rings - 1)</c> line instances in
-    /// one draw. The poles and seam are shared and the draw contributes no triangles. A zero radius
-    /// records nothing.
+    /// Composed from <paramref name="slices"/> meridians and <c>rings - 1</c> latitude circles with
+    /// shared poles and seam; a zero radius records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of <paramref name="center"/> or
-    /// <paramref name="radius"/> is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
-    /// <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">A center component or the radius is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius is negative,
+    /// <paramref name="rings"/> is less than two, or <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireSphere(Vector3 center, float radius, int rings, int slices, Color color)
     {
         EnsureDrawable(nameof(DrawWireSphere));
@@ -2390,30 +1746,15 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a tessellated wire sphere at a transform with the transform's scale applied to
-    /// <paramref name="radius"/>.
-    /// </summary>
-    /// <param name="transform">The wire-sphere transform; its position is the center.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="rings">The number of latitude bands; at least two.</param>
-    /// <param name="slices">The number of longitude segments; at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a tessellated wire sphere at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The line instances are composed as in
-    /// <see cref="DrawWireSphere(Vector3, float, int, int, Color)"/> and transformed by
-    /// <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>. A zero radius or a zero transform
-    /// scale component records nothing.
+    /// A zero radius or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The radius or a transform scale component is negative, <paramref name="rings"/> is less than
-    /// two, or <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">The radius or a transform component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or a transform
+    /// scale component is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireSphere(
         Transform transform,
         float radius,
@@ -2440,31 +1781,15 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one solid capsule between two spherical cap centers.
-    /// </summary>
-    /// <param name="start">The world-space center of the start spherical cap.</param>
-    /// <param name="end">The world-space center of the end spherical cap.</param>
-    /// <param name="radius">The cap radius.</param>
-    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
-    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
-    /// <param name="color">The linear capsule color.</param>
+    /// <summary>Records one solid capsule between two spherical cap centers.</summary>
     /// <remarks>
-    /// The capsule is the cylinder between the two cap centers plus one hemisphere at each end. It is
-    /// recorded as two instanced draws: <paramref name="slices"/> side quads and
-    /// <c>2 * slices * (2 * rings - 1)</c> cap triangles. The cap-center distance is the segment
-    /// length, so the total capsule height is <c>|end - start| + 2 * radius</c>. A zero radius or a
-    /// zero-length segment records nothing.
+    /// The cylinder body joins one hemisphere at each cap center, so total height is
+    /// <c>|end - start| + 2 * radius</c>; a zero radius or zero-length segment records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of an endpoint or the radius is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
-    /// <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">An endpoint or radius component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius is negative,
+    /// <paramref name="rings"/> is less than two, or <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCapsule(
         Vector3 start,
         Vector3 end,
@@ -2497,37 +1822,19 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one solid capsule at a transform; the capsule is centered at the transform origin and
-    /// its axis is local <c>+Y</c>.
-    /// </summary>
-    /// <param name="transform">The capsule transform; the capsule is centered at its position.</param>
-    /// <param name="radius">The local-space cap radius before the transform scale.</param>
-    /// <param name="height">The local-space distance between the two cap centers before the transform
-    /// scale.</param>
-    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
-    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
-    /// <param name="color">The linear capsule color.</param>
+    /// <summary>Records a solid capsule at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// <para>
-    /// The cap centers are at local <c>(0, ±height/2, 0)</c>, so the capsule is centered on the
-    /// transform origin and its total height is <c>(height + 2 * radius) * Scale.Y</c> along
-    /// <see cref="Transform.Up"/>. The instance matrices are composed as
-    /// <c>local * transform.ToMatrix()</c>, so the transform rotation orients the capsule and the scale
-    /// multiplies the radius and height.
-    /// </para>
-    /// <para>A zero radius, zero height, or zero transform scale component records nothing.</para>
+    /// Cap centers are at local <c>(0, ±height/2, 0)</c>, so total height is
+    /// <c>(height + 2 * radius) * Scale.Y</c> along <see cref="Transform.Up"/>; a zero radius, zero
+    /// height, or zero transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius, height, or a transform component is not
-    /// finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The radius, height, or a transform scale component is negative, <paramref name="rings"/> is
-    /// less than two, or <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">The radius, height, or a transform
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">The radius, height, or a transform scale
+    /// component is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCapsule(
         Transform transform,
         float radius,
@@ -2552,31 +1859,15 @@ public sealed class Camera : IDisposable
         DrawCapsuleCore(transform.ToMatrix(), radius, height, rings, slices, color);
     }
 
-    /// <summary>
-    /// Records the wire frame of a capsule between two spherical cap centers.
-    /// </summary>
-    /// <param name="start">The world-space center of the start spherical cap.</param>
-    /// <param name="end">The world-space center of the end spherical cap.</param>
-    /// <param name="radius">The cap radius.</param>
-    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
-    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records the wire frame of a capsule between two spherical cap centers.</summary>
     /// <remarks>
-    /// The wire frame is one instanced line draw with <c>slices * (4 * rings + 1)</c> segments:
-    /// <paramref name="slices"/> body edges, one equator ring per end, and per hemispherical cap
-    /// <paramref name="slices"/> meridians of <paramref name="rings"/> segments plus <c>rings - 1</c>
-    /// interior latitude rings. It contributes no triangles. A zero radius or a zero-length segment
-    /// records nothing.
+    /// One instanced line draw with <c>slices * (4 * rings + 1)</c> segments; it contributes no
+    /// triangles, and a zero radius or zero-length segment records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of an endpoint or the radius is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
-    /// <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">An endpoint or radius component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius is negative,
+    /// <paramref name="rings"/> is less than two, or <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCapsule(
         Vector3 start,
         Vector3 end,
@@ -2609,33 +1900,18 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records the wire frame of a capsule at a transform; the capsule is centered at the transform
-    /// origin and its axis is local <c>+Y</c>.
-    /// </summary>
-    /// <param name="transform">The capsule transform; the capsule is centered at its position.</param>
-    /// <param name="radius">The local-space cap radius before the transform scale.</param>
-    /// <param name="height">The local-space distance between the two cap centers before the transform
-    /// scale.</param>
-    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
-    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a capsule wireframe at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The wire frame is composed as in
-    /// <see cref="DrawWireCapsule(Vector3, Vector3, float, int, int, Color)"/> with the cap centers at
-    /// local <c>±height/2</c> on <c>Y</c>, then transformed by <c>transform.ToMatrix()</c>. A zero
-    /// radius, zero height, or zero transform scale component records nothing.
+    /// Cap centers are at local <c>±height/2</c> on <c>Y</c>; a zero radius, zero height, or zero
+    /// transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius, height, or a transform component is not
-    /// finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The radius, height, or a transform scale component is negative, <paramref name="rings"/> is
-    /// less than two, or <paramref name="slices"/> is less than three.
+    /// <exception cref="ArgumentException">The radius, height, or a transform
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">The radius, height, or a transform scale
+    /// component is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawWireCapsule(
         Transform transform,
         float radius,
@@ -2660,30 +1936,15 @@ public sealed class Camera : IDisposable
         DrawWireCapsuleCore(transform.ToMatrix(), radius, height, rings, slices, color);
     }
 
-    /// <summary>
-    /// Records a closed circle in the plane defined by a center, a rotation axis, and a rotation
-    /// angle.
-    /// </summary>
-    /// <param name="center">The world-space circle center.</param>
-    /// <param name="radius">The world-space radius.</param>
-    /// <param name="rotationAxis">The axis the base circle is rotated around; must be non-zero.</param>
-    /// <param name="rotationAngle">The rotation around <paramref name="rotationAxis"/> in degrees.</param>
-    /// <param name="color">The linear line color.</param>
+    /// <summary>Records a closed circle rotated by degrees around an axis.</summary>
     /// <remarks>
-    /// The base circle lies in the local <c>XZ</c> plane with local <c>+Y</c> as its normal, matching
-    /// <see cref="DrawPlane(Vector3, Vector2, Color)"/>, and is rotated by
-    /// <paramref name="rotationAngle"/> degrees around <paramref name="rotationAxis"/> before it is
-    /// translated to <paramref name="center"/>. The circle is 36 line segments and closes the loop. A
-    /// zero radius records nothing; a zero rotation axis is <see cref="ArgumentException"/>.
+    /// The base circle lies in local <c>XZ</c> with local <c>+Y</c> as its normal, matching
+    /// <see cref="DrawPlane(Vector3, Vector2, Color)"/>; a zero radius records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">A component of <paramref name="center"/>,
-    /// <paramref name="radius"/>, <paramref name="rotationAxis"/>, or
-    /// <paramref name="rotationAngle"/> is not finite, or <paramref name="rotationAxis"/> is zero.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A component of an argument is not finite, or
+    /// <paramref name="rotationAxis"/> is zero.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius is negative.</exception>
     public void DrawCircle(
         Vector3 center,
         float radius,
@@ -2722,29 +1983,15 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a closed circle at a transform in its local <c>XZ</c> plane.
-    /// </summary>
-    /// <param name="transform">The circle transform; its position is the circle center and its local
-    /// <c>+Y</c> is the circle normal.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="color">The linear line color.</param>
+    /// <summary>Records a closed circle at <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// The base circle is the local <c>XZ</c> plane with local <c>+Y</c> as its normal, matching
-    /// <see cref="DrawPlane(Transform, Vector2, Color)"/> and
-    /// <see cref="DrawGrid(Transform, int, float, Color)"/>. Its instance
-    /// matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the transform position
-    /// is the center, the rotation orients the plane, and the scale multiplies the radius on the local
-    /// X and Z axes (a non-uniform scale produces an ellipse). The circle is 36 line segments and
-    /// closes the loop. A zero radius or a zero transform scale component records nothing.
+    /// Local <c>+Y</c> is the circle normal; non-uniform scale produces an ellipse, and a zero
+    /// radius or transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
-    /// negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">The radius or a transform component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">The radius or a transform
+    /// scale component is negative.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
     public void DrawCircle(Transform transform, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawCircle));
@@ -2759,31 +2006,18 @@ public sealed class Camera : IDisposable
         DrawCircleCore(Matrix4x4.CreateScale(radius) * transform.ToMatrix(), color);
     }
 
-    /// <summary>
-    /// Records one solid disc of <paramref name="radius"/> in the transform's local <c>XY</c> plane.
-    /// </summary>
-    /// <param name="transform">The disc transform; its position is the disc center.</param>
-    /// <param name="radius">The local-space radius before the transform scale.</param>
-    /// <param name="color">The linear disc color.</param>
+    /// <summary>Records one solid disc in the transform's local <c>XY</c> plane.</summary>
     /// <remarks>
-    /// <para>
-    /// The disc's local surface is the <c>XY</c> plane facing local <c>+Z</c>, and its instance matrix
-    /// is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c> under the row-vector convention:
-    /// the transform position is the disc center, the rotation orients the surface, and the scale
-    /// multiplies the radius on each local axis, so a non-uniform scale produces an ellipse. The draw
-    /// is one instance of the engine unit disc mesh over the built-in <c>/shaders/primitive</c>
-    /// material and uses the opaque render state.
-    /// </para>
-    /// <para>A zero radius or a zero transform scale component records nothing.</para>
+    /// One engine unit-disc instance over <c>/shaders/primitive</c> with the opaque state; the
+    /// surface faces local <c>+Z</c>, non-uniform scale produces an ellipse, and a zero radius or
+    /// transform scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentException">The radius, a transform component, or a color component is
-    /// not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
-    /// negative.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">The radius, a transform component, or a color
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale
+    /// component is negative.
+    /// </exception>
     public void DrawDisc(Transform transform, float radius, Color color)
     {
         EnsureDrawable(nameof(DrawDisc));
@@ -2808,79 +2042,33 @@ public sealed class Camera : IDisposable
         matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
     }
 
-    /// <summary>
-    /// Records one textured, camera-facing quad centered at <paramref name="position"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="position">The world-space position of the quad's origin pivot.</param>
-    /// <param name="size">The world-space width and height of the quad.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <summary>Records a textured camera-facing billboard at a position.</summary>
     /// <remarks>
-    /// <para>
-    /// This is the convenience form of <see cref="DrawBillboard(Texture, Vector3, Vector2, Color, bool)"/>
-    /// with <c>faceCamera: true</c> and the full texture: the quad faces the camera and its normalized
-    /// origin is its center.
-    /// </para>
-    /// <para>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
-    /// The engine material's texture binding is set immediately before the draw is recorded and
-    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
-    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
-    /// component of zero records nothing.
-    /// </para>
+    /// Convenience form of the <c>faceCamera</c> overload with <c>faceCamera: true</c>, the full
+    /// texture, and the center pivot; the billboard is one alpha-blended engine quad with no depth
+    /// write. A zero size component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
+    /// <exception cref="ArgumentException">A position or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component is negative.</exception>
     public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color)
     {
         DrawBillboard(texture, position, size, color, faceCamera: true);
     }
 
-    /// <summary>
-    /// Records one textured quad centered at <paramref name="position"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="position">The world-space position of the quad's origin pivot.</param>
-    /// <param name="size">The world-space width and height of the quad.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
-    /// <param name="faceCamera">
-    /// When <see langword="true"/>, the quad faces the camera. When <see langword="false"/>, the quad is
-    /// the existing vertical billboard: it keeps world up and only the camera's yaw rotates it.
-    /// </param>
+    /// <summary>Records one textured billboard centered at <paramref name="position"/>.</summary>
     /// <remarks>
-    /// <para>
-    /// The quad samples the full texture and uses the quad's center as its origin pivot. The position
-    /// overloads have no transform, so a <c>faceCamera: false</c> draw keeps the engine's vertical
-    /// billboard orientation.
-    /// </para>
-    /// <para>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
-    /// The engine material's texture binding is set immediately before the draw is recorded and
-    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
-    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
-    /// component of zero records nothing.
-    /// </para>
+    /// Samples the full texture with the center pivot and is alpha-blended with no depth write;
+    /// <c>faceCamera: false</c> keeps world up and applies only the camera yaw, and a zero size
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
-    /// </exception>
+    /// <exception cref="ArgumentException">A position or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component is negative.</exception>
     public void DrawBillboard(
         Texture texture,
         Vector3 position,
@@ -2900,82 +2088,37 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one textured, camera-facing quad under <paramref name="transform"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="transform">
-    /// The billboard transform; see <see cref="DrawBillboard(Texture, Transform, Vector2, Color, bool)"/>.
-    /// </param>
-    /// <param name="size">The world-space width and height before the transform scale.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <summary>Records one textured camera-facing billboard under <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// This is the convenience form of
-    /// <see cref="DrawBillboard(Texture, Transform, Vector2, Color, bool)"/> with <c>faceCamera: true</c>
-    /// and the full texture.
+    /// Convenience form with <c>faceCamera: true</c> and the full texture; see the
+    /// <c>faceCamera</c> transform overload.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">A transform component or a size component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A size component or a transform scale component is negative.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
     public void DrawBillboard(Texture texture, Transform transform, Vector2 size, Color color)
     {
         DrawBillboard(texture, transform, size, color, faceCamera: true);
     }
 
-    /// <summary>
-    /// Records one textured quad under <paramref name="transform"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="transform">
-    /// The billboard transform. Its position is the origin pivot's world position, its rotation supplies
-    /// the in-plane roll when <paramref name="faceCamera"/> is <see langword="true"/> and orients the
-    /// plane when it is <see langword="false"/>, and its scale multiplies <paramref name="size"/> on the
-    /// local X and Y axes.
-    /// </param>
-    /// <param name="size">The world-space width and height before the transform scale.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
-    /// <param name="faceCamera">
-    /// When <see langword="true"/>, the quad faces the camera and the transform rotation contributes
-    /// only its twist about the billboard's local plane normal as the in-plane roll. When
-    /// <see langword="false"/>, the quad does not face the camera: the transform rotation orients the
-    /// billboard plane in world space, so an identity transform gives a world-space quad in the local
-    /// XY plane. This is intentionally different from the position overloads, whose
-    /// <c>faceCamera: false</c> form keeps the camera-relative vertical billboard; an identity
-    /// transform does not reproduce that vertical orientation.
-    /// </param>
+    /// <summary>Records one textured billboard under <paramref name="transform"/>.</summary>
     /// <remarks>
-    /// <para>
-    /// The quad samples the full texture and uses the quad's center as its origin pivot. With
-    /// <c>faceCamera: false</c> the transform rotation orients the plane in world space; the position
-    /// overloads keep the camera-relative vertical billboard instead, so an identity transform does not
-    /// reproduce the position overload's non-facing orientation.
-    /// </para>
-    /// <para>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
-    /// The engine material's texture binding is set immediately before the draw is recorded and
-    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
-    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A zero
-    /// size component or a zero transform scale component records nothing.
-    /// </para>
+    /// The transform position is the origin pivot, its scale multiplies the size, and its rotation
+    /// is the in-plane roll when facing and orients the plane otherwise; <c>faceCamera: false</c>
+    /// uses the rotation directly, so an identity transform gives a local-XY quad (unlike the
+    /// position overloads' vertical billboard). Samples the full texture, is alpha-blended with no
+    /// depth write, and records nothing for a zero size or transform scale component.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">A transform component or a size component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A size component or a transform scale component is negative.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A transform or size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale
+    /// component is negative.
     /// </exception>
     public void DrawBillboard(
         Texture texture,
@@ -2996,38 +2139,18 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records one textured, camera-facing quad that samples a normalized sub-rectangle of
-    /// <paramref name="texture"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="source">
-    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
-    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
-    /// extents, all in <c>[0, 1]</c>.
-    /// </param>
-    /// <param name="position">The world-space position of the quad's origin pivot.</param>
-    /// <param name="size">The world-space width and height of the quad.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <summary>Records one camera-facing billboard sampling a normalized source rectangle.</summary>
     /// <remarks>
-    /// This is the convenience form of
-    /// <see cref="DrawBillboard(Texture, Rect, Vector3, Vector2, Color, bool)"/> with
-    /// <c>faceCamera: true</c> and the quad's center as its origin pivot.
+    /// The source rectangle is the normalized top-left corner plus positive extents inside
+    /// <c>[0, 1]</c>; this convenience form uses <c>faceCamera: true</c> and the center pivot, and
+    /// a zero size component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/>, <paramref name="size"/>, or
-    /// <paramref name="source"/> is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A <paramref name="size"/> component is negative, <paramref name="source"/> does not have positive
-    /// width and height, or <paramref name="source"/> lies outside the normalized texture rectangle.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A position, size, or source component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A size component is
+    /// negative, or the source is not positive and inside the normalized rectangle.
     /// </exception>
     public void DrawBillboard(
         Texture texture,
@@ -3040,50 +2163,18 @@ public sealed class Camera : IDisposable
         DrawBillboard(texture, source, position, size, color, faceCamera: true);
     }
 
-    /// <summary>
-    /// Records one textured quad that samples a normalized sub-rectangle of <paramref name="texture"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="source">
-    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
-    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
-    /// extents, all in <c>[0, 1]</c>.
-    /// </param>
-    /// <param name="position">The world-space position of the quad's origin pivot.</param>
-    /// <param name="size">The world-space width and height of the quad.</param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
-    /// <param name="faceCamera">
-    /// When <see langword="true"/>, the quad faces the camera. When <see langword="false"/>, the quad is
-    /// the existing vertical billboard: it keeps world up and only the camera's yaw rotates it.
-    /// </param>
+    /// <summary>Records one billboard sampling a normalized source rectangle.</summary>
     /// <remarks>
-    /// <para>
-    /// The source rectangle is recorded as the per-instance UV rectangle and the built-in mesh shader
-    /// maps the quad's authored UVs through it, so <c>(0, 0, 1, 1)</c> is the same full-texture sample
-    /// as the overloads without a source rectangle.
-    /// </para>
-    /// <para>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
-    /// The engine material's texture binding is set immediately before the draw is recorded and
-    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
-    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
-    /// component of zero records nothing.
-    /// </para>
+    /// The rectangle is a per-instance UV rectangle, so <c>(0, 0, 1, 1)</c> is the full texture and
+    /// it never splits a batch; <c>faceCamera: false</c> keeps world up and applies only the camera
+    /// yaw, and a zero size component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="position"/>, <paramref name="size"/>, or
-    /// <paramref name="source"/> is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A <paramref name="size"/> component is negative, <paramref name="source"/> does not have positive
-    /// width and height, or <paramref name="source"/> lies outside the normalized texture rectangle.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentException">A position, size, or source component is not
+    /// finite.</exception> <exception cref="ArgumentOutOfRangeException">A size component is
+    /// negative, or the source is not positive and inside the normalized rectangle.
     /// </exception>
     public void DrawBillboard(
         Texture texture,
@@ -3097,39 +2188,21 @@ public sealed class Camera : IDisposable
         DrawBillboardAtPosition(texture, position, source, size, _centerOrigin, color, faceCamera);
     }
 
-    /// <summary>
-    /// Records one textured, camera-facing quad with an explicit source rectangle, size, and origin
-    /// pivot under <paramref name="transform"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="transform">The billboard transform; see the seven-argument overload.</param>
-    /// <param name="source">The normalized source rectangle; see the five-argument source overload.</param>
-    /// <param name="size">The world-space width and height before the transform scale.</param>
-    /// <param name="origin">
-    /// The normalized pivot in the billboard's local quad: <c>(0, 0)</c> is the bottom-left corner and
-    /// <c>(1, 1)</c> is the top-right corner. <c>(0.5, 0.5)</c> centers the quad on the transform
-    /// position.
-    /// </param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <summary>Records a camera-facing billboard with explicit UVs and pivot.</summary>
     /// <remarks>
-    /// This is the convenience form of
-    /// <see cref="DrawBillboard(Texture, Transform, Rect, Vector2, Vector2, Color, bool)"/> with
-    /// <c>faceCamera: true</c>.
+    /// The origin is the normalized pivot in the local quad: <c>(0, 0)</c> is the bottom-left
+    /// corner, <c>(1, 1)</c> the top-right, and <c>(0.5, 0.5)</c> centers the quad on the transform
+    /// position. This convenience form uses <c>faceCamera: true</c>, and a zero size or transform
+    /// scale component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A transform, size, source, or origin component is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A size component or a transform scale component is negative, <paramref name="source"/> does not
-    /// have positive width and height, or <paramref name="source"/> lies outside the normalized texture
-    /// rectangle.
+    /// <exception cref="ArgumentException">A transform, size, source, or origin
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale component is
+    /// negative, or the source is not positive and inside the normalized rectangle.
     /// </exception>
     public void DrawBillboard(
         Texture texture,
@@ -3143,76 +2216,23 @@ public sealed class Camera : IDisposable
         DrawBillboard(texture, transform, source, size, origin, color, faceCamera: true);
     }
 
-    /// <summary>
-    /// Records one textured quad with an explicit source rectangle, size, and origin pivot under
-    /// <paramref name="transform"/>.
-    /// </summary>
-    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="transform">
-    /// The billboard transform. Its position is the origin pivot's world position, its rotation supplies
-    /// the in-plane roll when <paramref name="faceCamera"/> is <see langword="true"/> and orients the
-    /// plane when it is <see langword="false"/>, and its scale multiplies <paramref name="size"/> on the
-    /// local X and Y axes.
-    /// </param>
-    /// <param name="source">
-    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
-    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
-    /// extents, all in <c>[0, 1]</c>.
-    /// </param>
-    /// <param name="size">The world-space width and height before the transform scale.</param>
-    /// <param name="origin">
-    /// The normalized pivot in the billboard's local quad: <c>(0, 0)</c> is the bottom-left corner and
-    /// <c>(1, 1)</c> is the top-right corner. <c>(0.5, 0.5)</c> centers the quad on the transform
-    /// position.
-    /// </param>
-    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
-    /// <param name="faceCamera">
-    /// When <see langword="true"/>, the quad faces the camera and the transform rotation contributes
-    /// only its twist about the billboard's local plane normal as the in-plane roll. When
-    /// <see langword="false"/>, the quad does not face the camera: the transform rotation orients the
-    /// billboard plane in world space, so an identity transform gives a world-space quad in the local
-    /// XY plane. This is intentionally different from the position overloads, whose
-    /// <c>faceCamera: false</c> form keeps the camera-relative vertical billboard; an identity
-    /// transform does not reproduce that vertical orientation.
-    /// </param>
+    /// <summary>Records a billboard with explicit UVs and pivot under a transform.</summary>
     /// <remarks>
-    /// <para>
-    /// The instance matrix maps the engine quad through the local billboard quad, the normalized origin
-    /// pivot, and the transform. Under the row-vector convention the local quad is
-    /// <c>Translate(-(origin - 0.5)) * Scale(size)</c>, so the pivot lands on the transform position and
-    /// the transform scale multiplies <paramref name="size"/>. With <c>faceCamera: true</c> the quad is
-    /// rolled by the transform's twist about its local <c>+Z</c> axis and then oriented by the camera
-    /// basis; with <c>false</c> the transform orientation is used directly, so an identity transform
-    /// gives a world-space quad in the local XY plane. The position overloads instead keep the
-    /// camera-relative vertical billboard when they do not face the camera.
-    /// </para>
-    /// <para>
-    /// The source rectangle is recorded as the per-instance UV rectangle and the built-in mesh shader
-    /// maps the quad's authored UVs through it, so <c>(0, 0, 1, 1)</c> is the same full-texture sample
-    /// as the overloads without a source rectangle.
-    /// </para>
-    /// <para>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
-    /// The engine material's texture binding is set immediately before the draw is recorded and
-    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
-    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A zero
-    /// size component or a zero transform scale component records nothing.
-    /// </para>
+    /// The transform position is the origin pivot, its scale multiplies the size, and its rotation
+    /// is the in-plane roll when facing and orients the plane otherwise; the origin is the
+    /// normalized pivot in the local quad, where <c>(0, 0)</c> is the bottom-left corner and
+    /// <c>(0.5, 0.5)</c> centers the quad. <c>faceCamera: false</c> uses the rotation directly, so
+    /// an identity transform gives a local-XY quad, and a zero size or transform scale
+    /// component records nothing.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A transform, size, source, or origin component is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is
+    /// <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A size component or a transform scale component is negative, <paramref name="source"/> does not
-    /// have positive width and height, or <paramref name="source"/> lies outside the normalized texture
-    /// rectangle.
+    /// <exception cref="ArgumentException">A transform, size, source, or origin
+    /// component is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// <exception cref="ArgumentOutOfRangeException">A size or transform scale component is
+    /// negative, or the source is not positive and inside the normalized rectangle.
     /// </exception>
     public void DrawBillboard(
         Texture texture,
@@ -3227,61 +2247,22 @@ public sealed class Camera : IDisposable
         DrawBillboardWithTransform(texture, transform, source, size, origin, color, faceCamera);
     }
 
-    /// <summary>
-    /// Records world-space text laid out in a transform's local XY plane through the built-in MSDF
-    /// program.
-    /// </summary>
-    /// <param name="font">The font whose face metrics and glyph textures the text uses.</param>
-    /// <param name="text">The UTF-16 text to lay out. Empty text records nothing.</param>
-    /// <param name="transform">
-    /// The text block's world transform. The block's layout origin is the top-left corner of the first
-    /// line's ascent box; the transform supplies its position, rotation, and scale.
-    /// </param>
-    /// <param name="size">The em height in world units. It must be finite and positive.</param>
-    /// <param name="color">The linear per-instance tint. Every glyph instance carries it.</param>
-    /// <param name="alignment">How each line is aligned inside the layout box.</param>
-    /// <param name="wrapping">Where lines may break.</param>
-    /// <param name="maxWidth">
-    /// The alignment and wrapping box width in world units at <paramref name="size"/>, or <c>0</c> for
-    /// no box limit. <see cref="TextWrapping.Word"/> and <see cref="TextWrapping.Character"/> require a
-    /// positive width.
-    /// </param>
+    /// <summary>Records world-space MSDF text laid out in a transform's local <c>XY</c> plane.</summary>
     /// <remarks>
-    /// <para>
-    /// The layout is the engine text layout: <c>+X</c> runs right, <c>+Y</c> runs up, and the readable
-    /// face points toward local <c>+Z</c>. The transform's local XY plane is the text plane, so the
-    /// block is world-space geometry. Each laid-out glyph is one instance of the engine quad mapped to
-    /// its layout position and size, then composed as <c>glyphQuad * transform.ToMatrix()</c> under the
-    /// row-vector convention.
-    /// </para>
-    /// <para>
-    /// Glyph textures are generated asynchronously. The call never waits: a glyph whose texture is not
-    /// ready, or whose generation failed or whose outline is empty, is skipped for this call while the
-    /// pen still advances by its face metrics, so the remaining glyphs keep their layout positions. The
-    /// glyph appears on a later frame once its texture is ready. The call retains the engine quad mesh
-    /// and the MSDF program in the frame; each recorded glyph texture is retained by its acquisition.
-    /// </para>
-    /// <para>
-    /// A call records at most one draw record: the engine quad, the engine MSDF material, the documented
-    /// text render state, and the call's tint. Every ready glyph is one instance with its own
-    /// per-instance glyph texture in layout order. All text over that mesh/program/state batches
-    /// together across calls and fonts; a call with no ready glyph records nothing. Validation runs
-    /// before any retention or record mutation, so a rejected call leaves the frame packet and its
-    /// retention set untouched.
-    /// </para>
+    /// Layout runs <c>+X</c> right, <c>+Y</c> up, and the readable face points toward local
+    /// <c>+Z</c>; the layout origin is the top-left corner of the first line's ascent box and the
+    /// em height is in world units. The max width is the alignment and wrapping box width in world
+    /// units, or <c>0</c> for no limit, and word or character wrapping require a positive width;
+    /// empty text records nothing, and glyph textures are generated asynchronously so an unready,
+    /// failed, or empty glyph is skipped while the pen still advances and appears on a later frame.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A transform position, rotation, or scale component, or a color component, is not finite.
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is
+    /// <see langword="null"/>.</exception> <exception cref="ArgumentException">A transform
+    /// position, rotation, or scale component, or a color component, is not finite.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="size"/> is not finite and positive; a transform scale component is negative;
-    /// <paramref name="alignment"/> or <paramref name="wrapping"/> is undefined; or
-    /// <paramref name="maxWidth"/> is invalid for the requested wrapping mode.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or <paramref name="font"/> is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, or the camera service has no primitive assets.
+    /// <exception cref="ArgumentOutOfRangeException">The size is not finite and positive, a
+    /// transform scale component is negative, the alignment or wrapping value is undefined, or the
+    /// max width is invalid for the wrapping mode.
     /// </exception>
     public void DrawText(
         Font font,
@@ -3318,41 +2299,16 @@ public sealed class Camera : IDisposable
         RecordText(font, layout, color, transform.ToMatrix());
     }
 
-    /// <summary>
-    /// Records the same text layout in a camera-facing plane, centered on a world position and drawn
-    /// through the built-in MSDF program.
-    /// </summary>
-    /// <param name="font">The font whose face metrics and glyph textures the text uses.</param>
-    /// <param name="text">The UTF-16 text to lay out. Empty text records nothing.</param>
-    /// <param name="position">The world-space center of the text block's layout bounds.</param>
-    /// <param name="size">The em height in world units. It must be finite and positive.</param>
-    /// <param name="color">The linear per-instance tint. Every glyph instance carries it.</param>
-    /// <param name="alignment">How each line is aligned inside the block width.</param>
+    /// <summary>Records text camera-facing and centered on a position.</summary>
     /// <remarks>
-    /// <para>
-    /// The layout is the same as <see cref="DrawText"/> with <see cref="TextWrapping.None"/> and no
-    /// width limit. The union of the layout box and every glyph quad
-    /// (<see cref="TextLayoutResult.BoundsMin"/> to <see cref="TextLayoutResult.BoundsMax"/>) is
-    /// centered on <paramref name="position"/> in the camera-facing plane: the camera's right and up
-    /// axes span the plane and the quad's <c>+Z</c> faces the camera. <paramref name="alignment"/>
-    /// positions each line inside the block width. There is no roll or orientation parameter; the
-    /// block always faces the camera.
-    /// </para>
-    /// <para>
-    /// The asynchronous glyph behavior, the single draw record, the per-instance glyph textures,
-    /// batching, and the validation rules are the same as <see cref="DrawText"/>.
-    /// </para>
+    /// Same layout, asynchronous glyph behavior, and validation as <see cref="DrawText"/>, using
+    /// <see cref="TextWrapping.None"/> and no width limit; the union of the layout box and glyph
+    /// quads is centered on the position in the camera plane. There is no roll parameter.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// A position or color component is not finite.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="size"/> is not finite and positive, or <paramref name="alignment"/> is undefined.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera or <paramref name="font"/> is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, or the camera service has no primitive assets.
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is
+    /// <see langword="null"/>.</exception> <exception cref="ArgumentException">A position or color
+    /// component is not finite.</exception> <exception cref="ArgumentOutOfRangeException">The size
+    /// is not finite and positive, or the alignment value is undefined.
     /// </exception>
     public void DrawTextBillboard(
         Font font,
@@ -3391,17 +2347,10 @@ public sealed class Camera : IDisposable
         RecordText(font, layout, color, block);
     }
 
-    /// <summary>
-    /// Validates and records a billboard positioned by a world-space point with an identity transform.
-    /// </summary>
+    /// <summary>Validates and records a billboard at a world point.</summary>
     /// <remarks>
-    /// Validation runs before any retention or record mutation. A non-finite argument is
-    /// <see cref="ArgumentException"/>, a negative size or a source rectangle that has non-positive
-    /// extents or lies outside the normalized texture rectangle is
-    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component records nothing. The
-    /// position overloads keep the existing vertical billboard orientation when
-    /// <paramref name="faceCamera"/> is <see langword="false"/> because they have no transform
-    /// rotation.
+    /// Validation runs before any retention or record mutation; <c>faceCamera: false</c> keeps the
+    /// vertical billboard because there is no transform rotation.
     /// </remarks>
     private void DrawBillboardAtPosition(
         Texture texture,
@@ -3432,16 +2381,7 @@ public sealed class Camera : IDisposable
         RecordBillboard(texture, source, color, matrix);
     }
 
-    /// <summary>
-    /// Validates and records a billboard positioned, oriented, and scaled by a <see cref="Transform"/>.
-    /// </summary>
-    /// <remarks>
-    /// Validation runs before any retention or record mutation. A non-finite argument is
-    /// <see cref="ArgumentException"/>, a negative size or transform scale component or a source
-    /// rectangle that has non-positive extents or lies outside the normalized texture rectangle is
-    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component or a zero transform scale
-    /// component records nothing.
-    /// </remarks>
+    /// <summary>Validates and records a transform-positioned billboard.</summary>
     private void DrawBillboardWithTransform(
         Texture texture,
         Transform transform,
@@ -3471,16 +2411,7 @@ public sealed class Camera : IDisposable
         RecordBillboard(texture, source, color, matrix);
     }
 
-    /// <summary>
-    /// Validates and records one textured quad in a transform's local <c>XY</c> plane.
-    /// </summary>
-    /// <remarks>
-    /// Validation runs before any retention or record mutation. A non-finite argument is
-    /// <see cref="ArgumentException"/>, a negative size or transform scale component or a source
-    /// rectangle that has non-positive extents or lies outside the normalized texture rectangle is
-    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component or a zero transform scale
-    /// component records nothing.
-    /// </remarks>
+    /// <summary>Validates and records one textured quad in a transform's local <c>XY</c> plane.</summary>
     private void DrawTexturedQuad(
         Transform transform,
         Vector2 size,
@@ -3513,14 +2444,10 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Binds the texture, records one textured quad with the effective render state, and clears the
-    /// shared binding.
-    /// </summary>
+    /// <summary>Records one textured quad and clears the shared texture binding.</summary>
     /// <remarks>
-    /// The caller has already validated every argument and composed the world matrix. The engine mesh
-    /// material is shared, so the binding exists only around this recording call; the record keeps its
-    /// own texture reference, and the UV rectangle is per-instance data that never affects batching.
+    /// The caller has validated the arguments and composed the world matrix; the engine mesh
+    /// material's binding exists only around this call.
     /// </remarks>
     private void RecordTexturedQuad(
         Texture texture,
@@ -3552,35 +2479,15 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one billboard instance through <see cref="RecordTexturedQuad"/> with the alpha-blended
-    /// state.
-    /// </summary>
-    /// <remarks>
-    /// The caller has already validated every argument and composed the world matrix.
-    /// </remarks>
+    /// <summary>Records one alpha-blended billboard instance.</summary>
     private void RecordBillboard(Texture texture, Rect source, Color color, Matrix4x4 matrix) =>
         RecordTexturedQuad(texture, source, color, RenderState.AlphaBlend, matrix);
 
-    /// <summary>
-    /// Acquires each ready glyph texture, records one MSDF draw with one instance per ready glyph, and
-    /// clears the reusable per-call scratch.
-    /// </summary>
-    /// <param name="font">The validated, undisposed font.</param>
-    /// <param name="layout">The service-owned layout buffer holding the arranged glyph records.</param>
-    /// <param name="color">The validated, finite linear tint.</param>
-    /// <param name="quadToWorld">
-    /// The local-glyph-quad-to-world matrix: the text block's transform for <see cref="DrawText"/>, or
-    /// the centered camera-facing block matrix for <see cref="DrawTextBillboard"/>.
-    /// </param>
+    /// <summary>Records one MSDF draw for the ready glyphs.</summary>
     /// <remarks>
-    /// Validation has already run; the remaining failures are engine-asset invariants: a disposed
-    /// primitive asset, or an MSDF material whose declared texture bindings no longer match the one
-    /// per-instance glyph texture this path records. The MSDF material is engine-owned, so its shared
-    /// texture binding is not set per call: each glyph instance carries its own texture in the record's
-    /// per-instance set. Glyph textures are retained by <see cref="Font.AcquireGlyphTexture"/> through
-    /// the frame's retention set and are deliberately not retained again here; the quad mesh and the
-    /// material's program are retained explicitly.
+    /// The quad-to-world matrix is the text transform or the centered camera-facing block. The MSDF
+    /// material must declare exactly one texture binding; each glyph texture is retained through
+    /// <see cref="Font.AcquireGlyphTexture"/>, while the quad mesh and program are retained here.
     /// </remarks>
     private void RecordText(Font font, TextLayoutBuffer layout, Color color, Matrix4x4 quadToWorld)
     {
@@ -3652,20 +2559,15 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Converts a render-pixel coordinate with a top-left origin into a world-space ray.
-    /// </summary>
-    /// <param name="screenPosition">
-    /// The render-pixel position in target space, not window space or viewport space. This differs from
-    /// <see cref="ScreenToWorldTransform"/>, whose input is relative to the camera viewport; add the
-    /// camera <see cref="Viewport"/> origin before passing a viewport-relative position here.
+    /// <summary>Converts a top-left render-pixel coordinate into a world-space ray.</summary>
+    /// <param name="screenPosition">Target-space render pixels, not viewport-relative: add the
+    /// camera <see cref="Viewport"/> origin before passing a viewport-relative position.
     /// </param>
     /// <returns>
-    /// A normalized world-space ray starting at the camera position for a perspective camera, or at the
-    /// near-plane point for an orthographic camera.
+    /// A normalized world-space ray from the camera position, or from the near-plane point for
+    /// an orthographic camera.
     /// </returns>
-    /// <exception cref="ArgumentException"><paramref name="screenPosition"/> has a non-finite component.</exception>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <exception cref="ArgumentException">The position has a non-finite component.</exception>
     public Ray ScreenToWorldRay(Vector2 screenPosition)
     {
         ThrowIfDisposed();
@@ -3704,16 +2606,12 @@ public sealed class Camera : IDisposable
         return new Ray(origin, direction);
     }
 
-    /// <summary>
-    /// Projects a world-space position to render pixels with a top-left origin.
-    /// </summary>
-    /// <param name="worldPosition">The world-space position.</param>
+    /// <summary>Projects a world-space position to target-space pixels (top-left origin).</summary>
     /// <returns>
-    /// The render-pixel position in the camera viewport, or <c>(NaN, NaN)</c> when the point is behind
-    /// the camera (<c>w &lt;= 0</c>) and has no finite screen position.
+    /// The viewport render-pixel position, or <c>(NaN, NaN)</c> when the point is behind the
+    /// camera ( <c>w &lt;= 0</c>).
     /// </returns>
-    /// <exception cref="ArgumentException"><paramref name="worldPosition"/> has a non-finite component.</exception>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    /// <exception cref="ArgumentException">The position has a non-finite component.</exception>
     public Vector2 WorldToScreen(Vector3 worldPosition)
     {
         ThrowIfDisposed();
@@ -3733,51 +2631,27 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Converts a render-pixel coordinate relative to the camera viewport into a world transform on the
-    /// plane at <paramref name="distance"/> along the camera's forward axis.
-    /// </summary>
-    /// <param name="point">
-    /// The render-pixel position relative to the camera viewport, with a top-left origin. It is not a
-    /// target-space position: <c>(0, 0)</c> is the viewport's top-left corner. This differs from
-    /// <see cref="ScreenToWorldRay"/>, whose input is in target space, and from <see cref="WorldToScreen"/>,
-    /// whose output is in target space; subtract the camera <see cref="Viewport"/> origin to convert a
-    /// target-space position, or add it to compare the plane position with <see cref="WorldToScreen"/>.
+    /// <summary>Maps a viewport point to a world transform on a forward-distance plane.</summary>
+    /// <param name="point">Viewport-relative render pixels with a top-left origin; subtract the
+    /// camera <see cref="Viewport"/> origin to convert a target-space position.
     /// </param>
-    /// <param name="distance">
-    /// The plane distance from the camera along its forward axis, in world units. It must be finite and
-    /// greater than zero.
+    /// <param name="distance">The plane distance along the forward axis in world
+    /// units; finite and positive.
     /// </param>
     /// <returns>
-    /// A transform whose position is the world point on that plane at <paramref name="point"/>, whose
-    /// rotation is the camera transform's rotation, and whose scale is uniform world units per render
-    /// pixel at that plane.
+    /// A transform at the world point on that plane, with the camera rotation and a uniform scale
+    /// in world units per render pixel.
     /// </returns>
     /// <remarks>
-    /// <para>
-    /// The returned transform's local XY plane is screen-aligned and its local <c>+Z</c> faces the
-    /// camera, so a sprite or text quad authored in local XY reads upright at the screen point. This is
-    /// the anchored-plane counterpart of <see cref="ScreenToWorldRay"/>: the ray gives only a direction,
-    /// while this member also supplies the world position, the screen-aligned rotation, and the
-    /// world-units-per-pixel scale for that plane.
-    /// </para>
-    /// <para>
-    /// The uniform scale is <c>2 * distance * tan(fieldOfView / 2) / viewport.Height</c> for a
-    /// perspective camera and <c>orthographicHeight / viewport.Height</c> for an orthographic camera. A
-    /// quad of <c>width > 0</c> and <c>height > 0</c> authored in render pixels therefore maps to
-    /// exactly the requested pixel extents at that plane.
-    /// </para>
-    /// <para>
-    /// The camera transform must have unit scale. A scaled camera transform is not supported by this
-    /// member: the view-to-world transform would scale the plane position, while
-    /// <paramref name="distance"/> and the returned units-per-pixel scale are unscaled.
-    /// </para>
+    /// The local <c>XY</c> plane is screen-aligned with local <c>+Z</c> toward the camera, so a
+    /// sprite or text quad reads upright. The scale is
+    /// <c>2 * distance * tan(fov / 2) / viewport.Height</c> for perspective and
+    /// <c>orthographicHeight / viewport.Height</c> for orthographic.
     /// </remarks>
-    /// <exception cref="ArgumentException"><paramref name="point"/> has a non-finite component.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="distance"/> is not finite or is not greater than zero.
+    /// <exception cref="ArgumentException">The point has a non-finite component.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The distance is not finite or
+    /// not greater than zero.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
     public Transform ScreenToWorldTransform(Vector2 point, float distance)
     {
         ThrowIfDisposed();
@@ -3814,14 +2688,7 @@ public sealed class Camera : IDisposable
         return new Transform(worldPosition, _transform.Rotation, new Vector3(unitsPerPixel));
     }
 
-    /// <summary>
-    /// Seals the pass. Idempotent.
-    /// </summary>
-    /// <remarks>
-    /// After disposal every property and draw throws <see cref="ObjectDisposedException"/>; the pass is
-    /// submitted to the frame when the tick ends.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Seals the pass and releases the camera; idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)
@@ -3904,10 +2771,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets whether a render target color or depth view belongs to the render texture the recording
-    /// camera writes.
-    /// </summary>
+    /// <summary>Whether a render-target view belongs to the render texture this camera writes.</summary>
     private bool IsSamePassRenderTargetView(Texture texture) =>
         _targetId != 0 && texture.RenderTargetId == _targetId;
 
@@ -3926,15 +2790,7 @@ public sealed class Camera : IDisposable
         return primitives;
     }
 
-    /// <summary>
-    /// Retains the mesh, program, and textures, snapshots the material cursor state, records one draw
-    /// with <paramref name="instanceCount"/> instances, and returns the world-matrix slot to fill.
-    /// </summary>
-    /// <remarks>
-    /// Validation happens before any retention or record mutation, so a rejected call leaves the frame
-    /// packet and its retention set untouched. Every caller runs on the tick thread from a recording
-    /// pass. The convenience overload records the full-texture UV rectangle <c>(0, 0, 1, 1)</c>.
-    /// </remarks>
+    /// <summary>Retains assets, records one draw, and returns the world-matrix slot.</summary>
     private Span<Matrix4x4> BeginPrimitiveDraw(
         Mesh mesh,
         Shader material,
@@ -3951,15 +2807,10 @@ public sealed class Camera : IDisposable
             new Vector4(0f, 0f, 1f, 1f)
         );
 
-    /// <summary>
-    /// Retains the mesh, program, and textures, snapshots the material cursor state, records one draw
-    /// with <paramref name="instanceCount"/> instances and the given per-instance UV rectangle, and
-    /// returns the world-matrix slot to fill.
-    /// </summary>
+    /// <summary>Retains assets and records one draw with a per-instance UV rectangle.</summary>
     /// <remarks>
-    /// Validation happens before any retention or record mutation, so a rejected call leaves the frame
-    /// packet and its retention set untouched. Every caller runs on the tick thread from a recording
-    /// pass. <paramref name="uvRect"/> is per-instance data and never affects batching.
+    /// Validation runs before any retention or record mutation, so a rejected call leaves the frame
+    /// packet untouched; the UV rectangle never affects batching.
     /// </remarks>
     private Span<Matrix4x4> BeginPrimitiveDraw(
         Mesh mesh,
@@ -3992,9 +2843,7 @@ public sealed class Camera : IDisposable
         return record.BeginInstances(instanceCount);
     }
 
-    /// <summary>
-    /// Builds the right, up, and front axes of a quad that faces along the camera's view direction.
-    /// </summary>
+    /// <summary>Builds the right, up, and front axes for a quad facing the camera's view direction.</summary>
     private (Vector3 Right, Vector3 Up, Vector3 Front) GetCameraFacingBasis()
     {
         Vector3 front = NormalizeOr(-_transform.Forward, Vector3.UnitZ);
@@ -4003,9 +2852,7 @@ public sealed class Camera : IDisposable
         return (right, Vector3.Cross(front, right), front);
     }
 
-    /// <summary>
-    /// Builds the right, up, and front axes of a vertical billboard: world up plus the camera yaw.
-    /// </summary>
+    /// <summary>Builds the axes for a vertical billboard: world up plus the camera yaw.</summary>
     private (Vector3 Right, Vector3 Up, Vector3 Front) GetVerticalBillboardBasis()
     {
         Vector3 forward = _transform.Forward;
@@ -4027,24 +2874,12 @@ public sealed class Camera : IDisposable
         return Matrix4x4.CreateScale(width, height, 1f) * orientation;
     }
 
-    /// <summary>
-    /// Builds the local billboard quad that maps the unit quad so the normalized
-    /// <paramref name="origin"/> pivot sits at the local origin and <paramref name="size"/> scales it.
-    /// </summary>
-    /// <remarks>
-    /// The engine quad is one unit square in its local XY plane centered on the origin, so the pivot
-    /// offset from the center is <c>origin - 0.5</c>. Under the row-vector convention the translation
-    /// is applied before the scale, which puts the pivot at the local origin and keeps the offset in
-    /// world-size units.
-    /// </remarks>
+    /// <summary>Maps the unit quad to the normalized origin pivot and size.</summary>
     private static Matrix4x4 CreateBillboardQuadMatrix(Vector2 size, Vector2 origin) =>
         Matrix4x4.CreateTranslation(-(origin.X - 0.5f), -(origin.Y - 0.5f), 0f)
         * Matrix4x4.CreateScale(size.X, size.Y, 1f);
 
-    /// <summary>
-    /// Builds the vertical billboard matrix: world up plus the camera yaw, with the origin pivot and
-    /// the world-space position.
-    /// </summary>
+    /// <summary>Builds the vertical billboard matrix from a position, size, and pivot.</summary>
     private Matrix4x4 CreateVerticalBillboardMatrix(Vector3 position, Vector2 size, Vector2 origin)
     {
         (Vector3 right, Vector3 up, Vector3 front) = GetVerticalBillboardBasis();
@@ -4052,14 +2887,7 @@ public sealed class Camera : IDisposable
             * CreateBillboardOrientation(position, right, up, front);
     }
 
-    /// <summary>
-    /// Builds the camera-facing billboard matrix with the transform position and scale and the
-    /// transform rotation's in-plane roll.
-    /// </summary>
-    /// <remarks>
-    /// The transform scale multiplies the width and height. The roll is applied around the pivot in the
-    /// billboard's local XY plane before the camera basis orients the quad.
-    /// </remarks>
+    /// <summary>Builds the camera-facing billboard matrix from a transform and roll.</summary>
     private Matrix4x4 CreateFacingBillboardMatrix(Transform transform, Vector2 size, Vector2 origin)
     {
         Vector2 scaledSize = new(size.X * transform.Scale.X, size.Y * transform.Scale.Y);
@@ -4071,15 +2899,9 @@ public sealed class Camera : IDisposable
         return quad * CreateBillboardOrientation(transform.Position, right, up, front);
     }
 
-    /// <summary>
-    /// Extracts the billboard's in-plane roll from a rotation: the twist about the local <c>+Z</c>
-    /// plane normal.
-    /// </summary>
+    /// <summary>Extracts the billboard's in-plane roll: the twist about the local <c>+Z</c> normal.</summary>
     /// <remarks>
-    /// The quaternion is decomposed into a swing and a twist about <c>+Z</c>. The twist angle is
-    /// <c>2 * atan2(Z, W)</c>, which is the rotation that must be applied in the billboard's plane. A
-    /// pure roll gives its angle, a pure pitch or yaw gives zero, and a combined rotation uses only its
-    /// roll component. The result is wrapped to <c>(-pi, pi]</c>.
+    /// A pure pitch or yaw gives zero; the result is wrapped to <c>(-pi, pi]</c>.
     /// </remarks>
     private static float GetBillboardRoll(Quaternion rotation)
     {
@@ -4096,9 +2918,7 @@ public sealed class Camera : IDisposable
         return roll;
     }
 
-    /// <summary>
-    /// Builds the row-vector quad orientation from the given right, up, and front axes and position.
-    /// </summary>
+    /// <summary>Builds the row-vector quad orientation from the right, up, front, and position.</summary>
     private static Matrix4x4 CreateBillboardOrientation(
         Vector3 position,
         Vector3 right,
@@ -4221,14 +3041,10 @@ public sealed class Camera : IDisposable
         return length > 0f && float.IsFinite(length) ? value / length : fallback;
     }
 
-    /// <summary>
-    /// Composes a rotation and translation that maps the local <c>+Y</c> axis to
-    /// <paramref name="end"/> - <paramref name="start"/> and the local origin to
-    /// <paramref name="start"/>.
-    /// </summary>
+    /// <summary>Maps local <c>+Y</c> to <c>end - start</c> and the origin to <c>start</c>.</summary>
     /// <remarks>
-    /// The roll around the segment is deterministic: the local X axis is the normalized cross product
-    /// of world up (or world X for a vertical segment) and the segment axis.
+    /// The roll around the segment is deterministic: local X is the cross product of world up
+    /// (world X for a vertical segment) and the segment axis.
     /// </remarks>
     private static Matrix4x4 CreateSegmentMatrix(Vector3 start, Vector3 end)
     {
@@ -4256,10 +3072,7 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Composes the reference-triangle map for one world-space triangle and then applies
-    /// <paramref name="outer"/>.
-    /// </summary>
+    /// <summary>Composes the reference-triangle map and applies <paramref name="outer"/>.</summary>
     private static Matrix4x4 CreateTriangleMatrix(
         Vector3 a,
         Vector3 b,
@@ -4267,14 +3080,7 @@ public sealed class Camera : IDisposable
         Matrix4x4 outer
     ) => CreateTriangleMatrix(a, b, c, Vector3.Cross(b - a, c - a), Vector3.UnitZ) * outer;
 
-    /// <summary>
-    /// Records a tessellated unit sphere through <paramref name="outer"/> as one instanced triangle
-    /// draw.
-    /// </summary>
-    /// <param name="outer">The unit-sphere-to-world matrix.</param>
-    /// <param name="rings">The validated number of latitude bands; at least two.</param>
-    /// <param name="slices">The validated number of longitude segments; at least three.</param>
-    /// <param name="color">The linear sphere color.</param>
+    /// <summary>Records a tessellated unit sphere as one instanced triangle draw.</summary>
     private void DrawTessellatedSphere(Matrix4x4 outer, int rings, int slices, Color color)
     {
         PrimitiveAssets primitives = RequirePrimitives();
@@ -4333,14 +3139,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a tessellated unit wire sphere through <paramref name="outer"/> as one instanced line
-    /// draw.
-    /// </summary>
-    /// <param name="outer">The unit-sphere-to-world matrix.</param>
-    /// <param name="rings">The validated number of latitude bands; at least two.</param>
-    /// <param name="slices">The validated number of longitude segments; at least three.</param>
-    /// <param name="color">The linear wire color.</param>
+    /// <summary>Records a tessellated unit wire sphere as one instanced line draw.</summary>
     private void DrawTessellatedWireSphere(Matrix4x4 outer, int rings, int slices, Color color)
     {
         PrimitiveAssets primitives = RequirePrimitives();
@@ -4379,16 +3178,11 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a capped cylinder in local shape space through <paramref name="outer"/>.
-    /// </summary>
+    /// <summary>Records a capped cylinder in local shape space through <paramref name="outer"/>.</summary>
     /// <remarks>
-    /// Local space has its bottom cap at the origin and its axis along <c>+Y</c>. Equal positive radii
-    /// use quad side instances and two cap triangle instances per side. Unequal positive radii use two
-    /// side triangles plus one triangle per cap for each side because a tapered segment is not an
-    /// affine image of the unit quad. A zero radius at one end uses one side triangle and one base-cap
-    /// triangle per side; the degenerate cap at the apex is skipped. The caller validates the values,
-    /// rejects two zero radii, and rejects a zero height.
+    /// Equal positive radii use quad sides, unequal radii use two triangles per side, and one zero
+    /// radius makes a cone whose degenerate apex cap is skipped. The caller validates the values
+    /// and rejects two zero radii or a zero height.
     /// </remarks>
     private void DrawCylinderCore(
         Matrix4x4 outer,
@@ -4550,14 +3344,7 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a wire cylinder in local shape space through <paramref name="outer"/> as one instanced
-    /// line draw.
-    /// </summary>
-    /// <remarks>
-    /// The draw has one vertical edge per side plus one closed ring per non-zero radius. The caller
-    /// validates the values, rejects two zero radii, and rejects a zero height.
-    /// </remarks>
+    /// <summary>Records a wire cylinder in local shape space as one line draw.</summary>
     private void DrawWireCylinderCore(
         Matrix4x4 outer,
         float radiusTop,
@@ -4614,14 +3401,10 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records a solid capsule in local shape space through <paramref name="outer"/>.
-    /// </summary>
+    /// <summary>Records a solid capsule in local shape space through <paramref name="outer"/>.</summary>
     /// <remarks>
-    /// Local space is centered at the origin with the cap centers at <c>(0, ±height/2, 0)</c>. The body
-    /// is <c>slices</c> side quads and the two hemispherical caps are
-    /// <c>2 * slices * (2 * rings - 1)</c> triangles. The caller validates the values and rejects a
-    /// zero radius or height.
+    /// Local space is centered at the origin with cap centers at <c>(0, ±height/2, 0)</c>; the
+    /// caller validates the values and rejects a zero radius or height.
     /// </remarks>
     private void DrawCapsuleCore(
         Matrix4x4 outer,
@@ -4679,15 +3462,10 @@ public sealed class Camera : IDisposable
         );
     }
 
-    /// <summary>
-    /// Records a wire capsule in local shape space through <paramref name="outer"/> as one instanced
-    /// line draw.
-    /// </summary>
+    /// <summary>Records a wire capsule in local shape space as one line draw.</summary>
     /// <remarks>
-    /// The draw has <c>slices * (4 * rings + 1)</c> line instances: one body edge per slice, one
-    /// equator ring per end, and per hemispherical cap one meridian per slice with <c>rings</c>
-    /// segments plus <c>rings - 1</c> interior latitude rings. The caller validates the values and
-    /// rejects a zero radius or height.
+    /// The draw has <c>slices * (4 * rings + 1)</c> line instances; the
+    /// caller validates the values.
     /// </remarks>
     private void DrawWireCapsuleCore(
         Matrix4x4 outer,
@@ -4776,12 +3554,10 @@ public sealed class Camera : IDisposable
         }
     }
 
-    /// <summary>
-    /// Fill the cap triangles of one capsule hemisphere, starting at <paramref name="matrixIndex"/>.
-    /// </summary>
+    /// <summary>Fills one capsule hemisphere's cap triangles.</summary>
     /// <remarks>
-    /// The top hemisphere uses the same winding as the engine sphere mesh. The bottom hemisphere
-    /// mirrors the top coordinates and reverses each triangle's winding, so both caps face outward.
+    /// The top hemisphere uses the engine sphere winding; the bottom mirrors coordinates and
+    /// reverses winding so both caps face outward.
     /// </remarks>
     private static int AddHemisphereTriangles(
         Span<Matrix4x4> matrices,
@@ -4869,10 +3645,7 @@ public sealed class Camera : IDisposable
         return matrixIndex + 1;
     }
 
-    /// <summary>
-    /// Records a closed unit circle in the local <c>XZ</c> plane through <paramref name="outer"/> as
-    /// one instanced line draw.
-    /// </summary>
+    /// <summary>Records a closed unit circle in the local <c>XZ</c> plane.</summary>
     private void DrawCircleCore(Matrix4x4 outer, Color color)
     {
         PrimitiveAssets primitives = RequirePrimitives();
@@ -4967,14 +3740,11 @@ public sealed class Camera : IDisposable
     private static bool HasZeroScale(Transform transform) =>
         transform.Scale.X == 0f || transform.Scale.Y == 0f || transform.Scale.Z == 0f;
 
-    /// <summary>
-    /// Validates a normalized billboard source rectangle: finite, with positive extents, inside the
-    /// <c>[0, 1]</c> texture rectangle.
-    /// </summary>
+    /// <summary>Validates a normalized source rectangle.</summary>
     /// <remarks>
     /// <see cref="Rect.X"/> and <see cref="Rect.Y"/> are the top-left corner and
-    /// <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the extents. The bounds are exact
-    /// comparisons, so <c>(0, 0, 1, 1)</c> and a rectangle that ends exactly on <c>1</c> are legal.
+    /// <see cref="Rect.Width"/> and <see cref="Rect.Height"/> the extents; a rectangle ending
+    /// exactly on <c>1</c> is legal.
     /// </remarks>
     private static void ValidateBillboardSource(Rect source, string parameterName)
     {

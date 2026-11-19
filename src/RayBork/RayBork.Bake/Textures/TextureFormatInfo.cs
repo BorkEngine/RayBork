@@ -1,13 +1,9 @@
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// The KTX2 and Data Format Descriptor metadata of one <see cref="TextureFormat"/>.
-/// </summary>
+/// <summary>The KTX2 metadata of one <see cref="TextureFormat"/>.</summary>
 /// <remarks>
-/// The values mirror the Vulkan format table plus the narrow KTX2 profile this bake writes: one 2D
-/// image, one layer, one face, no supercompression, and a complete mip chain. The DFD color model,
-/// transfer function, texel block extent, and sample list are the fields a KTX2 reader compares
-/// against the descriptor.
+/// Values mirror the Vulkan format table plus the bake's narrow KTX2 profile. The DFD color model,
+/// transfer function, block extent, and samples are what a reader compares against the descriptor.
 /// </remarks>
 internal sealed class TextureFormatInfo
 {
@@ -140,16 +136,10 @@ internal sealed class TextureFormatInfo
     /// <summary>Gets whether the format stores 4x4 block-compressed data.</summary>
     internal bool IsBlockCompressed => BlockWidth != 1 || BlockHeight != 1;
 
-    /// <summary>
-    /// Gets the alignment KTX2 requires for the first byte of every mip level:
-    /// <c>lcm(texelBlockSize, 4)</c>.
-    /// </summary>
+    /// <summary>Gets the mip level alignment, <c>lcm(texelBlockSize, 4)</c>.</summary>
     internal int RequiredAlignment => LeastCommonMultiple(BytesPerBlock, 4);
 
-    /// <summary>Gets the metadata for a descriptor format.</summary>
-    /// <param name="format">The descriptor format.</param>
-    /// <returns>The format metadata.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The value is not a supported format.</exception>
+    /// <summary>Gets the metadata for a supported descriptor format.</summary>
     internal static TextureFormatInfo For(TextureFormat format) =>
         format switch
         {
@@ -166,11 +156,7 @@ internal sealed class TextureFormatInfo
             ),
         };
 
-    /// <summary>Gets the stored byte length of one mip level.</summary>
-    /// <param name="width">The level's pixel width.</param>
-    /// <param name="height">The level's pixel height.</param>
-    /// <returns>The stored byte length, without padding.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
+    /// <summary>Gets the stored byte length of one mip level, without padding.</summary>
     internal int GetLevelByteLength(int width, int height)
     {
         if (width <= 0)

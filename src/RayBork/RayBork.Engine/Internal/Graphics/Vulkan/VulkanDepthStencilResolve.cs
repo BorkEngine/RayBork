@@ -3,23 +3,13 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Probes and selects the Vulkan 1.2 depth/stencil resolve mode a depth-bearing render target uses.
+/// Selects and probes the Vulkan 1.2 depth/stencil resolve mode a depth-bearing render target uses.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The renderer resolves a multisampled depth attachment into the single-sample depth image a shader
-/// samples. Vulkan 1.2 exposes the supported modes through
-/// <c>VkPhysicalDeviceDepthStencilResolveProperties</c>; a conformant Vulkan 1.2 device advertises
-/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>, which is the only mode the renderer accepts because the
-/// public depth view must expose the stored reverse-Z value unchanged. A device that does not advertise
-/// sample-zero is rejected instead of creating a depth view whose values would depend on a min/max
-/// resolve.
-/// </para>
-/// <para>
-/// The engine has no stencil attachment, so only the depth mode is selected. The selection and diagnostic
-/// helpers are pure and safe on any thread; <see cref="Query"/> reads the physical device and is
-/// render-thread only.
-/// </para>
+/// A multisampled depth attachment resolves into the sampled single-sample depth image with
+/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>, the only mode that leaves the stored reverse-Z value unchanged;
+/// a device without it is rejected. <see cref="Query"/> reads the physical device and is render-thread
+/// only; the selection and diagnostic helpers are pure.
 /// </remarks>
 internal static class VulkanDepthStencilResolve
 {
@@ -27,16 +17,10 @@ internal static class VulkanDepthStencilResolve
     internal const string PROPERTY_NAME =
         "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes";
 
-    /// <summary>The depth resolve mode every conformant Vulkan 1.2 device advertises and the renderer requires.</summary>
+    /// <summary>The depth resolve mode the renderer requires.</summary>
     internal const string MODE_NAME = "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT";
 
-    /// <summary>
-    /// Queries a physical device's depth/stencil resolve support.
-    /// </summary>
-    /// <param name="vulkan">The loaded Vulkan API.</param>
-    /// <param name="physicalDevice">The physical device to probe.</param>
-    /// <returns>The device's depth/stencil resolve properties.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="vulkan"/> is <c>null</c>.</exception>
+    /// <summary>Queries a physical device's depth/stencil resolve support.</summary>
     internal static unsafe PhysicalDeviceDepthStencilResolveProperties Query(
         Vk vulkan,
         PhysicalDevice physicalDevice
@@ -58,22 +42,14 @@ internal static class VulkanDepthStencilResolve
     }
 
     /// <summary>
-    /// Selects the depth resolve mode the renderer uses.
+    /// Selects sample-zero depth resolve, or <see cref="ResolveModeFlags.None"/> when it is unsupported.
     /// </summary>
-    /// <param name="supported">The modes the device advertises for depth.</param>
-    /// <returns>
-    /// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> when the device advertises it, or
-    /// <see cref="ResolveModeFlags.None"/> when it does not.
-    /// </returns>
     internal static ResolveModeFlags SelectDepthResolveMode(ResolveModeFlags supported) =>
         (supported & ResolveModeFlags.SampleZeroBit) != 0
             ? ResolveModeFlags.SampleZeroBit
             : ResolveModeFlags.None;
 
-    /// <summary>
-    /// Describes a resolve-mode mask for a diagnostic.
-    /// </summary>
-    /// <param name="mode">The resolve-mode mask.</param>
+    /// <summary>Describes a resolve-mode mask for a diagnostic.</summary>
     /// <returns>The Vulkan mode names, or <c>VK_RESOLVE_MODE_NONE</c>.</returns>
     internal static string Describe(ResolveModeFlags mode)
     {
@@ -106,12 +82,7 @@ internal static class VulkanDepthStencilResolve
         return string.Join(" | ", names);
     }
 
-    /// <summary>
-    /// Builds the diagnostic for a device that advertises no usable depth resolve mode.
-    /// </summary>
-    /// <param name="deviceName">The device name reported by Vulkan.</param>
-    /// <param name="supported">The modes the device advertises for depth.</param>
-    /// <returns>The diagnostic message.</returns>
+    /// <summary>Builds the diagnostic for a device without a usable depth resolve mode.</summary>
     internal static string CreateMissingModeMessage(
         string deviceName,
         ResolveModeFlags supported

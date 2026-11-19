@@ -4,9 +4,8 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts.Glyph;
 
 /// <summary>
-/// Starts one app-lifetime generation service and creates pipelines over one fake texture factory.
-/// <see cref="Dispose"/> follows the required shutdown order: stop the service, then dispose every
-/// pipeline. A test may dispose a pipeline early; the second dispose is a no-op.
+/// Starts one app-lifetime generation service and creates pipelines over one fake texture factory;
+/// dispose stops the service before the pipelines.
 /// </summary>
 internal sealed class GlyphPipelineTestHarness : IDisposable
 {
@@ -34,10 +33,6 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
     internal GlyphGenerationService Service { get; }
 
     /// <summary>Creates and registers a pipeline over one face.</summary>
-    /// <param name="face">The parsed face.</param>
-    /// <param name="settings">The MSDF settings, or the face's defaults when omitted.</param>
-    /// <param name="textureBudget">The cache budget, or the production budget when omitted.</param>
-    /// <returns>The pipeline.</returns>
     internal FontGlyphPipeline CreatePipeline(
         SfntFace face,
         FontGlyphSettings? settings = null,
@@ -55,14 +50,7 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
         return pipeline;
     }
 
-    /// <summary>
-    /// Begins one frame, requests one glyph, and waits until it settles. The probe acquisition holds no
-    /// frame and releases the empty retention set before it waits.
-    /// </summary>
-    /// <param name="pipeline">The pipeline.</param>
-    /// <param name="glyphId">The glyph id.</param>
-    /// <param name="frameIndex">The frame index for the request.</param>
-    /// <returns>A task that completes when the glyph is terminal.</returns>
+    /// <summary>Begins a frame, requests one glyph, and waits until it settles.</summary>
     internal static async Task RequestAndWaitAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
@@ -78,15 +66,7 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
             .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>
-    /// Begins one frame, requests one glyph, waits until it is ready, and returns the cached texture.
-    /// The acquisition's frame hold is released, simulating a frame that completed. A glyph that is
-    /// already cached is returned without a second generation.
-    /// </summary>
-    /// <param name="pipeline">The pipeline.</param>
-    /// <param name="glyphId">The glyph id.</param>
-    /// <param name="frameIndex">The frame index for the request.</param>
-    /// <returns>The generated texture.</returns>
+    /// <summary>Begins a frame, requests one glyph, waits, and returns the texture.</summary>
     internal static async Task<Texture> GenerateAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
@@ -118,9 +98,6 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
     }
 
     /// <summary>Acquires one glyph and immediately releases the frame hold.</summary>
-    /// <param name="pipeline">The pipeline.</param>
-    /// <param name="glyphId">The glyph id.</param>
-    /// <returns>The cached texture, or <see langword="null"/> on a miss.</returns>
     internal static Texture? AcquireOnce(FontGlyphPipeline pipeline, int glyphId)
     {
         FrameAssetRetention retention = new();
@@ -134,11 +111,7 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Stops a service on a pool thread with a bounded wait, so a broken join fails the test instead of
-    /// hanging it.
-    /// </summary>
-    /// <param name="service">The service to stop.</param>
+    /// <summary>Stops a service with a bounded wait, so a broken join fails the test.</summary>
     internal static void StopService(GlyphGenerationService service)
     {
         ArgumentNullException.ThrowIfNull(service);
@@ -149,7 +122,7 @@ internal sealed class GlyphPipelineTestHarness : IDisposable
             .GetResult();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Dispose()
     {
         StopService(Service);

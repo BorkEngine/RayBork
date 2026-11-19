@@ -9,30 +9,10 @@ namespace RayBork;
 /// cursor and texture bindings.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A material is not an engine asset and has no shared identity. <see cref="IAssetCatalog.Load{T}"/>
-/// returns a new independent material every call, all backed by the same cached internal program for
-/// that path. Two materials over the same program batch together in one instanced draw; their uniform
-/// values and texture bindings are per-instance data and never split a batch.
-/// </para>
-/// <para>
-/// <see cref="Stages"/>, <see cref="Uniforms"/>, and <see cref="Textures"/> come from the bake sidecar
-/// metadata, not from runtime SPIR-V reflection. <see cref="SetUniform(string, float)"/> and its
-/// overloads write the cursor that the next draw snapshots; values are stored in the per-instance
-/// shader ABI record, and the renderer resolves texture bindings to bindless indices.
-/// </para>
-/// <para>
-/// The cursor is tick-thread affine: <see cref="SetUniform(string, float)"/> and its overloads plus
-/// <see cref="ResetUniforms"/> throw <see cref="InvalidOperationException"/> from any other thread.
-/// Cursor mutation is safe against a concurrent <see cref="Dispose"/> from another thread. A texture
-/// set into the cursor acquires an engine owner reference, so disposing the public texture afterwards
-/// does not invalidate the cursor; overwriting the binding, <see cref="ResetUniforms"/>, or disposing
-/// the material releases it.
-/// </para>
-/// <para>
-/// <see cref="Path"/> and <see cref="IsDisposed"/> stay readable after disposal. Every other public
-/// member throws <see cref="ObjectDisposedException"/> once the material is disposed.
-/// </para>
+/// Each <see cref="IAssetCatalog.Load{T}"/> call returns an independent material over the same cached
+/// program, and every cursor mutation is tick-thread only. <see cref="Path"/> and
+/// <see cref="IsDisposed"/> stay readable after disposal; every other public member throws
+/// <see cref="ObjectDisposedException"/>.
 /// </remarks>
 public sealed class Shader : IDisposable
 {
@@ -46,11 +26,9 @@ public sealed class Shader : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Initializes one material over an already referenced shader program. The caller must have
-    /// acquired the program owner reference that this material releases on <see cref="Dispose"/>.
+    /// Initializes one material over an already referenced program that it releases on
+    /// <see cref="Dispose"/>.
     /// </summary>
-    /// <param name="program">The shared program.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <c>null</c>.</exception>
     internal Shader(ShaderProgram program)
     {
         ArgumentNullException.ThrowIfNull(program);
@@ -64,15 +42,10 @@ public sealed class Shader : IDisposable
         _textureValues = new Texture?[program.Abi.Textures.Count];
     }
 
-    /// <summary>
-    /// Gets the canonical path of the shader program. It stays readable after disposal.
-    /// </summary>
+    /// <summary>Gets the canonical program path; readable after disposal.</summary>
     public string Path => _path;
 
-    /// <summary>
-    /// Gets the stages present in the program.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
+    /// <summary>Gets the shader stages the baked program declares.</summary>
     public ShaderStageMask Stages
     {
         get
@@ -82,11 +55,7 @@ public sealed class Shader : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the default render state baked for the program. The draw recorder uses it when a draw does
-    /// not override the state.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
+    /// <summary>Gets the baked render state a draw uses unless it overrides it.</summary>
     public RenderState DefaultRenderState
     {
         get
@@ -96,11 +65,7 @@ public sealed class Shader : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the reflected uniform declarations. The list is read-only and never reflects the current
-    /// uniform values.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
+    /// <summary>Gets the baked uniform declarations, not the current values.</summary>
     public IReadOnlyList<ShaderUniform> Uniforms
     {
         get
@@ -110,11 +75,7 @@ public sealed class Shader : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the texture bindings in bindless slot order. The list is read-only and never reflects the
-    /// current texture assignments.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
+    /// <summary>Gets the baked texture bindings in bindless slot order; read-only.</summary>
     public IReadOnlyList<ShaderTextureBinding> Textures
     {
         get
@@ -127,75 +88,44 @@ public sealed class Shader : IDisposable
     /// <inheritdoc/>
     public bool IsDisposed => _disposed || _program.IsDisposed;
 
-    /// <summary>
-    /// Gets the internal program this material references.
-    /// </summary>
+    /// <summary>Gets the internal program this material references.</summary>
     internal ShaderProgram Program => _program;
 
-    /// <summary>
-    /// Gets the per-instance layout derived from the sidecar declaration order.
-    /// </summary>
+    /// <summary>Gets the per-instance layout derived from the sidecar declaration order.</summary>
     internal ShaderAbiLayout Abi => _program.Abi;
 
-    /// <summary>Gets the complete per-instance record size in bytes, including the 96-byte header.</summary>
+    /// <summary>Gets the per-instance record size in bytes, including the 96-byte header.</summary>
     internal int InstanceDataSize => _program.InstanceDataSize;
 
-    /// <summary>
-    /// Gets the reusable little-endian cursor template that starts at instance offset
-    /// <see cref="ShaderAbiLayout.INSTANCE_HEADER_SIZE"/>.
-    /// </summary>
+    /// <summary>Gets the cursor template that starts after the 96-byte instance header.</summary>
     /// <remarks>
-    /// The span is exactly <see cref="InstanceDataSize"/> minus the 96-byte header. Uniform values are
-    /// stored at their layout offset minus the header, so copying the span to instance-record offset
-    /// 96 reproduces the record. The texture index slots at the start of the span stay zero because
-    /// the draw recorder resolves them from <see cref="TextureValues"/>. The data is valid until the
-    /// next cursor mutation (<see cref="SetUniform(string, float)"/> and its overloads or
-    /// <see cref="ResetUniforms"/>) and is read synchronously by the draw recorder on the tick thread.
-    /// The span does not allocate per call.
+    /// Valid until the next cursor mutation; the draw recorder reads it on the tick thread. A draw
+    /// copies it to instance-record offset 96.
     /// </remarks>
     internal ReadOnlySpan<byte> InstanceData => _instanceData;
 
-    /// <summary>
-    /// Gets the current texture binding values in sidecar declaration order, or <see langword="null"/>
-    /// for a binding that uses the built-in white fallback.
-    /// </summary>
+    /// <summary>Gets the current texture bindings in sidecar order; <c>null</c> means white.</summary>
     /// <remarks>
-    /// The span is valid until the next cursor mutation. The draw recorder copies it synchronously on
-    /// the tick thread and retains the referenced textures for the frame.
+    /// Valid until the next cursor mutation; the draw recorder retains the textures for the frame.
     /// </remarks>
     internal ReadOnlySpan<Texture?> TextureValues => _textureValues;
 
-    /// <summary>
-    /// Gets the immutable program bake-default instance template that starts at instance offset
-    /// <see cref="ShaderAbiLayout.INSTANCE_HEADER_SIZE"/>.
-    /// </summary>
+    /// <summary>Gets the immutable bake-default instance template.</summary>
     /// <remarks>
-    /// This is the same data shape as <see cref="InstanceData"/>, but it always holds the program's bake
-    /// defaults and is never changed by any material cursor. A draw path that must use the baked
-    /// defaults, such as a model draw that has no per-draw override, copies this span to instance-record
-    /// offset 96. It is stable for the program lifetime and allocates nothing.
+    /// A draw without overrides copies it to instance-record offset 96; it stays stable for the
+    /// program lifetime.
     /// </remarks>
     internal ReadOnlySpan<byte> DefaultInstanceData => _program.DefaultInstanceData;
 
-    /// <summary>
-    /// Gets the immutable program bake-default texture bindings, one <see langword="null"/> per
-    /// sidecar texture.
-    /// </summary>
+    /// <summary>Gets the immutable bake-default texture bindings.</summary>
     /// <remarks>
-    /// A draw path that must use the baked defaults uses this span, so the renderer resolves every
-    /// binding to the built-in white fallback. It is stable for the program lifetime and acquires no
-    /// owner references.
+    /// All entries are <c>null</c>, so bindings resolve to the white fallback and stay stable for the
+    /// program lifetime.
     /// </remarks>
     internal ReadOnlySpan<Texture?> DefaultTextureValues => _program.DefaultTextureValues;
 
-    /// <summary>
-    /// Sets a <c>float</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a float uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>float</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, float value)
     {
         Span<byte> bytes = stackalloc byte[sizeof(float)];
@@ -203,14 +133,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Float, bytes);
     }
 
-    /// <summary>
-    /// Sets an <c>int</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not an int uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes an <c>int</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, int value)
     {
         Span<byte> bytes = stackalloc byte[sizeof(int)];
@@ -218,14 +142,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Int, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>uint</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a uint uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>uint</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, uint value)
     {
         Span<byte> bytes = stackalloc byte[sizeof(uint)];
@@ -233,14 +151,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.UInt, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>bool</c> uniform by name. The value is stored as the <c>uint</c> <c>0</c> or <c>1</c>.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a bool uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>bool</c> as <c>0</c> or <c>1</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, bool value)
     {
         Span<byte> bytes = stackalloc byte[sizeof(uint)];
@@ -248,14 +160,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Bool, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>vec2</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec2 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>vec2</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Vector2 value)
     {
         Span<byte> bytes = stackalloc byte[8];
@@ -264,14 +170,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Vector2, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>vec3</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec3 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>vec3</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Vector3 value)
     {
         Span<byte> bytes = stackalloc byte[12];
@@ -281,14 +181,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Vector3, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>vec4</c> uniform by name.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a <c>vec4</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Vector4 value)
     {
         Span<byte> bytes = stackalloc byte[16];
@@ -296,15 +190,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>vec4</c> uniform by name from the quaternion's <c>x</c>, <c>y</c>, <c>z</c>, and
-    /// <c>w</c> components.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes the quaternion components as a <c>vec4</c> uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Quaternion value)
     {
         Span<byte> bytes = stackalloc byte[16];
@@ -312,14 +199,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>mat4</c> uniform by name. The sixteen components are stored in row-major order.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a mat4 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes a row-major <c>mat4</c> into the named uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Matrix4x4 value)
     {
         Span<byte> bytes = stackalloc byte[64];
@@ -342,14 +223,8 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Matrix4x4, bytes);
     }
 
-    /// <summary>
-    /// Sets a <c>vec4</c> uniform by name from the color's red, green, blue, and alpha components.
-    /// </summary>
-    /// <param name="name">The baked uniform name.</param>
-    /// <param name="value">The new value.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Writes the RGBA components as a <c>vec4</c> uniform.</summary>
+    /// <exception cref="ArgumentException">The name is unknown or has another type.</exception>
     public void SetUniform(string name, Color value)
     {
         Span<byte> bytes = stackalloc byte[16];
@@ -357,20 +232,13 @@ public sealed class Shader : IDisposable
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
     }
 
-    /// <summary>
-    /// Sets a bindless texture binding by name.
-    /// </summary>
-    /// <param name="name">The baked texture binding name.</param>
-    /// <param name="texture">
-    /// The new texture, or <see langword="null"/> to use the built-in white fallback.
-    /// </param>
+    /// <summary>Binds a texture, or <c>null</c> for the white fallback.</summary>
     /// <remarks>
-    /// A non-null texture acquires an engine owner reference that keeps it alive until the binding is
-    /// overwritten, <see cref="ResetUniforms"/> runs, or the material is disposed.
+    /// The binding holds an owner reference until it is overwritten,
+    /// <see cref="ResetUniforms"/> runs, or the material is disposed.
     /// </remarks>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a texture binding.</exception>
-    /// <exception cref="ObjectDisposedException">The material or <paramref name="texture"/> is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <exception cref="ArgumentException">Unknown name or non-texture binding.</exception>
+    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public void SetUniform(string name, Texture? texture)
     {
         ThrowIfDisposed();
@@ -423,15 +291,8 @@ public sealed class Shader : IDisposable
         }
     }
 
-    /// <summary>
-    /// Restores every uniform to its program bake default and clears every texture binding to the
-    /// built-in white fallback.
-    /// </summary>
-    /// <remarks>
-    /// Every texture owner reference the cursor acquired is released exactly once.
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Restores every uniform to its bake default and clears texture bindings.</summary>
+    /// <remarks>Releases every texture owner reference the cursor holds.</remarks>
     public void ResetUniforms()
     {
         ThrowIfDisposed();
@@ -456,11 +317,7 @@ public sealed class Shader : IDisposable
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Disposing one material releases only that material's program reference and texture bindings.
-    /// Other materials over the same program stay usable until their own disposal.
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">The material or its program was already disposed.</exception>
+    /// <remarks>Releases only this material's references; other materials stay usable.</remarks>
     public void Dispose()
     {
         ThrowIfDisposed();

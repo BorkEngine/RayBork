@@ -5,24 +5,11 @@ using RayBork;
 namespace Pong;
 
 /// <summary>
-/// A player-vs-AI Pong match drawn with a scene camera and a later HUD camera in screen space.
+/// A player-vs-AI Pong match drawn by a scene camera and a later HUD camera.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The left paddle is the human and the right paddle is the deterministic AI. The gameplay runs on a
-/// 1280x720 design playfield with its origin at the top-left and <c>+Y</c> pointing down. Each tick
-/// fits that 16:9 playfield into the current render pixels, keeps the remainder as the scene camera's
-/// clear color, and maps design pixels to render pixels when it draws. Sizes passed to the draw
-/// helpers are therefore always render pixels.
-/// </para>
-/// <para>
-/// Every draw anchors a camera-facing plane with
-/// <see cref="Camera.ScreenToWorldTransform(Vector2, float)"/>. Both cameras are orthographic with a
-/// visible height equal to the render height, so the plane's world-units-per-pixel scale is exactly
-/// one and the design layout needs no manual projection math. The scene camera draws the playfield,
-/// the paddles, and the ball; the later HUD camera draws the scores, status line, and pause/winner
-/// overlay with <see cref="ClearMode.Depth"/>, so scene depth cannot occlude the HUD.
-/// </para>
+/// Gameplay runs on a 1280x720 design playfield letterboxed into the render size. W/S or the stick
+/// moves the left paddle; Space pauses, R restarts, B toggles bloom, and Esc exits.
 /// </remarks>
 internal sealed class PongGame : IGame
 {
@@ -127,10 +114,7 @@ internal sealed class PongGame : IGame
     private float _wallFlash;
     private int _frameCount;
 
-    /// <summary>
-    /// Creates the match.
-    /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
+    /// <summary>Creates the match.</summary>
     internal PongGame(int frameLimit)
     {
         _frameLimit = frameLimit;

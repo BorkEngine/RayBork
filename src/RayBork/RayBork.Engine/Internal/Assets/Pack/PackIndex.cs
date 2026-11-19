@@ -3,51 +3,29 @@ using System.Text;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Serializes and parses the RAYBORKP v1 binary index.
-/// </summary>
+/// <summary>Serializes and parses the RAYBORKP v1 binary index.</summary>
 /// <remarks>
-/// <para>
-/// Every field is little-endian. An entry is a <c>u16</c> UTF-8 path length, the path bytes, the
-/// asset type, the flag bits, the absolute payload offset, the stored and uncompressed lengths, the
-/// alignment, and the XXH3-64 hash of the stored bytes.
-/// </para>
-/// <para>
-/// The writer stores entries in ordinal path order. The reader rejects a non-canonical path, an
-/// unknown type, an undefined flag bit, a flag/alignment disagreement, an out-of-bounds payload, a
-/// bad alignment, a non-strict order, and a duplicate path with <c>RB1003</c>.
-/// </para>
+/// Entries are little-endian in ordinal path order, and the reader rejects every structural
+/// violation with <c>RB1003</c>. An entry is a path length, path bytes, type, flags, offset,
+/// lengths, alignment, and the XXH3-64 hash of the stored bytes.
 /// </remarks>
 internal static class PackIndex
 {
-    /// <summary>
-    /// The strict UTF-8 decoder. A malformed path must be rejected, not silently replaced.
-    /// </summary>
+    /// <summary>The strict UTF-8 decoder used to reject malformed paths.</summary>
     private static readonly UTF8Encoding _strictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true
     );
 
-    /// <summary>
-    /// The initial entry-list capacity. A corrupt header entry count must not force a large
-    /// allocation before the index length has been validated.
-    /// </summary>
+    /// <summary>The initial capacity; a corrupt count must not force a large allocation.</summary>
     private const int INITIAL_ENTRY_CAPACITY = 1024;
 
-    /// <summary>
-    /// Gets the serialized length of one entry, including its path bytes.
-    /// </summary>
-    /// <param name="path">The canonical asset path.</param>
-    /// <returns>The entry length in bytes.</returns>
+    /// <summary>Gets the serialized length of one entry, including its path bytes.</summary>
     internal static int GetEntryLength(string path) =>
         checked(PackFormat.INDEX_ENTRY_FIXED_LENGTH + Encoding.UTF8.GetByteCount(path));
 
-    /// <summary>
-    /// Serializes validated entries in their current order.
-    /// </summary>
-    /// <param name="entries">The entries, already sorted by ordinal path order.</param>
-    /// <returns>The index bytes.</returns>
-    /// <exception cref="InvalidOperationException">The index exceeds the v1 length limit.</exception>
+    /// <summary>Serializes entries in their current, already sorted order.</summary>
+    /// <exception cref="InvalidOperationException">The index exceeds a v1 field limit.</exception>
     internal static byte[] Serialize(IReadOnlyList<PackEntry> entries)
     {
         long length = 0;
@@ -104,15 +82,7 @@ internal static class PackIndex
         return index;
     }
 
-    /// <summary>
-    /// Parses and fully validates an index.
-    /// </summary>
-    /// <param name="index">The complete index bytes.</param>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="entryCount">The entry count declared by the header.</param>
-    /// <param name="fileLength">The complete pack length.</param>
-    /// <param name="payloadStart">The first byte after the index; payloads may not start earlier.</param>
-    /// <returns>The entries in sorted order.</returns>
+    /// <summary>Parses and fully validates an index, returning entries in sorted order.</summary>
     /// <exception cref="AssetPackException">The index is structurally invalid.</exception>
     internal static PackEntry[] Parse(
         ReadOnlySpan<byte> index,

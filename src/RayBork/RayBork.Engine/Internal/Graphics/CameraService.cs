@@ -2,22 +2,11 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Owns the tick-thread camera recording state for one app: the frame packet currently recording and
-/// the single active <see cref="Camera"/>.
-/// </summary>
+/// <summary>Owns tick-thread frame recording state for one app.</summary>
 /// <remarks>
-/// <para>
-/// The tick runner begins a frame after it acquires a writable ring slot and ends it after
-/// <see cref="IGame.Tick"/> returns. Cameras are sequential, not nested: creating one while another is
-/// active is an <see cref="InvalidOperationException"/>, and a camera left undisposed when the tick
-/// ends is an <see cref="InvalidOperationException"/> that names the leaked camera. The tick runner
-/// abandons the frame in both cases.
-/// </para>
-/// <para>
-/// Every member is tick-thread only. The service holds no GPU state; it only builds camera and
-/// tone-mapping snapshots and forwards them into the frame packet.
-/// </para>
+/// Cameras are sequential, not nested; nesting one or leaving one undisposed when the tick ends
+/// throws <see cref="InvalidOperationException"/>, and the frame is abandoned. Every member is
+/// tick-thread only; the service holds no GPU state.
 /// </remarks>
 internal sealed class CameraService
 {
@@ -38,11 +27,7 @@ internal sealed class CameraService
     private int _textGlyphCount;
     private int _nextCameraNumber;
 
-    /// <summary>
-    /// Initializes the service with the window used to resolve the default camera viewport.
-    /// </summary>
-    /// <param name="window">The app window; its render size is read at camera creation.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <c>null</c>.</exception>
+    /// <summary>Initializes the service with the window that supplies the default camera viewport.</summary>
     internal CameraService(IWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -52,110 +37,64 @@ internal sealed class CameraService
     /// <summary>Gets whether a frame is currently accepting cameras and draws.</summary>
     internal bool IsRecording => _packet is not null;
 
-    /// <summary>
-    /// Gets the app's engine primitive meshes and materials, or <see langword="null"/> before the app
-    /// attaches them and after it detaches them during shutdown.
-    /// </summary>
+    /// <summary>Gets the app's primitive meshes and materials, or <see langword="null"/> while detached.</summary>
     /// <remarks>
-    /// The app attaches the assets before <see cref="IGame.Setup"/> runs and detaches them after
-    /// <see cref="IGame.Shutdown"/> returned, so the primitive draw helpers may read them only while a
-    /// frame records. The service does not own the assets and never disposes them.
+    /// The app attaches them before <see cref="IGame.Setup"/> and detaches them after
+    /// <see cref="IGame.Shutdown"/>; reading them is valid only while a frame records. The service
+    /// never disposes them.
     /// </remarks>
     internal PrimitiveAssets? Primitives => _primitives;
 
-    /// <summary>
-    /// Attaches the app-lifetime primitive assets for the later camera draw helpers.
-    /// </summary>
-    /// <param name="primitives">The app's primitive assets.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="primitives"/> is <c>null</c>.</exception>
-    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    /// <summary>Attaches the app-lifetime primitive assets before the tick thread starts.</summary>
     internal void AttachPrimitives(PrimitiveAssets primitives)
     {
         ArgumentNullException.ThrowIfNull(primitives);
         _primitives = primitives;
     }
 
-    /// <summary>
-    /// Detaches the primitive assets before the app disposes them. Called on the main thread after the
-    /// tick thread joined.
-    /// </summary>
+    /// <summary>Detaches the primitive assets after the tick thread joined.</summary>
     internal void DetachPrimitives() => _primitives = null;
 
-    /// <summary>
-    /// Attaches the app-lifetime preloaded SSAO assets used by <see cref="SsaoEffect"/> captures.
-    /// </summary>
-    /// <param name="assets">The loaded engine-owned SSAO assets.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
-    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    /// <summary>Attaches the app-lifetime SSAO assets used by <see cref="SsaoEffect"/> captures.</summary>
     internal void AttachSsaoAssets(SsaoAssets assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
         _ssaoAssets = assets;
     }
 
-    /// <summary>
-    /// Detaches the SSAO assets before the app disposes them. Called on the main thread after the tick
-    /// thread joined.
-    /// </summary>
+    /// <summary>Detaches the SSAO assets before the app disposes them.</summary>
     internal void DetachSsaoAssets() => _ssaoAssets = null;
 
-    /// <summary>
-    /// Attaches the app-lifetime preloaded bloom assets used by <see cref="BloomEffect"/> captures.
-    /// </summary>
-    /// <param name="assets">The loaded engine-owned bloom assets.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
-    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    /// <summary>Attaches the app-lifetime bloom assets used by <see cref="BloomEffect"/> captures.</summary>
     internal void AttachBloomAssets(BloomAssets assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
         _bloomAssets = assets;
     }
 
-    /// <summary>
-    /// Detaches the bloom assets before the app disposes them. Called on the main thread after the tick
-    /// thread joined.
-    /// </summary>
+    /// <summary>Detaches the bloom assets before the app disposes them.</summary>
     internal void DetachBloomAssets() => _bloomAssets = null;
 
-    /// <summary>
-    /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
-    /// snapshots.
-    /// </summary>
-    /// <param name="tonemapping">The app's tone-mapping settings.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="tonemapping"/> is <c>null</c>.</exception>
-    /// <remarks>
-    /// Called by the app on the main thread before the tick thread starts. The service never mutates
-    /// the settings; it reads <see cref="TonemappingSettings.Snapshot"/> when
-    /// <see cref="EndFrame"/> seals a frame. Without an attach, a frame keeps
-    /// <see cref="TonemappingSnapshot.Default"/>, which is the path used by tests and GPU harnesses
-    /// that construct packets directly.
-    /// </remarks>
+    /// <summary>Attaches the settings snapshotted when <see cref="EndFrame"/> seals a frame.</summary>
+    /// <remarks>Without an attach, sealed frames keep <see cref="TonemappingSnapshot.Default"/>.</remarks>
     internal void AttachTonemapping(TonemappingSettings tonemapping)
     {
         ArgumentNullException.ThrowIfNull(tonemapping);
         _tonemapping = tonemapping;
     }
 
-    /// <summary>
-    /// Gets the layout buffer the camera text draws reuse.
-    /// </summary>
+    /// <summary>Gets the layout buffer that camera text draws reuse.</summary>
     /// <remarks>
-    /// The service owns one buffer for the app lifetime, so a warmed buffer lays text out without
-    /// allocating. Cameras are sequential, so one buffer is sufficient; the glyph span it exposes is
-    /// valid only until the next arrange call, and a text draw consumes it before returning.
+    /// One buffer suffices because cameras are sequential; the glyph span it exposes is valid only
+    /// until the next arrange call.
     /// </remarks>
     internal TextLayoutBuffer TextLayout => _textLayout;
 
-    /// <summary>
-    /// Reserves the reusable per-call glyph scratch and returns its writable matrix span.
-    /// </summary>
-    /// <param name="count">The number of laid-out glyph records the call may record.</param>
-    /// <returns>Exactly <paramref name="count"/> matrix slots for this call to fill.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <summary>Reserves the reusable glyph scratch and returns <paramref name="count"/> matrix slots.</summary>
+    /// <param name="count">The number of laid-out glyph records the call may fill.</param>
+    /// <returns>Exactly <paramref name="count"/> slots for this call to write.</returns>
     /// <remarks>
-    /// A call fills one slot per ready glyph, so the reserved span can be longer than the recorded
-    /// instance count. The matching texture span is <see cref="TextGlyphTextures"/>; call
-    /// <see cref="ClearTextGlyphs"/> once the draw record copied both spans.
+    /// Fill one slot per ready glyph and clear both spans with <see cref="ClearTextGlyphs"/>.
     /// </remarks>
     internal Span<Matrix4x4> ReserveTextGlyphs(int count)
     {
@@ -174,19 +113,11 @@ internal sealed class CameraService
         return _textGlyphMatrices.AsSpan(0, count);
     }
 
-    /// <summary>
-    /// Gets the writable per-glyph texture span reserved by <see cref="ReserveTextGlyphs"/>.
-    /// </summary>
+    /// <summary>Gets the writable texture span reserved by <see cref="ReserveTextGlyphs"/>.</summary>
     internal Span<Texture?> TextGlyphTextures => _textGlyphTextures.AsSpan(0, _textGlyphCount);
 
-    /// <summary>
-    /// Clears the per-glyph texture references the last text draw wrote.
-    /// </summary>
-    /// <remarks>
-    /// The matrices hold no references, so only the textures are cleared: the app-lifetime service
-    /// must not keep a glyph texture reachable between frames. The frame's retention set, not this
-    /// scratch, owns the resource hold that keeps the texture alive while the frame renders.
-    /// </remarks>
+    /// <summary>Clears the per-glyph texture references the last text draw wrote.</summary>
+    /// <remarks>The frame's retention set, not this scratch, keeps the textures alive.</remarks>
     internal void ClearTextGlyphs()
     {
         if (_textGlyphCount == 0)
@@ -198,19 +129,10 @@ internal sealed class CameraService
         _textGlyphCount = 0;
     }
 
-    /// <summary>
-    /// Marks <paramref name="font"/> as begun for the camera that is recording and starts its glyph
-    /// cache clock once.
-    /// </summary>
-    /// <param name="font">The font recording text is about to acquire glyphs from.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException"><paramref name="font"/> is disposed.</exception>
+    /// <summary>Begins <paramref name="font"/>'s glyph cache frame once for the recording camera.</summary>
     /// <exception cref="InvalidOperationException">No frame is recording.</exception>
     /// <remarks>
-    /// The camera draw path calls this for every text draw it records, and the per-camera set makes the
-    /// actual <see cref="Font.BeginFrame"/> call happen once per camera and font. The pipeline keeps the
-    /// highest frame index, so a later camera in the same tick may pass the same index again without
-    /// moving the clock backwards.
+    /// The pipeline keeps the highest frame index, so a repeat never moves the clock backwards.
     /// </remarks>
     internal void BeginTextFont(Font font)
     {
@@ -225,13 +147,10 @@ internal sealed class CameraService
         }
     }
 
-    /// <summary>
-    /// Starts recording a frame into <paramref name="packet"/>.
-    /// </summary>
+    /// <summary>Starts recording a frame into <paramref name="packet"/>.</summary>
     /// <param name="packet">The writable packet acquired from the frame ring.</param>
     /// <param name="time">Absolute seconds since the app started.</param>
     /// <param name="deltaTime">Clamped seconds since the previous tick.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="packet"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">A frame is already recording.</exception>
     internal void BeginFrame(RenderFramePacket packet, double time, double deltaTime)
     {
@@ -247,14 +166,9 @@ internal sealed class CameraService
         _nextCameraNumber = 1;
     }
 
-    /// <summary>
-    /// Ends the recording phase and seals the packet. The frame snapshot of the attached runtime
-    /// tone-mapping settings is copied into the packet before it seals.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// A camera created during the frame was not disposed before the tick returned. The exception names
-    /// the leaked camera; the tick runner abandons the frame instead of publishing it.
-    /// </exception>
+    /// <summary>Seals the recording packet, snapshotting the attached tone-mapping settings first.</summary>
+    /// <exception cref="InvalidOperationException">A camera leaked undisposed; the frame is not published.</exception>
+    /// <remarks>Tone-mapping writes made anywhere in the tick apply to this frame.</remarks>
     internal void EndFrame()
     {
         RenderFramePacket? packet = _packet;
@@ -281,20 +195,14 @@ internal sealed class CameraService
         packet.Seal();
     }
 
-    /// <summary>
-    /// Drops the recording state without sealing or publishing the packet. Used when the tick failed
-    /// after the ring slot was acquired.
-    /// </summary>
+    /// <summary>Drops the recording state without sealing or publishing the packet.</summary>
     internal void AbandonFrame()
     {
         _packet = null;
         _activeCamera = null;
     }
 
-    /// <summary>
-    /// Creates a camera for the requested projection and appends its pass to the recording frame.
-    /// Exactly the size argument selected by <paramref name="projection"/> is used.
-    /// </summary>
+    /// <summary>Creates a camera for the selected projection and appends its pass to the frame.</summary>
     /// <param name="transform">The world-space camera transform.</param>
     /// <param name="projection">The projection kind.</param>
     /// <param name="fieldOfView">The perspective vertical field of view in degrees.</param>
@@ -303,33 +211,15 @@ internal sealed class CameraService
     /// <param name="clearColor">The linear clear color, or <see langword="null"/> for opaque black.</param>
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
-    /// <param name="viewport">The requested pixel viewport, or <see langword="null"/> for the full target.</param>
-    /// <param name="target">
-    /// The render texture the pass writes, or <see langword="null"/> for the app's linear HDR scene
-    /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
-    /// uses the clamped viewport.
-    /// </param>
-    /// <param name="postProcess">
-    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
-    /// post-processing. The stack, every entry's enabled value, and each custom effect's shader cursor
-    /// and texture bindings are frozen here; later changes apply to later cameras only.
-    /// </param>
-    /// <exception cref="ArgumentException">
-    /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
-    /// viewport is invalid or empty, or the clear color has a non-finite component.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="projection"/> is not defined, the clear mode has unknown bits, or a selected
-    /// projection or clip-plane parameter is outside its range.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera's <paramref name="target"/> is disposed, or a post-process effect's shader or a texture
-    /// its material binds is disposed.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
-    /// transform is singular, or a post-process effect violates the custom shader contract.
-    /// </exception>
+    /// <param name="viewport">Pixel viewport clamped to the target; <see langword="null"/> for the full target.</param>
+    /// <param name="target">The render texture written, or <see langword="null"/> for the linear HDR scene target.</param>
+    /// <param name="postProcess">The stack frozen at creation, so later edits affect only later cameras.</param>
+    /// <exception cref="ArgumentException">The unused size argument is nonzero, the viewport
+    /// clamps empty, or the clear color is non-finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The projection is undefined, the clear mode
+    /// has unknown bits, or a selected parameter is out of range.</exception>
+    /// <exception cref="InvalidOperationException">No frame records, another camera is active,
+    /// or the transform is singular.</exception>
     internal Camera CreateCamera(
         Transform transform,
         CameraProjection projection,
@@ -446,11 +336,7 @@ internal sealed class CameraService
         return camera;
     }
 
-    /// <summary>
-    /// Clears the active camera slot when the camera is disposed. Called by <see cref="Camera.Dispose"/>.
-    /// </summary>
-    /// <param name="camera">The disposed camera.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="camera"/> is <c>null</c>.</exception>
+    /// <summary>Clears the active camera slot when the camera is disposed.</summary>
     internal void Release(Camera camera)
     {
         ArgumentNullException.ThrowIfNull(camera);
@@ -480,16 +366,8 @@ internal sealed class CameraService
         }
     }
 
-    /// <summary>
-    /// Captures the stack entries into the scratch snapshots the pending pass records.
-    /// </summary>
-    /// <remarks>
-    /// The capture runs before the pass is appended, so a rejected effect leaves the frame packet
-    /// unchanged. The scratch list is reused for the app lifetime, so a camera with a stack allocates
-    /// only the snapshots themselves.
-    /// </remarks>
-    /// <param name="postProcess">The stack to snapshot, or <see langword="null"/> for none.</param>
-    /// <param name="target">The camera's target, or <see langword="null"/> for the scene target.</param>
+    /// <summary>Captures the stack entries into the reusable scratch the pending pass records.</summary>
+    /// <remarks>The capture precedes the pass, so a rejected effect leaves the packet unchanged.</remarks>
     private void CapturePostProcessEffects(PostProcessStack? postProcess, RenderTexture? target)
     {
         _postProcessScratch.Clear();

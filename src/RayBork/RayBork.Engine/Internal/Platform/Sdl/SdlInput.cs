@@ -4,23 +4,17 @@ using SDL3;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Translates SDL3 input events into the raw <see cref="InputState"/>. Runs on the main thread; the
-/// tick thread captures the state through <see cref="Capture"/>.
-/// </summary>
+/// <summary>Translates SDL3 input events into raw <see cref="InputState"/>.</summary>
+/// <remarks>
+/// Events are applied on the main thread; the tick thread captures state through
+/// <see cref="Capture"/>.
+/// </remarks>
 internal sealed class SdlInput
 {
     private readonly Func<Vector2> _pixelScaleProvider;
     private readonly InputState _state;
 
-    /// <summary>
-    /// Creates the input translator.
-    /// </summary>
-    /// <param name="vibrationSink">The sink for gamepad vibration requests.</param>
-    /// <param name="pixelScaleProvider">
-    /// Returns the render-to-window pixel ratio used for mouse position and delta. The platform
-    /// supplies the live window ratio; tests pass a fixed ratio.
-    /// </param>
+    /// <summary>Creates the input translator.</summary>
     internal SdlInput(IGamepadVibrationSink vibrationSink, Func<Vector2> pixelScaleProvider)
     {
         ArgumentNullException.ThrowIfNull(pixelScaleProvider);
@@ -28,25 +22,16 @@ internal sealed class SdlInput
         _state = new InputState(vibrationSink);
     }
 
-    /// <summary>
-    /// Gets the raw state for main-thread gamepad connect, disconnect, and initial polling.
-    /// </summary>
+    /// <summary>Gets the raw state for main-thread gamepad and initial polling updates.</summary>
     internal InputState State => _state;
 
-    /// <summary>
-    /// Captures the next tick snapshot. Runs on the tick thread.
-    /// </summary>
+    /// <summary>Captures the next tick snapshot; runs on the tick thread.</summary>
     internal IInput Capture() => _state.Capture();
 
-    /// <summary>
-    /// Clears keyboard and mouse levels and pending edges when the window loses focus.
-    /// </summary>
+    /// <summary>Clears keyboard and mouse levels and pending edges on focus loss.</summary>
     internal void ResetLevels() => _state.ResetLevels();
 
-    /// <summary>
-    /// Applies one SDL3 event to the raw input state. Window, display, close, and gamepad device
-    /// events are owned by the platform and are ignored here.
-    /// </summary>
+    /// <summary>Applies one SDL3 event, ignoring platform-owned event types.</summary>
     internal void HandleEvent(in SDL.Event sdlEvent)
     {
         switch ((SDL.EventType)sdlEvent.Type)
@@ -89,15 +74,7 @@ internal sealed class SdlInput
         }
     }
 
-    /// <summary>
-    /// Computes the per-axis render-to-window pixel ratio. The result is linear and unrounded so
-    /// fractional render pixels survive.
-    /// </summary>
-    /// <param name="renderWidth">The physical framebuffer width.</param>
-    /// <param name="renderHeight">The physical framebuffer height.</param>
-    /// <param name="windowWidth">The window width.</param>
-    /// <param name="windowHeight">The window height.</param>
-    /// <returns>The x and y pixel ratios, each 1 when its ratio is unusable.</returns>
+    /// <summary>Computes the per-axis render-to-window pixel ratio; invalid ratios become 1.</summary>
     internal static Vector2 ComputePixelScale(
         float renderWidth,
         float renderHeight,

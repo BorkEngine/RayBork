@@ -3,22 +3,12 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// One camera post-process effect: an entry of a <see cref="PostProcessStack"/> that the renderer runs
-/// for a camera pass after its geometry.
+/// One camera post-process effect: an entry of a <see cref="PostProcessStack"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The type is an engine-fixed base: its constructor and capture member are internal, so a game cannot
-/// derive its own effect type. A custom effect is a <see cref="ShaderPostProcessEffect"/> over a baked
-/// shader; <see cref="SsaoEffect"/> and <see cref="BloomEffect"/> are the built-in effects.
-/// </para>
-/// <para>
-/// <see cref="Enabled"/> is read and written on the tick thread. A camera snapshots the stack, the
-/// effects, and each effect's <see cref="Enabled"/> value when it is created, so a change made after
-/// that affects only later cameras. The snapshot is pooled by this effect and reused after the frame
-/// that held it is released, so adding an effect to a stack does not allocate a new snapshot for every
-/// camera. An effect and its stack own no engine object and do not dispose the effect's shader.
-/// </para>
+/// The constructor and capture member are internal, so games cannot derive their own effect type. A
+/// camera snapshots the effect's <see cref="Enabled"/> value at creation, and <see cref="Enabled"/> is
+/// tick-thread only; an effect owns no engine object and never disposes its shader.
 /// </remarks>
 public abstract class PostProcessEffect
 {
@@ -27,14 +17,7 @@ public abstract class PostProcessEffect
 
     private protected PostProcessEffect() { }
 
-    /// <summary>
-    /// Gets or sets whether this effect runs. The default is <see langword="true"/>.
-    /// </summary>
-    /// <remarks>
-    /// The setter is tick-thread only. A camera snapshots the value at creation; disabling the effect
-    /// afterwards does not remove it from an already recorded frame.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Gets or sets whether this effect runs; enabled by default.</summary>
     public bool Enabled
     {
         get => _enabled;
@@ -45,26 +28,11 @@ public abstract class PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Captures this effect's run state for one camera pass. Called on the tick thread when the camera
-    /// is created, after the public validation has passed.
-    /// </summary>
-    /// <param name="context">The target information the capture validates against.</param>
-    /// <returns>The immutable render-thread snapshot the pass runs.</returns>
-    /// <exception cref="ObjectDisposedException">The effect's shader or a bound texture was disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The effect's shader violates the custom post-process contract, or the target cannot supply a
-    /// source the shader declares.
-    /// </exception>
+    /// <summary>Captures this effect's run state for one camera pass.</summary>
+    /// <remarks>Called on the tick thread when the camera is created, after validation.</remarks>
     internal abstract PostProcessEffectSnapshot Capture(PostProcessCaptureContext context);
 
-    /// <summary>
-    /// Takes a pooled snapshot of <typeparamref name="T"/> from this effect, or returns
-    /// <see langword="null"/> when none is free. Called on the tick thread by a capture that reuses its
-    /// snapshot object, uniform buffer, and texture array across cameras.
-    /// </summary>
-    /// <typeparam name="T">The concrete snapshot type the effect owns.</typeparam>
-    /// <returns>A free snapshot to fill, or <see langword="null"/>.</returns>
+    /// <summary>Takes a free pooled snapshot of <typeparamref name="T"/>, or <c>null</c>.</summary>
     internal T? TakeSnapshot<T>()
         where T : PostProcessEffectSnapshot
     {
@@ -80,11 +48,7 @@ public abstract class PostProcessEffect
         return null;
     }
 
-    /// <summary>
-    /// Returns a reset snapshot to this effect's pool. Called on the tick thread when the camera pass
-    /// that held it is recycled.
-    /// </summary>
-    /// <param name="snapshot">The snapshot to pool.</param>
+    /// <summary>Returns a reset snapshot to this effect's pool.</summary>
     internal void ReturnSnapshot(PostProcessEffectSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

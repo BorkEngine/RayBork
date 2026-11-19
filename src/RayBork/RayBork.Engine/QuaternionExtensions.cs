@@ -2,12 +2,9 @@ using System.Numerics;
 
 namespace RayBork;
 
-/// <summary>
-/// Unity-style extensions for <see cref="Quaternion"/>.
-/// </summary>
+/// <summary>Unity-style extensions for <see cref="Quaternion"/>.</summary>
 /// <remarks>
-/// Rotations use the right-handed, Y-up System.Numerics convention: forward is <c>-Z</c>.
-/// Angle arguments and results are in degrees.
+/// Angles are in degrees. The coordinate system is right-handed and Y-up, with forward <c>-Z</c>.
 /// </remarks>
 public static class QuaternionExtensions
 {
@@ -21,13 +18,10 @@ public static class QuaternionExtensions
 
     extension(Quaternion)
     {
-        /// <summary>
-        /// Creates a rotation from Euler angles in degrees.
-        /// </summary>
+        /// <summary>Creates a rotation from Euler angles in degrees around X, Y, and Z.</summary>
         /// <param name="x">The angle around the X axis, in degrees.</param>
         /// <param name="y">The angle around the Y axis, in degrees.</param>
         /// <param name="z">The angle around the Z axis, in degrees.</param>
-        /// <returns>The composed rotation.</returns>
         public static Quaternion Euler(float x, float y, float z) =>
             Quaternion.CreateFromYawPitchRoll(
                 y * DEGREES_TO_RADIANS,
@@ -35,13 +29,8 @@ public static class QuaternionExtensions
                 z * DEGREES_TO_RADIANS
             );
 
-        /// <summary>
-        /// Creates a rotation of a given angle around an axis.
-        /// </summary>
-        /// <param name="degrees">The clockwise angle in degrees around the axis.</param>
-        /// <param name="axis">The rotation axis. It must not be zero.</param>
-        /// <returns>The normalized rotation.</returns>
-        /// <exception cref="ArgumentException"><paramref name="axis"/> has zero length.</exception>
+        /// <summary>Creates a clockwise rotation of an angle in degrees around an axis.</summary>
+        /// <exception cref="ArgumentException">The axis has zero length.</exception>
         public static Quaternion AngleAxis(float degrees, Vector3 axis)
         {
             float lengthSquared = axis.LengthSquared();
@@ -59,15 +48,9 @@ public static class QuaternionExtensions
             );
         }
 
-        /// <summary>
-        /// Creates a rotation that looks along a forward direction with a given up direction.
-        /// </summary>
-        /// <param name="forward">The forward direction. It must not be zero.</param>
-        /// <param name="upwards">The up direction. It must not be zero or parallel to the forward direction.</param>
-        /// <returns>The normalized rotation whose forward axis is <paramref name="forward"/>.</returns>
+        /// <summary>Creates a look rotation from forward and up directions.</summary>
         /// <exception cref="ArgumentException">
-        /// <paramref name="forward"/> or <paramref name="upwards"/> has zero length, or the two
-        /// directions are parallel.
+        /// A direction is zero, or the forward and up directions are parallel.
         /// </exception>
         public static Quaternion LookRotation(Vector3 forward, Vector3 upwards)
         {
@@ -128,15 +111,10 @@ public static class QuaternionExtensions
             return Quaternion.Normalize(Quaternion.CreateFromRotationMatrix(rotationMatrix));
         }
 
-        /// <summary>
-        /// Creates the shortest rotation that maps one direction to another.
-        /// </summary>
-        /// <param name="from">The starting direction. It must not be zero.</param>
-        /// <param name="to">The target direction. It must not be zero.</param>
-        /// <returns>The normalized rotation that maps <paramref name="from"/> to <paramref name="to"/>.</returns>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="from"/> or <paramref name="to"/> has zero length.
-        /// </exception>
+        /// <summary>Creates the shortest rotation that maps one direction to another.</summary>
+        /// <param name="from">The starting direction; it must not be zero.</param>
+        /// <param name="to">The target direction; it must not be zero.</param>
+        /// <exception cref="ArgumentException">A direction has zero length.</exception>
         public static Quaternion FromToRotation(Vector3 from, Vector3 to)
         {
             float fromLengthSquared = from.LengthSquared();
@@ -183,14 +161,10 @@ public static class QuaternionExtensions
 
     extension(Quaternion value)
     {
-        /// <summary>
-        /// Gets the quaternion scaled to unit length.
-        /// </summary>
+        /// <summary>Gets the quaternion scaled to unit length.</summary>
         public Quaternion Normalized => Quaternion.Normalize(value);
 
-        /// <summary>
-        /// Gets the Euler angles in degrees, ordered as X, Y, and Z.
-        /// </summary>
+        /// <summary>Gets the Euler angles in degrees, ordered as X, Y, and Z.</summary>
         public Vector3 EulerAngles
         {
             get
@@ -225,9 +199,7 @@ public static class QuaternionExtensions
             }
         }
 
-        /// <summary>
-        /// Returns the unsigned angle between two rotations, in degrees.
-        /// </summary>
+        /// <summary>Gets the unsigned angle between two rotations, in degrees.</summary>
         /// <param name="other">The other rotation.</param>
         /// <returns>The angle in degrees, in the range <c>[0, 180]</c>.</returns>
         public float Angle(Quaternion other)
@@ -236,14 +208,9 @@ public static class QuaternionExtensions
             return MathF.Acos(Math.Clamp(MathF.Abs(dot), 0f, 1f)) * 2f * RADIANS_TO_DEGREES;
         }
 
-        /// <summary>
-        /// Decomposes the rotation into an angle in degrees and a rotation axis.
-        /// </summary>
-        /// <param name="angle">The resulting angle in degrees, in the range <c>[0, 360]</c>.</param>
-        /// <param name="axis">
-        /// The resulting normalized rotation axis, or <c>(1, 0, 0)</c> when the rotation is the
-        /// identity.
-        /// </param>
+        /// <summary>Splits the rotation into an angle in degrees and a normalized axis.</summary>
+        /// <param name="angle">The angle in degrees.</param>
+        /// <param name="axis">The normalized axis, or <c>(1, 0, 0)</c> for the identity.</param>
         public void ToAngleAxis(out float angle, out Vector3 axis)
         {
             Quaternion normalized = NormalizeOrIdentity(value);
@@ -260,15 +227,9 @@ public static class QuaternionExtensions
             axis = new Vector3(normalized.X, normalized.Y, normalized.Z) / sinHalfAngle;
         }
 
-        /// <summary>
-        /// Rotates towards a target rotation with a maximum angular step.
-        /// </summary>
+        /// <summary>Rotates towards a target by at most a maximum step in degrees.</summary>
         /// <param name="target">The target rotation.</param>
-        /// <param name="maxDegreesDelta">The maximum rotation in degrees for this call.</param>
-        /// <returns>
-        /// The rotation that is at most <paramref name="maxDegreesDelta"/> degrees from this rotation
-        /// in the direction of <paramref name="target"/>, or the target when it is closer.
-        /// </returns>
+        /// <param name="maxDegreesDelta">The maximum step in degrees.</param>
         public Quaternion RotateTowards(Quaternion target, float maxDegreesDelta)
         {
             float angle = Angle(value, target);
@@ -281,12 +242,9 @@ public static class QuaternionExtensions
             return Slerp(value, target, MathF.Min(1f, maxDegreesDelta / angle));
         }
 
-        /// <summary>
-        /// Spherically interpolates towards a target rotation, clamping the interpolation factor.
-        /// </summary>
+        /// <summary>Interpolates towards a target, clamping the factor to <c>[0, 1]</c>.</summary>
         /// <param name="target">The target rotation.</param>
-        /// <param name="t">The interpolation factor, clamped to <c>[0, 1]</c>.</param>
-        /// <returns>The interpolated rotation.</returns>
+        /// <param name="t">The interpolation factor.</param>
         public Quaternion Slerp(Quaternion target, float t)
         {
             t = Math.Clamp(t, 0f, 1f);

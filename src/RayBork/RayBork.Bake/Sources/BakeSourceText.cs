@@ -11,12 +11,7 @@ internal static class BakeSourceText
         throwOnInvalidBytes: true
     );
 
-    /// <summary>Reads a TOML source file.</summary>
-    /// <param name="fullPath">The absolute path.</param>
-    /// <param name="diagnosticPath">The diagnostic display path.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="text">The decoded text when successful.</param>
-    /// <returns><see langword="true"/> when the file was read and decoded.</returns>
+    /// <summary>Reads one source file, reporting read and UTF-8 failures.</summary>
     internal static bool TryRead(
         string fullPath,
         string diagnosticPath,

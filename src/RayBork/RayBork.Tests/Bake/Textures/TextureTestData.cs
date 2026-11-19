@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace RayBork.Tests.Bake.Textures;
 
-/// <summary>Deterministic texture inputs and independently computed level geometry for tests.</summary>
+/// <summary>Deterministic texture inputs and independently computed level geometry.</summary>
 internal static class TextureTestData
 {
     /// <summary>A 2x2 RGBA8 PNG: red, green, blue, and semi-transparent white.</summary>
@@ -191,9 +191,6 @@ internal static class TextureTestData
     ];
 
     /// <summary>Creates a deterministic RGBA8 gradient with a distinct alpha ramp.</summary>
-    /// <param name="width">The pixel width.</param>
-    /// <param name="height">The pixel height.</param>
-    /// <returns>The row-major straight-alpha RGBA8 pixels.</returns>
     internal static byte[] CreatePixels(int width, int height)
     {
         var pixels = new byte[width * height * 4];
@@ -212,13 +209,7 @@ internal static class TextureTestData
         return pixels;
     }
 
-    /// <summary>
-    /// Creates a PNG header whose declared extent exceeds the bake's size policy. The probe rejects
-    /// it before any decoder reads the (deliberately incomplete) body.
-    /// </summary>
-    /// <param name="width">The declared width.</param>
-    /// <param name="height">The declared height.</param>
-    /// <returns>The crafted header bytes.</returns>
+    /// <summary>Creates a PNG header whose declared extent exceeds the size policy.</summary>
     internal static byte[] CreatePngHeader(int width, int height)
     {
         var header = new byte[33];
@@ -234,9 +225,6 @@ internal static class TextureTestData
     }
 
     /// <summary>Gets the number of levels in a complete mip chain.</summary>
-    /// <param name="width">The base width.</param>
-    /// <param name="height">The base height.</param>
-    /// <returns>The complete level count.</returns>
     internal static int MipLevelCount(int width, int height)
     {
         int levels = 1;
@@ -251,10 +239,6 @@ internal static class TextureTestData
     }
 
     /// <summary>Gets an independent expected stored length of one mip level.</summary>
-    /// <param name="format">The stored format.</param>
-    /// <param name="width">The level width.</param>
-    /// <param name="height">The level height.</param>
-    /// <returns>The stored byte length without alignment padding.</returns>
     internal static int LevelByteLength(TextureFormat format, int width, int height)
     {
         int bytesPerBlock = format switch
@@ -276,14 +260,8 @@ internal static class TextureTestData
     }
 
     /// <summary>Gets the level width for a complete chain.</summary>
-    /// <param name="width">The base width.</param>
-    /// <param name="level">The zero-based level.</param>
-    /// <returns>The level width.</returns>
     internal static int LevelWidth(int width, int level) => Math.Max(1, width >> level);
 
     /// <summary>Gets the level height for a complete chain.</summary>
-    /// <param name="height">The base height.</param>
-    /// <param name="level">The zero-based level.</param>
-    /// <returns>The level height.</returns>
     internal static int LevelHeight(int height, int level) => Math.Max(1, height >> level);
 }

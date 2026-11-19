@@ -1,8 +1,6 @@
 namespace RayBork;
 
-/// <summary>
-/// One baked texture binding of a shader.
-/// </summary>
+/// <summary>A baked texture binding of a shader.</summary>
 /// <param name="Name">The GLSL sampler name.</param>
-/// <param name="Index">The bindless texture slot index reserved for the binding.</param>
+/// <param name="Index">The reserved bindless texture slot.</param>
 public readonly record struct ShaderTextureBinding(string Name, int Index);

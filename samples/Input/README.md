@@ -117,7 +117,7 @@ The field text uses `EngineDefaults.DefaultFont` (Fira Sans Regular), and the ti
 and event log use `EngineDefaults.DefaultMonoFont` (JetBrains Mono, default instance Regular). Both
 built-in faces cover Latin, Cyrillic, and Greek, and the engine has no font fallback: a rune the
 face's cmap does not map draws as that face's `.notdef` box (see
-[Text rendering](../../docs/api/rendering/text.md)). The sample ships no font of its own and cannot
+[Text rendering](../../docs/cheatsheet.md#font)). The sample ships no font of its own and cannot
 substitute one, so a committed CJK string is stored, copied, and counted but draws as `.notdef`
 boxes. A non-BMP single-codepoint emoji such as U+1F600 is one surrogate pair, so it is stored as two
 UTF-16 code units and decodes as one rune, and the field and the log each draw one `.notdef` box; a
@@ -352,8 +352,8 @@ Any host, including WSLg:
 
 ## Related documentation
 
-- [Input](../../docs/api/input.md)
-- [Window](../../docs/api/window.md)
-- [Text rendering](../../docs/api/rendering/text.md)
-- [Camera](../../docs/api/rendering/camera.md)
-- [Native AOT](../../docs/api/aot.md)
+- [Input](../../docs/cheatsheet.md#input)
+- [Window](../../docs/cheatsheet.md#window)
+- [Text rendering](../../docs/cheatsheet.md#font)
+- [Camera](../../docs/cheatsheet.md#camera)
+- [Native AOT](../../docs/architecture.md#projects)

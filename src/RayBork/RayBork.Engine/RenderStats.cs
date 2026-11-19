@@ -1,42 +1,25 @@
 namespace RayBork;
 
-/// <summary>
-/// A snapshot of the last completed frame's render statistics.
-/// </summary>
+/// <summary>A snapshot of the last completed frame's render statistics.</summary>
 /// <remarks>
 /// The render thread writes the snapshot and the tick thread reads it through
-/// <see cref="EngineContext.Stats"/>. It describes the last completed frame, not the frame currently
-/// being recorded, and its fields are not a consistent transactional snapshot. Use it for
-/// diagnostics and overlays, not for synchronization.
+/// <see cref="EngineContext.Stats"/>. It describes the last completed frame, is not transactional,
+/// and is meant for diagnostics, not synchronization.
 /// </remarks>
-/// <param name="FrameIndex">The tick frame this snapshot describes.</param>
-/// <param name="PresentedFrames">
-/// The number of successful presentations since startup. It is cumulative across frames and
-/// recoveries and counts a frame only after it reached the presentation engine.
-/// </param>
-/// <param name="DrawCalls">The number of draw commands submitted for the frame.</param>
-/// <param name="Instances">The number of instances that survived culling and were submitted.</param>
+/// <param name="FrameIndex">The tick frame described by this snapshot.</param>
+/// <param name="PresentedFrames">The number of successful presentations since startup.</param>
+/// <param name="DrawCalls">The number of draw commands submitted.</param>
+/// <param name="Instances">The submitted instances that survived culling.</param>
 /// <param name="Triangles">The submitted triangle count after instancing.</param>
-/// <param name="CulledInstances">The number of instances rejected by frustum culling.</param>
-/// <param name="PipelineCount">The number of distinct pipelines used by the frame.</param>
-/// <param name="TextureCount">The number of bindless texture slots live after the frame.</param>
-/// <param name="SampleCount">The effective MSAA sample count for the frame.</param>
-/// <param name="HdrOutput">
-/// Whether the frame presented through an HDR-capable swapchain format.
-/// </param>
-/// <param name="CpuFrameMilliseconds">
-/// The render-thread CPU time spent planning, recording, and submitting the frame. It excludes the
-/// frame fence wait, the swapchain acquire wait, and presentation.
-/// </param>
-/// <param name="GpuFrameMilliseconds">
-/// The GPU timestamp delta for the frame, or <c>0</c> when timestamps are unavailable.
-/// </param>
-/// <param name="FramesInFlight">
-/// The number of frames submitted but not yet retired at snapshot time.
-/// </param>
-/// <param name="RecoveryCount">
-/// The number of device and swapchain recoveries completed since startup.
-/// </param>
+/// <param name="CulledInstances">The instances rejected by frustum culling.</param>
+/// <param name="PipelineCount">The number of distinct pipelines used.</param>
+/// <param name="TextureCount">The number of live bindless texture slots after the frame.</param>
+/// <param name="SampleCount">The effective MSAA sample count.</param>
+/// <param name="HdrOutput">Whether the frame used an HDR-capable swapchain format.</param>
+/// <param name="CpuFrameMilliseconds">Render-thread CPU time, excluding waits.</param>
+/// <param name="GpuFrameMilliseconds">The GPU timestamp delta, or <c>0</c> if unavailable.</param>
+/// <param name="FramesInFlight">The submitted frames not yet retired.</param>
+/// <param name="RecoveryCount">The device and swapchain recoveries since startup.</param>
 public readonly record struct RenderStats(
     long FrameIndex,
     long PresentedFrames,

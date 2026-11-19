@@ -1,21 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The CFF charset: the string identifier (or CID) of every glyph in the face.
-/// </summary>
+/// <summary>The CFF charset: the string identifier (or CID) of every glyph in the face.</summary>
 /// <remarks>
-/// <para>
-/// Glyph 0 is always <c>.notdef</c> with SID 0. Charset formats 0, 1, and 2 are decoded into one
-/// 16-bit identifier per glyph; the table is validated against the face's glyph count so a range can
-/// never run past the last glyph. The predefined ISOAdobe charset (offset 0) is the identity mapping
-/// over its 229 glyphs; the predefined Expert and ExpertSubset charsets are valid CFF but outside the
-/// supported subset and raise <see cref="FontUnsupportedException"/>.
-/// </para>
-/// <para>
-/// The instance is immutable and safe to read from any thread. <see cref="TryGetGlyphId"/> resolves
-/// the deprecated <c>seac</c> form through a SID-sorted lookup built once at parse, so a face with
-/// many <c>seac</c> glyphs is O(log glyphs) per component instead of a linear scan.
-/// </para>
+/// Glyph 0 is <c>.notdef</c> with SID 0, and formats 0, 1, and 2 decode one 16-bit identifier
+/// per glyph; the predefined Expert and ExpertSubset charsets are unsupported. A SID-sorted lookup
+/// resolves <c>seac</c> components, and the instance is immutable and thread-safe.
 /// </remarks>
 internal sealed class CffCharset
 {
@@ -49,18 +38,6 @@ internal sealed class CffCharset
     }
 
     /// <summary>Parses the charset of a face.</summary>
-    /// <param name="table">The complete <c>CFF </c> table.</param>
-    /// <param name="glyphCount">The face's glyph count.</param>
-    /// <param name="offset">The Top DICT charset offset, where 0, 1, and 2 are predefined charsets.</param>
-    /// <param name="context">A description used in failure reasons.</param>
-    /// <returns>The parsed charset.</returns>
-    /// <exception cref="FontFormatException">
-    /// The charset is truncated, uses an unsupported format, overflows 16-bit identifiers, or does
-    /// not map exactly the face's glyphs.
-    /// </exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The charset is a predefined Expert or ExpertSubset charset.
-    /// </exception>
     internal static CffCharset Parse(
         ReadOnlyMemory<byte> table,
         int glyphCount,
@@ -177,9 +154,6 @@ internal sealed class CffCharset
     }
 
     /// <summary>Finds the first glyph that carries one SID.</summary>
-    /// <param name="sid">The SID to resolve.</param>
-    /// <param name="glyphId">The matching glyph identifier, or zero when none matches.</param>
-    /// <returns><see langword="true"/> when the SID maps to a glyph.</returns>
     internal bool TryGetGlyphId(int sid, out int glyphId)
     {
         if ((uint)sid > MAX_SID)

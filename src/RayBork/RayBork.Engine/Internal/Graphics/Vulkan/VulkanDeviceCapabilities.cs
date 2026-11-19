@@ -8,33 +8,15 @@ namespace RayBork.Internal;
 /// An immutable snapshot of the selected device's limits, features, and queue families.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The render thread probes this snapshot once when the logical device is created and re-probes it
-/// only when the device is recreated. The swapchain-dependent data in <see cref="Swapchain"/> is
-/// re-queried when the swapchain is recreated; the rest of the snapshot stays valid for the
-/// logical device lifetime.
-/// </para>
-/// <para>
-/// The descriptor-indexing flags and update-after-bind limits describe the M4 bindless texture
-/// table. <see cref="BindlessTextureCapacity"/> is always
-/// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>: the shader ABI declares
-/// <c>RayBorkTextures[2048]</c>, so the descriptor set layout must use exactly that count and the
-/// capacity is never reduced. Device selection rejects a device without the feature subset or with
-/// update-after-bind sampled-image limits below the capacity.
-/// </para>
-/// <para>
-/// <see cref="DepthResolveMode"/> is the Vulkan 1.2 depth resolve mode the backend writes into every
-/// multisampled depth-bearing render pass. It is always sample-zero; a device that does not advertise
-/// it is rejected. The snapshot is probed once with the logical device and re-probed only when the
-/// device is recreated.
-/// </para>
+/// Probed once with the logical device and re-probed only when the device is recreated; the
+/// swapchain-dependent data is re-queried when the swapchain is recreated. The bindless capacity
+/// is fixed at 2048 entries and the depth resolve mode is always sample-zero; device selection
+/// rejects a device that cannot provide either.
 /// </remarks>
 internal sealed class VulkanDeviceCapabilities
 {
     /// <summary>
-    /// The renderer's bindless texture capacity: 2048 combined image samplers, matching the fixed
-    /// <c>RayBorkTextures[2048]</c> shader array. A device whose update-after-bind sampled-image
-    /// limits are below this value is rejected during device selection.
+    /// The bindless texture capacity: 2048 combined image samplers, matching the shader ABI.
     /// </summary>
     internal const uint TARGET_BINDLESS_TEXTURE_CAPACITY = ShaderAbiNames.TEXTURE_CAPACITY;
 
@@ -96,171 +78,101 @@ internal sealed class VulkanDeviceCapabilities
         Swapchain = swapchain;
     }
 
-    /// <summary>
-    /// Gets the device name reported by Vulkan.
-    /// </summary>
+    /// <summary>Gets the device name reported by Vulkan.</summary>
     internal string DeviceName { get; }
 
-    /// <summary>
-    /// Gets the packed Vulkan API version supported by the device.
-    /// </summary>
+    /// <summary>Gets the packed Vulkan API version the device supports.</summary>
     internal uint ApiVersion { get; }
 
-    /// <summary>
-    /// Gets the PCI vendor identifier reported by Vulkan.
-    /// </summary>
+    /// <summary>Gets the PCI vendor identifier reported by Vulkan.</summary>
     internal uint VendorId { get; }
 
-    /// <summary>
-    /// Gets the PCI device identifier reported by Vulkan.
-    /// </summary>
+    /// <summary>Gets the PCI device identifier reported by Vulkan.</summary>
     internal uint DeviceId { get; }
 
-    /// <summary>
-    /// Gets the Vulkan device type.
-    /// </summary>
+    /// <summary>Gets the Vulkan device type.</summary>
     internal PhysicalDeviceType DeviceType { get; }
 
-    /// <summary>
-    /// Gets the queue-family index used for graphics and compute work.
-    /// </summary>
+    /// <summary>Gets the queue-family index used for graphics and compute work.</summary>
     internal uint GraphicsQueueFamily { get; }
 
-    /// <summary>
-    /// Gets the queue-family index used for presentation.
-    /// </summary>
+    /// <summary>Gets the queue-family index used for presentation.</summary>
     internal uint PresentQueueFamily { get; }
 
-    /// <summary>
-    /// Gets the maximum framebuffer width in pixels.
-    /// </summary>
+    /// <summary>Gets the maximum framebuffer width in pixels.</summary>
     internal uint MaxFramebufferWidth { get; }
 
-    /// <summary>
-    /// Gets the maximum framebuffer height in pixels.
-    /// </summary>
+    /// <summary>Gets the maximum framebuffer height in pixels.</summary>
     internal uint MaxFramebufferHeight { get; }
 
     /// <summary>
-    /// Gets the supported MSAA sample counts in ascending order. The list always contains one.
+    /// Gets the supported MSAA sample counts in ascending order; the list always contains one.
     /// </summary>
     internal IReadOnlyList<int> SupportedSampleCounts => _supportedSampleCounts;
 
     /// <summary>
-    /// Gets the Vulkan 1.2 depth resolve mode the renderer uses for a multisampled depth attachment.
-    /// It is always <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>; device selection rejects a device that does
-    /// not advertise sample-zero. The renderer never uses a min/max resolve because that would change
-    /// the stored reverse-Z value a depth view exposes.
+    /// Gets the depth resolve mode, always sample-zero; a device without it is rejected.
     /// </summary>
     internal ResolveModeFlags DepthResolveMode { get; }
 
-    /// <summary>
-    /// Gets whether the device supports and the renderer enables the M4 descriptor-indexing subset:
-    /// partially bound arrays, sampled-image update-after-bind, and non-uniform indexing of
-    /// sampled-image arrays.
-    /// </summary>
+    /// <summary>Gets whether the bindless descriptor-indexing feature subset is enabled.</summary>
     internal bool DescriptorIndexing { get; }
 
-    /// <summary>
-    /// Gets the maximum update-after-bind sampled images available to one shader stage.
-    /// </summary>
+    /// <summary>Gets the maximum update-after-bind sampled images per shader stage.</summary>
     internal uint MaxPerStageDescriptorUpdateAfterBindSampledImages { get; }
 
-    /// <summary>
-    /// Gets the maximum update-after-bind sampled images available to one descriptor set.
-    /// </summary>
+    /// <summary>Gets the maximum update-after-bind sampled images per descriptor set.</summary>
     internal uint MaxDescriptorSetUpdateAfterBindSampledImages { get; }
 
-    /// <summary>
-    /// Gets the maximum update-after-bind samplers available to one shader stage.
-    /// </summary>
+    /// <summary>Gets the maximum update-after-bind samplers per shader stage.</summary>
     internal uint MaxPerStageDescriptorUpdateAfterBindSamplers { get; }
 
-    /// <summary>
-    /// Gets the maximum byte range of one storage buffer.
-    /// </summary>
+    /// <summary>Gets the maximum byte range of one storage buffer.</summary>
     internal uint MaxStorageBufferRange { get; }
 
-    /// <summary>
-    /// Gets the maximum size in bytes of one device memory allocation.
-    /// </summary>
+    /// <summary>Gets the maximum size in bytes of one device memory allocation.</summary>
     internal ulong MaxMemoryAllocationSize { get; }
 
     /// <summary>
-    /// Gets the bindless texture table capacity the backend creates. It is always
-    /// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>, which matches the fixed shader array; device
-    /// selection guarantees the device's update-after-bind sampled-image limits cover it.
+    /// Gets the bindless capacity, always the fixed shader-array capacity of 2048 entries.
     /// </summary>
     internal uint BindlessTextureCapacity { get; }
 
-    /// <summary>
-    /// Gets whether the device supports anisotropic sampling. The renderer enables the feature when
-    /// it is supported.
-    /// </summary>
+    /// <summary>Gets whether anisotropic sampling is supported and enabled.</summary>
     internal bool SamplerAnisotropy { get; }
 
-    /// <summary>
-    /// Gets the maximum sampler anisotropy the device supports. It is meaningful only when
-    /// <see cref="SamplerAnisotropy"/> is <see langword="true"/>.
-    /// </summary>
+    /// <summary>Gets the maximum sampler anisotropy, meaningful only when supported.</summary>
     internal float MaxSamplerAnisotropy { get; }
 
-    /// <summary>
-    /// Gets whether the device supports the BC block-compressed formats. A packed BC7 or BC5 texture
-    /// requires this capability; a device without it rejects the upload with <c>RB1010</c>.
-    /// </summary>
+    /// <summary>Gets whether BC block-compressed texture formats are supported.</summary>
     internal bool TextureCompressionBc { get; }
 
     /// <summary>
-    /// Gets whether the device supports the core <c>fillModeNonSolid</c> feature and the renderer
-    /// enables it. Wireframe model draws need it for <c>VK_POLYGON_MODE_LINE</c> pipelines; a device
-    /// without it reports an unsupported wireframe draw instead of rendering nothing.
+    /// Gets whether non-solid fill is supported and enabled, as wireframe draws require.
     /// </summary>
     internal bool FillModeNonSolid { get; }
 
-    /// <summary>
-    /// Gets whether <c>VK_EXT_swapchain_colorspace</c> was enabled on the instance.
-    /// </summary>
+    /// <summary>Gets whether the swapchain color-space extension was enabled.</summary>
     internal bool SwapchainColorSpaceExtensionEnabled { get; }
 
-    /// <summary>
-    /// Gets the surface format and color-space pairs advertised by the window surface.
-    /// </summary>
+    /// <summary>Gets the format and color-space pairs the window surface advertises.</summary>
     internal IReadOnlyList<VulkanSurfaceFormat> SurfaceFormats => Swapchain.Formats;
 
-    /// <summary>
-    /// Gets whether the surface advertises a half-float scRGB pair that can carry HDR values.
-    /// </summary>
+    /// <summary>Gets whether the surface advertises a half-float scRGB HDR pair.</summary>
     internal bool SupportsHdrFloatFormat => Swapchain.SupportsHdrFloatFormat;
 
-    /// <summary>
-    /// Gets whether the surface advertises the extended sRGB linear (scRGB) color space for a
-    /// half-float format.
-    /// </summary>
+    /// <summary>Gets whether the surface advertises extended sRGB linear color space.</summary>
     internal bool SupportsExtendedSrgbLinear => Swapchain.SupportsExtendedSrgbLinear;
 
-    /// <summary>
-    /// Gets the swapchain support snapshot captured for the window surface.
-    /// </summary>
+    /// <summary>Gets the swapchain support snapshot captured for the window surface.</summary>
     internal VulkanSwapchainSupport Swapchain { get; }
 
     /// <summary>
     /// Probes the selected physical device and creates the capabilities snapshot.
     /// </summary>
     /// <remarks>
-    /// Runs on the render thread after the logical device is created. The descriptor-indexing subset
-    /// is reported as enabled only when the device advertises every required feature; device
-    /// selection already guarantees that for a created device.
+    /// Requires the sampled-image capacity to cover 2048 entries and sample-zero depth resolve.
     /// </remarks>
-    /// <param name="vulkan">The loaded Vulkan API.</param>
-    /// <param name="physicalDevice">The selected physical device.</param>
-    /// <param name="graphicsQueueFamily">The selected graphics queue family.</param>
-    /// <param name="presentQueueFamily">The selected presentation queue family.</param>
-    /// <param name="swapchainColorSpaceExtensionEnabled">
-    /// Whether <c>VK_EXT_swapchain_colorspace</c> was enabled on the instance.
-    /// </param>
-    /// <param name="swapchain">The swapchain support snapshot for the window surface.</param>
-    /// <returns>The capabilities snapshot.</returns>
     internal static unsafe VulkanDeviceCapabilities Query(
         Vk vulkan,
         PhysicalDevice physicalDevice,

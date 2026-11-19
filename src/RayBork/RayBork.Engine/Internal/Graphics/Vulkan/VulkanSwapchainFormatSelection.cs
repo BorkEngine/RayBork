@@ -6,15 +6,9 @@ namespace RayBork.Internal;
 /// The swapchain format, color space, and present encoding selected for the window surface.
 /// </summary>
 /// <remarks>
-/// The value is pure render-thread state. <see cref="Description"/> is the stable public format
-/// token, for example <c>R16G16B16A16_SFLOAT</c>, that the backend projects into
-/// <see cref="EngineInfo.SwapchainFormat"/>.
+/// <see cref="Description"/> is the stable public format token, for example
+/// <c>R16G16B16A16_SFLOAT</c>.
 /// </remarks>
-/// <param name="Format">The Vulkan surface format selected for the swapchain images.</param>
-/// <param name="ColorSpace">The color space the surface advertises for <paramref name="Format"/>.</param>
-/// <param name="Encoding">The encoding the present fragment shader applies for this format.</param>
-/// <param name="IsHdr">Whether the selected pair presents HDR through scRGB.</param>
-/// <param name="Description">The public format token reported by <see cref="EngineInfo.SwapchainFormat"/>.</param>
 internal readonly record struct VulkanSwapchainFormat(
     Format Format,
     ColorSpaceKHR ColorSpace,
@@ -27,22 +21,15 @@ internal readonly record struct VulkanSwapchainFormat(
 /// Chooses the swapchain format and present encoding for the window HDR state.
 /// </summary>
 /// <remarks>
-/// The policy is pure so it can be unit tested without a GPU. HDR presentation uses the scRGB
-/// half-float path because HDR10/PQ is deferred; SDR presentation prefers a format whose hardware
-/// transfer function matches the selected encoding. <c>A2B10G10R10_UNORM_PACK32</c> is never
-/// selected in M2. The caller owns the fallback warnings.
+/// HDR uses the scRGB half-float path; extended-sRGB linear is preferred over sRGB nonlinear
+/// because HDR10/PQ is deferred. SDR prefers a format whose hardware transfer function matches
+/// the encoding; <c>A2B10G10R10_UNORM_PACK32</c> is never selected.
 /// </remarks>
 internal static class VulkanSwapchainFormatSelection
 {
-    /// <summary>
-    /// Selects the swapchain format for the surface format pairs the window advertises.
-    /// </summary>
-    /// <param name="formats">The format and color-space pairs the surface advertises.</param>
-    /// <param name="hdr">The cached window HDR state.</param>
-    /// <returns>The selected format, color space, encoding, and HDR flag.</returns>
+    /// <summary>Selects the format for the surface format pairs the window advertises.</summary>
     /// <exception cref="GraphicsException">
-    /// The surface advertises no usable pair. The message lists every available pair and the
-    /// diagnostic code is <c>RB3001</c>.
+    /// No usable pair is advertised; the diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal static VulkanSwapchainFormat Select(
         IReadOnlyList<VulkanSurfaceFormat> formats,

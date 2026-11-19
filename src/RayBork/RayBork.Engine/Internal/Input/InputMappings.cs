@@ -2,10 +2,8 @@ using SDL3;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Translates SDL3 input identifiers into the RayBork contracts and owns the shared array sizes and
-/// validation rules used by the raw input state and the tick snapshots.
-/// </summary>
+/// <summary>Translates SDL3 input identifiers into the RayBork input contracts.</summary>
+/// <remarks>Also owns the shared array sizes and validation rules for raw state and snapshots.</remarks>
 internal static class InputMappings
 {
     internal const int KEY_COUNT = 512;
@@ -17,11 +15,7 @@ internal static class InputMappings
 
     private const float AXIS_SCALE = 32767f;
 
-    /// <summary>
-    /// Converts an SDL3 scancode to a RayBork key when the scancode has a key storage slot. A
-    /// scancode outside the key array range has no slot and is rejected instead of producing an
-    /// invalid key index.
-    /// </summary>
+    /// <summary>Converts an SDL3 scancode to a key when the scancode has a storage slot.</summary>
     /// <param name="scancode">The SDL3 scancode from a keyboard event.</param>
     /// <param name="key">The mapped key when the scancode is in range.</param>
     /// <returns><see langword="true"/> when the scancode is in range.</returns>
@@ -38,9 +32,7 @@ internal static class InputMappings
         return false;
     }
 
-    /// <summary>
-    /// Maps the one-based SDL3 mouse button number to the zero-based <see cref="MouseButton"/>.
-    /// </summary>
+    /// <summary>Maps a one-based SDL3 mouse button to zero-based <see cref="MouseButton"/>.</summary>
     internal static bool TryGetMouseButton(byte sdlButton, out MouseButton button)
     {
         if (sdlButton >= 1 && sdlButton <= MOUSE_BUTTON_COUNT)
@@ -53,10 +45,7 @@ internal static class InputMappings
         return false;
     }
 
-    /// <summary>
-    /// Maps an SDL3 gamepad button, rejecting paddle, Misc4, Misc5, and Misc6 buttons that have no
-    /// RayBork name.
-    /// </summary>
+    /// <summary>Maps an SDL3 gamepad button, rejecting unnamed paddle and misc buttons.</summary>
     internal static bool TryGetGamepadButton(SDL.GamepadButton sdlButton, out GamepadButton button)
     {
         int value = (int)sdlButton;
@@ -73,9 +62,7 @@ internal static class InputMappings
         return false;
     }
 
-    /// <summary>
-    /// Maps an SDL3 stick axis index to a <see cref="GamepadAxis"/>.
-    /// </summary>
+    /// <summary>Maps an SDL3 stick axis index to a <see cref="GamepadAxis"/>.</summary>
     internal static bool TryGetGamepadAxis(byte sdlAxis, out GamepadAxis axis)
     {
         if (sdlAxis < GAMEPAD_AXIS_COUNT)
@@ -88,9 +75,7 @@ internal static class InputMappings
         return false;
     }
 
-    /// <summary>
-    /// Maps SDL3 axis index 4 or 5 to a <see cref="GamepadTrigger"/>.
-    /// </summary>
+    /// <summary>Maps SDL3 axis index 4 or 5 to a <see cref="GamepadTrigger"/>.</summary>
     internal static bool TryGetGamepadTrigger(byte sdlAxis, out GamepadTrigger trigger)
     {
         int value = sdlAxis - GAMEPAD_AXIS_COUNT;
@@ -115,14 +100,10 @@ internal static class InputMappings
     /// </summary>
     internal static float NormalizeTrigger(short value) => Math.Clamp(value / AXIS_SCALE, 0f, 1f);
 
-    /// <summary>
-    /// Gets the storage slot of a stick axis in the flat gamepad axis array.
-    /// </summary>
+    /// <summary>Gets the storage slot of a stick axis in the flat gamepad axis array.</summary>
     internal static int AxisSlot(GamepadAxis axis) => (int)axis;
 
-    /// <summary>
-    /// Gets the storage slot of a trigger in the flat gamepad axis array.
-    /// </summary>
+    /// <summary>Gets the storage slot of a trigger in the flat gamepad axis array.</summary>
     internal static int TriggerSlot(GamepadTrigger trigger) => GAMEPAD_AXIS_COUNT + (int)trigger;
 
     internal static void ValidateKey(Key key)

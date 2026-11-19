@@ -2,24 +2,12 @@ using System.Buffers.Binary;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// A bounds-checked reader over one CFF DICT: encoded operands followed by an operator.
-/// </summary>
+/// <summary>A bounds-checked reader over one CFF DICT of operands and operators.</summary>
 /// <remarks>
-/// <para>
-/// A DICT stores numbers and operators, and every operator consumes the operands that precede it.
-/// <see cref="TryRead"/> yields one operator code together with its operand count; the operands are
-/// read through <see cref="Operand"/> before the next call. The reader validates every byte, rejects
-/// the reserved bytes and nibbles, requires at least one mantissa digit in a real operand, rejects a
-/// trailing operand run that no operator consumes, and bounds the operand stack at
-/// <see cref="MAX_OPERANDS"/>. All failures are <see cref="FontFormatException"/>, never a framework
-/// exception.
-/// </para>
-/// <para>
-/// Operator codes are the single-byte value for a one-byte operator and
-/// <c>0x0C00 | secondByte</c> for an escape operator. The reader is a short-lived parse-time helper;
-/// it is not thread-safe and retains the sliced table bytes.
-/// </para>
+/// <see cref="TryRead"/> yields one operator and its operand count, readable through
+/// <see cref="Operand"/>. Reserved bytes, malformed reals, a trailing operand run, and more than
+/// <see cref="MAX_OPERANDS"/> operands are <see cref="FontFormatException"/>s; the reader is parse-time
+/// only and not thread-safe.
 /// </remarks>
 internal sealed class CffDictReader
 {
@@ -46,8 +34,6 @@ internal sealed class CffDictReader
     private int _position;
 
     /// <summary>Initializes a DICT reader over one slice with a diagnostic context.</summary>
-    /// <param name="data">The DICT bytes.</param>
-    /// <param name="context">A description such as <c>the CFF Top DICT</c> used in failure reasons.</param>
     internal CffDictReader(ReadOnlyMemory<byte> data, string context)
     {
         _data = data;
@@ -55,13 +41,6 @@ internal sealed class CffDictReader
     }
 
     /// <summary>Reads the next operator and its operand count.</summary>
-    /// <param name="operatorCode">The one-byte or escaped operator code.</param>
-    /// <param name="operandCount">The number of operands that precede the operator.</param>
-    /// <returns><see langword="false"/> when the DICT ends.</returns>
-    /// <exception cref="FontFormatException">
-    /// The DICT is truncated, uses a reserved byte, has a malformed real operand, overflows the
-    /// operand stack, or ends with operands that no operator consumes.
-    /// </exception>
     internal bool TryRead(out int operatorCode, out int operandCount)
     {
         ReadOnlySpan<byte> data = _data.Span;
@@ -135,10 +114,7 @@ internal sealed class CffDictReader
         }
     }
 
-    /// <summary>Gets one operand of the operator returned by the last <see cref="TryRead"/> call.</summary>
-    /// <param name="index">The zero-based operand index.</param>
-    /// <returns>The operand value.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the operator's operands.</exception>
+    /// <summary>Gets one operand of the last operator read.</summary>
     internal double Operand(int index)
     {
         if ((uint)index >= (uint)_availableOperandCount)

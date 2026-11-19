@@ -1,18 +1,13 @@
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// One straight-alpha RGBA8 level of a generated mip chain.
-/// </summary>
+/// <summary>One straight-alpha RGBA8 level of a generated mip chain.</summary>
 /// <remarks>
-/// The baker generates every level once as RGBA8 and then packs or block-encodes each level for the
-/// selected format. The pixel array is owned by the level and is never shared with a caller.
+/// Every level is generated once as RGBA8 and then packed or block-encoded. The pixel array is
+/// owned by the level and never shared with a caller.
 /// </remarks>
 internal sealed class TextureLevel
 {
     /// <summary>Initializes a mip level.</summary>
-    /// <param name="width">The level's pixel width.</param>
-    /// <param name="height">The level's pixel height.</param>
-    /// <param name="pixels">The straight-alpha RGBA8 pixels, <c>width × height × 4</c> bytes.</param>
     internal TextureLevel(int width, int height, byte[] pixels)
     {
         ArgumentNullException.ThrowIfNull(pixels);

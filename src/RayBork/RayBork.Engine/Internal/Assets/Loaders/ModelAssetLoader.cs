@@ -7,29 +7,13 @@ namespace RayBork.Internal;
 /// <see cref="Model"/> over the shared cached part meshes and programs.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A model is not an engine asset: it has no cache entry, no shared identity, and no lifetime of its
-/// own. Every successful call resolves the packed descriptor and returns a new <see cref="Model"/> that
-/// owns one material per part and one mesh reference per distinct part mesh. The part loads themselves
-/// still use the shared engine cache, so repeated model loads share the underlying meshes and programs
-/// without sharing the model or its materials.
-/// </para>
-/// <para>
-/// The loader requests every part through the catalog's <see cref="AssetLoadContext"/>, so the loader
-/// thread keeps serving the part loads while this load is incomplete. A failed or canceled load
-/// releases every part mesh reference and material it already acquired.
-/// </para>
-/// <para>
-/// Every part names a canonical shader path. The bake supplies the built-in <c>shaders/mesh</c>
-/// default when the sidecar omits one; the runtime has no default and no legacy mapping, so a pack
-/// with a null or stale path fails to load.
-/// </para>
+/// A model has no cache entry or shared identity of its own; every load returns a new model owning one
+/// material per part and one reference per distinct mesh, and a failed or canceled load releases what
+/// it acquired. Every part must name a canonical shader path.
 /// </remarks>
 internal sealed class ModelAssetLoader : IAssetLoader<Model>
 {
-    /// <summary>
-    /// The shared loader instance.
-    /// </summary>
+    /// <summary>The shared loader instance.</summary>
     internal static readonly ModelAssetLoader Instance = new();
 
     private ModelAssetLoader() { }

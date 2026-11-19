@@ -6,115 +6,58 @@ namespace RayBork;
 /// The per-tick input snapshot.
 /// </summary>
 /// <remarks>
-/// Read input only on the tick thread, from <see cref="IGame.Setup"/>, <see cref="IGame.Tick"/>, or
-/// <see cref="IGame.Shutdown"/>. The snapshot is captured at the start of <c>Tick</c>; events that
-/// arrive while a tick runs apply to the next tick.
+/// Read only on the tick thread, from <see cref="IGame.Setup"/>, <see cref="IGame.Tick"/>, or
+/// <see cref="IGame.Shutdown"/>. Events that arrive while a tick runs apply to the next tick.
 /// </remarks>
 public interface IInput
 {
-    /// <summary>
-    /// Determines whether a key is held down.
-    /// </summary>
-    /// <param name="key">The physical key to test.</param>
-    /// <returns><see langword="true"/> while the key is down.</returns>
+    /// <summary>Gets whether a key is held down.</summary>
     bool IsKeyDown(Key key);
 
-    /// <summary>
-    /// Determines whether a key had its first press during the current tick. OS-generated key repeats
-    /// do not set this value.
-    /// </summary>
-    /// <param name="key">The physical key to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a key was first pressed this tick, excluding OS repeats.</summary>
     bool IsKeyPressed(Key key);
 
-    /// <summary>
-    /// Determines whether a key generated an OS repeat event during the current tick. The first press
-    /// does not set this value.
-    /// </summary>
-    /// <param name="key">The physical key to test.</param>
-    /// <returns><see langword="true"/> for one tick after an OS repeat event.</returns>
+    /// <summary>Gets whether an OS key repeat occurred this tick; excludes the first press.</summary>
     bool IsKeyPressedRepeat(Key key);
 
-    /// <summary>
-    /// Determines whether a key was released during the current tick.
-    /// </summary>
-    /// <param name="key">The physical key to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a key was released this tick.</summary>
     bool IsKeyReleased(Key key);
 
-    /// <summary>
-    /// Determines whether a key is up.
-    /// </summary>
-    /// <param name="key">The physical key to test.</param>
-    /// <returns><see langword="true"/> while the key is not down.</returns>
+    /// <summary>Gets whether a key is up.</summary>
     bool IsKeyUp(Key key);
 
-    /// <summary>
-    /// Gets the UTF-16 text entered during the current tick, in layout order. Empty when no text was
-    /// entered.
-    /// </summary>
+    /// <summary>Gets the UTF-16 text entered this tick in layout order; empty when none.</summary>
     string TextInput { get; }
 
     /// <summary>
-    /// Gets the mouse position in render pixels with a top-left origin.
+    /// Gets the mouse position in fractional render pixels with a top-left origin, not window units.
     /// </summary>
-    /// <remarks>
-    /// Render pixels are physical framebuffer pixels, so the value is passed directly to
-    /// <see cref="Camera.ScreenToWorldRay"/> and compared directly with
-    /// <see cref="Camera.WorldToScreen"/> output. It is fractional and is not in
-    /// <see cref="IWindow.Width"/> window coordinates.
-    /// </remarks>
     Vector2 MousePosition { get; }
 
     /// <summary>
-    /// Gets the mouse movement in render pixels since the previous tick, including while the cursor
-    /// mode is <see cref="CursorMode.Disabled"/>.
+    /// Gets mouse movement in render pixels since the previous tick, even while the cursor is
+    /// disabled.
     /// </summary>
     Vector2 MouseDelta { get; }
 
-    /// <summary>
-    /// Gets the vertical mouse wheel delta for the current tick.
-    /// </summary>
+    /// <summary>Gets the vertical wheel delta for this tick.</summary>
     float MouseWheel { get; }
 
-    /// <summary>
-    /// Determines whether a mouse button is held down.
-    /// </summary>
-    /// <param name="button">The mouse button to test.</param>
-    /// <returns><see langword="true"/> while the button is down.</returns>
+    /// <summary>Gets whether a mouse button is held down.</summary>
     bool IsMouseButtonDown(MouseButton button);
 
-    /// <summary>
-    /// Determines whether a mouse button was pressed during the current tick.
-    /// </summary>
-    /// <param name="button">The mouse button to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a mouse button was pressed this tick.</summary>
     bool IsMouseButtonPressed(MouseButton button);
 
-    /// <summary>
-    /// Determines whether a mouse button was released during the current tick.
-    /// </summary>
-    /// <param name="button">The mouse button to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a mouse button was released this tick.</summary>
     bool IsMouseButtonReleased(MouseButton button);
 
-    /// <summary>
-    /// Determines whether a mouse button is up.
-    /// </summary>
-    /// <param name="button">The mouse button to test.</param>
-    /// <returns><see langword="true"/> while the button is not down.</returns>
+    /// <summary>Gets whether a mouse button is up.</summary>
     bool IsMouseButtonUp(MouseButton button);
 
-    /// <summary>
-    /// Gets the connected gamepads for the current tick. The position of a pad in this list can change
-    /// across a hotplug; use <see cref="IGamepad.InstanceId"/> for per-device state.
-    /// </summary>
+    /// <summary>Gets connected gamepads this tick; positions can change on hotplug.</summary>
     IReadOnlyList<IGamepad> Gamepads { get; }
 
-    /// <summary>
-    /// Gets the gamepad at the given index in <see cref="Gamepads"/>.
-    /// </summary>
-    /// <param name="index">The position in <see cref="Gamepads"/>.</param>
-    /// <returns>The gamepad, or <see langword="null"/> when no pad is connected at the index.</returns>
+    /// <summary>Gets a gamepad by index from <see cref="Gamepads"/>; null when absent.</summary>
     IGamepad? GetGamepad(int index);
 }

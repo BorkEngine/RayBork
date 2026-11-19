@@ -5,41 +5,12 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Executes the camera post-process chain on the render thread: the target-sized Rgba16Float ping-pong
-/// targets, the custom-effect and built-in SSAO and bloom fullscreen passes, the engine store-back pass,
-/// and the per-target store-back framebuffers.
-/// </summary>
+/// <summary>Runs the camera post-process chain on the render thread and stores the result back.</summary>
 /// <remarks>
-/// <para>
-/// The chain is target-sized: the camera target's resolved color and depth are the source, an enabled
-/// custom effect records one fullscreen pass from the current source into the next single-sample
-/// <c>Rgba16Float</c> post target, and two effects therefore chain into two passes. The engine then
-/// records one store-back pass that samples the final post target and writes the target's MSAA color
-/// attachment (or its single-sample color image) for the camera viewport only, resolving the result for
-/// a later camera, the present pass, or a readback. Depth is never part of the store-back.
-/// </para>
-/// <para>
-/// The post targets are pooled per frame ring slot and per target extent, so one frame can run effects
-/// on the scene target and on render targets of different sizes without destroying images a recorded
-/// pass still references. <see cref="BeginFrame"/> keeps the extents the previous frame on that slot used
-/// and destroys the rest after the slot's fence signaled, so a resize or a changed target set recycles
-/// its images one frame later and the steady state allocates nothing. A device recovery disposes and
-/// recreates the whole processor. Each post target allocates one bindless slot so an effect can sample
-/// it through the shader ABI, and one descriptor set for the store-back pass' own sampler layout.
-/// Render-thread only; the normal path allocates nothing after warm-up.
-/// </para>
-/// <para>
-/// SSAO and bloom hook in through <see cref="PostProcessEffectSnapshot"/> and
-/// <see cref="PostProcessContext"/>. A built-in rents a target-sized or
-/// smaller color target from the same pool, creates a fullscreen pipeline against the post render pass,
-/// writes one instance record per
-/// pass, and records the pass with the engine quad and frame descriptor set. It completes its final
-/// target-sized result with <see cref="PostProcessContext.CompleteColorTarget"/>, or releases an
-/// intermediate target with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; this processor then
-/// runs the same store-back. <see cref="SsaoEffect"/> and <see cref="BloomEffect"/> are the built-in
-/// effects on these hooks.
-/// </para>
+/// Post targets are target-sized single-sample <c>Rgba16Float</c> images; effects run in order, then one
+/// store-back pass writes the final target into the camera viewport's color attachment. Targets are pooled
+/// per frame slot and extent so a resize recycles images a frame later, and the processor is recreated
+/// after a device recovery.
 /// </remarks>
 internal sealed unsafe class VulkanPostProcessor : IDisposable
 {
@@ -47,8 +18,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
     private const int POST_SAMPLE_COUNT = 1;
 
     /// <summary>
-    /// The forced render state of every custom post-process pipeline: opaque, no culling, no depth test
-    /// or write, no blending. A shader's baked default render state never reaches a post pass.
+    /// The forced render state of every custom post-process pipeline: opaque, no culling, no depth test.
     /// </summary>
     private static readonly RenderState _forcedRenderState = new()
     {
@@ -97,26 +67,10 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the number of times a frame slot's target-sized post-target set was created, for GPU tests.
-    /// Test-only; it is not part of the renderer seam.
-    /// </summary>
+    /// <summary>Gets the number of post-target set creations, for GPU tests only.</summary>
     internal int TargetRecreationCount { get; private set; }
 
-    /// <summary>
-    /// Creates the post render pass, the custom-effect pipeline cache, the store-back pipeline set, the
-    /// fullscreen quad, and the run context.
-    /// </summary>
-    /// <param name="device">The device that owns the resources.</param>
-    /// <param name="bindless">The live bindless table.</param>
-    /// <param name="frameResources">The frame slot resources that own the instance buffer.</param>
-    /// <param name="geometryPipelineLayout">The shared geometry pipeline layout the custom effect uses.</param>
-    /// <param name="deviceGeneration">The logical device generation the shader modules belong to.</param>
-    /// <returns>The created processor.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates the post render pass, pipeline caches, fullscreen quad, and run context.</summary>
     internal static VulkanPostProcessor Create(
         VulkanDevice device,
         VulkanBindlessTextureTable bindless,
@@ -155,43 +109,17 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Starts one frame for a frame ring slot and releases the target extents the previous frame on that
-    /// slot did not use.
-    /// </summary>
-    /// <remarks>
-    /// The caller has waited for the slot's fence, so the previous submission on this slot completed and
-    /// no in-flight command buffer references its post targets. Extents this frame reuses are kept; a
-    /// stale extent (a window resize, a resized or released render target) is destroyed here. The call is
-    /// idempotent for the frame and does nothing when the slot never ran effects.
-    /// </remarks>
-    /// <param name="frameSlot">The frame ring slot being recorded.</param>
-    /// <param name="frameIndex">The frame's index, for the previous-frame comparison.</param>
+    /// <summary>Starts one frame for a ring slot and releases the previous frame's unused extents.</summary>
+    /// <remarks>The slot's fence signaled, so no in-flight command buffer references the stale targets.</remarks>
     internal void BeginFrame(int frameSlot, long frameIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _slots[frameSlot].BeginFrame(frameIndex);
     }
 
-    /// <summary>
-    /// Runs the enabled effects of one camera pass and the store-back for its viewport.
-    /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
-    /// <param name="frame">The frame packet.</param>
-    /// <param name="pass">The camera pass being recorded.</param>
-    /// <param name="passIndex">The frame-wide camera pass index.</param>
-    /// <param name="frameSlot">The frame ring slot.</param>
-    /// <param name="target">The camera's render target.</param>
-    /// <param name="targetColorSlot">The target's resolved color bindless slot.</param>
-    /// <param name="targetDepthSlot">The target's resolved depth bindless slot, or <c>0</c>.</param>
-    /// <param name="renderArea">The camera viewport rectangle the store-back writes.</param>
-    /// <param name="instanceByteOffset">
-    /// The next unused instance-buffer byte offset; advanced past the recorded effect instances.
-    /// </param>
+    /// <summary>Runs the enabled effects of one camera pass and the store-back for its viewport.</summary>
     /// <exception cref="GraphicsException">
-    /// A shader is not a live GPU resource, a post target could not be created, or an effect declares a
-    /// depth source the target cannot supply. The diagnostic code is <c>RB3001</c>.
+    /// A shader is not live, a post target cannot be created, or a depth source is missing.
     /// </exception>
     internal void Process(
         Vk vulkan,
@@ -258,11 +186,8 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Disposes one camera target's store-back framebuffer. The caller invokes it before the target's
-    /// images are replaced or destroyed. Safe with a target that has no cached store-back.
-    /// </summary>
-    /// <param name="target">The target whose framebuffer is no longer valid.</param>
+    /// <summary>Destroys a camera target's cached store-back framebuffer before its images are replaced.</summary>
+    /// <remarks>Safe for a target without a cached store-back.</remarks>
     internal void DestroyStoreBack(VulkanRenderTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -280,56 +205,26 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
     /// <summary>Gets the Vulkan device that owns the post render pass, pipelines, and targets.</summary>
     internal VulkanDevice Device => _device;
 
-    /// <summary>
-    /// Gets the color-only single-sample render pass every post target is built against. A built-in
-    /// effect creates its pipelines against this pass.
-    /// </summary>
+    /// <summary>Gets the color-only single-sample render pass every post target is built against.</summary>
     internal RenderPass PostRenderPass => _postRenderPass;
 
-    /// <summary>
-    /// Gets the engine pipeline layout a fullscreen post pipeline must use so it can read the frame
-    /// block and instance records and receive the pass-index push constant.
-    /// </summary>
+    /// <summary>Gets the engine pipeline layout a fullscreen post pipeline must use.</summary>
     internal PipelineLayout PipelineLayout => _geometryPipelineLayout;
 
-    /// <summary>
-    /// Gets the forced render state a post-process pipeline uses: opaque, no culling, no depth test or
-    /// write, because the post render pass has no depth attachment.
-    /// </summary>
+    /// <summary>Gets the forced render state a post-process pipeline uses; the pass has no depth.</summary>
     internal static RenderState FullscreenRenderState => _forcedRenderState;
 
-    /// <summary>
-    /// Gets the frame descriptor set that binds the frame block and instance-record storage buffer.
-    /// </summary>
-    /// <param name="frameSlot">The frame ring slot being recorded.</param>
+    /// <summary>Gets the frame descriptor set binding the frame block and instance records.</summary>
     /// <returns>The descriptor set to bind at set 0.</returns>
     internal DescriptorSet GetFrameDescriptorSet(int frameSlot) =>
         _frameResources.GetDescriptorSet(frameSlot);
 
-    /// <summary>
-    /// Gets a writable range of the frame slot's instance-record storage.
-    /// </summary>
-    /// <param name="frameSlot">The frame ring slot being recorded.</param>
-    /// <param name="byteOffset">The record's byte offset.</param>
-    /// <param name="stride">The record's size in bytes.</param>
-    /// <returns>The writable record span.</returns>
+    /// <summary>Gets a writable span of the frame slot's instance-record storage.</summary>
     internal Span<byte> GetInstanceRecordSpan(int frameSlot, ulong byteOffset, int stride) =>
         _frameResources.GetInstanceSpan(frameSlot, byteOffset, (ulong)stride);
 
-    /// <summary>
-    /// Gets or creates a fullscreen pipeline for a baked shader against the post render pass, using the
-    /// engine pipeline layout and the requested render state.
-    /// </summary>
-    /// <param name="program">The internal shader program asset.</param>
-    /// <param name="renderState">
-    /// The render state to bake into the pipeline. It must be the forced fullscreen state, because the
-    /// post render pass has no depth attachment; a depth-tested, culled, or blended state is rejected
-    /// before pipeline creation.
-    /// </param>
-    /// <returns>The cached pipeline.</returns>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="renderState"/> is not <see cref="FullscreenRenderState"/>.
-    /// </exception>
+    /// <summary>Gets or creates a fullscreen pipeline for a baked shader against the post render pass.</summary>
+    /// <remarks>Only <see cref="FullscreenRenderState"/> is valid; the pass has no depth.</remarks>
     internal Pipeline GetOrCreateFullscreenPipeline(EngineAsset program, RenderState renderState)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -352,31 +247,19 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         );
     }
 
-    /// <summary>
-    /// Rents a target-sized post target for the next pass and transitions it for writing.
-    /// </summary>
-    /// <param name="context">The current camera pass context.</param>
-    /// <returns>The target to write.</returns>
+    /// <summary>Rents a camera-target-sized post target and transitions it for writing.</summary>
     internal VulkanPostTarget RentColorTarget(PostProcessContext context) =>
         RentColorTarget(context, context.Extent);
 
-    /// <summary>
-    /// Rents a post target of any extent from the per-extent pool and transitions it for writing.
-    /// </summary>
+    /// <summary>Rents a post target of any extent and transitions it for writing.</summary>
     /// <remarks>
-    /// The rent rotates through the extent's three-target set and skips the current chain source, so a
-    /// prior effect's completed output is preserved while consecutive passes do not overwrite the image
-    /// they just sampled. A built-in effect uses this for an intermediate pass at a different resolution,
-    /// such as a bloom downsample, and releases it with
-    /// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>.
+    /// The rent skips the current chain source so a prior effect's output survives; release an
+    /// intermediate target with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>.
     /// </remarks>
-    /// <param name="context">The current camera pass context.</param>
-    /// <param name="extent">The positive target extent.</param>
-    /// <returns>The target to write.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="extent"/> has a zero dimension.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// No post chain is active; only an effect's <c>Run</c> may rent a target.
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The extent has a zero dimension or exceeds the device framebuffer limit.
     /// </exception>
+    /// <exception cref="InvalidOperationException">No post chain is active.</exception>
     internal VulkanPostTarget RentColorTarget(PostProcessContext context, Extent2D extent)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -414,16 +297,8 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         return target;
     }
 
-    /// <summary>
-    /// Transitions a rendered post target to a shader read and makes it the chain source. The target
-    /// must be camera-target-sized, because the store-back maps the camera viewport through it.
-    /// </summary>
-    /// <param name="context">The current camera pass context.</param>
-    /// <param name="target">The target the effect rendered into.</param>
-    /// <exception cref="InvalidOperationException">
-    /// The target is not the camera target's size; complete an intermediate-sized result with
-    /// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/> instead.
-    /// </exception>
+    /// <summary>Transitions a camera-target-sized target to a shader read and makes it the chain source.</summary>
+    /// <exception cref="InvalidOperationException">The target is not target-sized.</exception>
     internal void CompleteColorTarget(PostProcessContext context, VulkanPostTarget target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -446,12 +321,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         context.SetCurrentColorTarget(target);
     }
 
-    /// <summary>
-    /// Transitions an auxiliary post target to a shader read without making it the chain source, so a
-    /// built-in effect can sample it in a later pass.
-    /// </summary>
-    /// <param name="context">The current camera pass context.</param>
-    /// <param name="target">The auxiliary target the effect rendered into.</param>
+    /// <summary>Transitions an auxiliary target to a shader read without making it the chain source.</summary>
     internal void CompleteAuxiliaryTarget(PostProcessContext context, VulkanPostTarget target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -460,27 +330,11 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         target.TransitionToShaderRead(context.Vulkan, context.CommandBuffer);
     }
 
-    /// <summary>
-    /// Records one fullscreen pass from a post target into another with a pipeline created against the
-    /// post render pass, the engine fullscreen quad, and the frame descriptor set.
-    /// </summary>
-    /// <remarks>
-    /// The caller reserves and writes the pass' instance record first with
-    /// <see cref="PostProcessContext.ReserveInstanceRecord"/> and
-    /// <see cref="PostProcessContext.GetInstanceRecordSpan"/>, and writes every texture index slot
-    /// itself. A custom shader effect and a built-in multi-pass effect both use this recorder.
-    /// </remarks>
-    /// <param name="context">The current camera pass context.</param>
-    /// <param name="destination">The rented target to write.</param>
-    /// <param name="pipeline">The fullscreen pipeline to draw with.</param>
-    /// <param name="instanceByteOffset">The reserved record's stride-aligned byte offset.</param>
-    /// <param name="stride">The record's size in bytes.</param>
+    /// <summary>Records one fullscreen pass into a rented target with the engine fullscreen quad.</summary>
+    /// <remarks>The caller reserves and fills the instance record and texture slots first.</remarks>
     /// <exception cref="ArgumentException">
-    /// <paramref name="pipeline"/> is the default handle or <paramref name="instanceByteOffset"/> is not
-    /// stride-aligned.
+    /// The pipeline is the default handle or the instance offset is not stride-aligned.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stride"/> is not positive.</exception>
-    /// <exception cref="InvalidOperationException">No post chain is active.</exception>
     internal void RecordFullscreenPass(
         PostProcessContext context,
         VulkanPostTarget destination,
@@ -583,17 +437,9 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         vulkan.CmdEndRenderPass(commandBuffer);
     }
 
-    /// <summary>
-    /// Records one custom effect's fullscreen pass from the current source into
-    /// <paramref name="destination"/>.
-    /// </summary>
-    /// <param name="context">The current camera pass context.</param>
-    /// <param name="destination">The rented target to write.</param>
-    /// <param name="snapshot">The frozen effect state.</param>
-    /// <param name="program">The effect's internal shader program asset.</param>
+    /// <summary>Records one custom effect's fullscreen pass from the current chain source.</summary>
     /// <exception cref="GraphicsException">
-    /// The shader is not a live GPU resource, the depth source is missing, or the instance record does
-    /// not fit the frame slot. The diagnostic code is <c>RB3001</c>.
+    /// The shader is not live, the depth source is missing, or the instance record does not fit.
     /// </exception>
     internal void RecordCustomShaderPass(
         PostProcessContext context,
@@ -662,11 +508,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         RecordFullscreenPass(context, destination, pipeline, byteOffset, stride);
     }
 
-    /// <summary>
-    /// Records the engine store-back pass from the final chain target into the camera target for the
-    /// camera viewport and returns the resolved color to a shader read.
-    /// </summary>
-    /// <param name="context">The current camera pass context.</param>
+    /// <summary>Records the store-back pass into the camera target for the camera viewport.</summary>
     /// <exception cref="GraphicsException">The store-back pipeline could not be created.</exception>
     internal void RecordStoreBack(PostProcessContext context)
     {
@@ -701,19 +543,13 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         target.CompleteStoreBack(context.Vulkan, context.CommandBuffer);
     }
 
-    /// <summary>
-    /// Resolves one material texture binding to its bindless slot.
-    /// </summary>
+    /// <summary>Resolves a material texture binding to its bindless slot.</summary>
     /// <param name="texture">The texture, or <see langword="null"/> for the white fallback.</param>
-    /// <returns>The bindless slot.</returns>
     internal static uint ResolveTextureSlot(Texture? texture) =>
         VulkanTextureBinding.ResolveSlot(texture);
 
-    /// <summary>
-    /// Destroys every cached store-back framebuffer, the target-sized post targets, the pipeline caches,
-    /// the fullscreen quad, and the store-back pipeline set. The call is idempotent and must run before
-    /// the device, render targets, and bindless table are destroyed.
-    /// </summary>
+    /// <summary>Destroys the cached store-backs, post targets, pipeline caches, quad, and render pass.</summary>
+    /// <remarks>Idempotent; must run before the device, targets, and bindless table are destroyed.</remarks>
     public void Dispose()
     {
         if (_disposed)
@@ -871,14 +707,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets or creates the post-target set for one extent in a frame slot and marks it used by this
-    /// frame.
-    /// </summary>
-    /// <param name="slot">The frame slot's pool.</param>
-    /// <param name="extent">The positive target extent.</param>
-    /// <param name="frameIndex">The recording frame's index.</param>
-    /// <returns>The set to ping-pong through.</returns>
+    /// <summary>Gets or creates an extent's target set in a frame slot and marks it used.</summary>
     private PostTargetSet GetTargetSet(PostTargetSlot slot, Extent2D extent, long frameIndex)
     {
         if (slot.TryGet(extent, frameIndex, out PostTargetSet? set))
@@ -962,16 +791,12 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         );
     }
 
-    /// <summary>
-    /// The store-back render pass and framebuffer of one camera target.
-    /// </summary>
+    /// <summary>The store-back render pass and framebuffer of one camera target.</summary>
     private readonly record struct TargetStoreBack(RenderPass RenderPass, Framebuffer Framebuffer);
 
     /// <summary>
-    /// One post-target set the renderer ping-pongs through for one extent. The set owns three
-    /// target-sized images; <see cref="Rent"/> rotates through them and skips the current chain source,
-    /// so a prior effect's completed output survives and consecutive passes do not overwrite the image
-    /// they just sampled.
+    /// One extent's ping-pong set of three post targets. <see cref="Rent"/> skips the current chain source
+    /// so consecutive passes never overwrite the image they just sampled.
     /// </summary>
     private sealed class PostTargetSet(
         VulkanPostTarget first,
@@ -982,13 +807,8 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         private readonly VulkanPostTarget[] _targets = [first, second, third];
         private int _nextIndex;
 
-        /// <summary>
-        /// Gets the next target to write, skipping <paramref name="source"/> so the chain's current
-        /// source image is preserved.
-        /// </summary>
+        /// <summary>Gets the next target to write, skipping <paramref name="source"/>.</summary>
         /// <param name="source">The current chain source, or <see langword="null"/> before an effect.</param>
-        /// <returns>The target to write.</returns>
-        /// <exception cref="InvalidOperationException">Every target is the current source.</exception>
         internal VulkanPostTarget Rent(VulkanPostTarget? source)
         {
             for (int offset = 0; offset < _targets.Length; offset++)
@@ -1019,16 +839,10 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable
         }
     }
 
-    /// <summary>
-    /// One frame slot's target-sized post targets, keyed by target extent, and the last frame index the
-    /// slot recorded.
-    /// </summary>
+    /// <summary>One frame slot's target sets, keyed by extent, and the last recorded frame index.</summary>
     /// <remarks>
-    /// A frame can run effects on the scene target and on several render targets of different sizes, so a
-    /// single set per slot would destroy images a recorded pass still references. The slot therefore
-    /// keeps one set per extent and releases the extents the previous frame on the slot did not use; the
-    /// caller invokes <see cref="BeginFrame"/> only after the slot's fence signaled, so those images are
-    /// no longer in flight.
+    /// A slot keeps one set per extent because one frame can run effects on targets of different sizes,
+    /// and releases the previous frame's unused extents after the slot's fence signaled.
     /// </remarks>
     private sealed class PostTargetSlot
     {

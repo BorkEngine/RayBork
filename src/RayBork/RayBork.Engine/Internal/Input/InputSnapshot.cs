@@ -2,15 +2,10 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The immutable per-tick input snapshot captured on the tick thread. Read it only on the tick
-/// thread, from <c>Setup</c>, <c>Tick</c>, or <c>Shutdown</c>.
-/// </summary>
+/// <summary>The immutable per-tick input snapshot captured on the tick thread.</summary>
 /// <remarks>
-/// The owning <see cref="InputState"/> clones its arrays before constructing the snapshot, so later
-/// events never change the keyboard or mouse view. Gamepad entries are stable
-/// <see cref="GamepadHandle"/> objects whose state advances with each tick; use
-/// <see cref="IGamepad.InstanceId"/> for per-device state across hotplug.
+/// Read it only on the tick thread; arrays are cloned first, so later events never change this view.
+/// Gamepad entries are stable <see cref="GamepadHandle"/> objects updated per tick.
 /// </remarks>
 internal sealed class InputSnapshot : IInput
 {

@@ -2,22 +2,12 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// One recorded camera pass inside a <see cref="RenderFramePacket"/>.
-/// </summary>
+/// <summary>One recorded camera pass inside a <see cref="RenderFramePacket"/>.</summary>
 /// <remarks>
-/// <para>
-/// A pass is a value snapshot taken while the tick thread records it: the camera matrices, the camera
-/// position, the clamped pixel viewport, the clear mode and color, and the ordered draw records. The
-/// render thread never reads a live <see cref="Camera"/>, transform, or shader cursor.
-/// </para>
-/// <para>
-/// The recording members are tick-thread only and legal until <see cref="Seal"/> runs, which happens
-/// when the camera is disposed and again when the packet is sealed. A sealed pass rejects new draws
-/// with <see cref="InvalidOperationException"/>. The pooled draw-record buffer is owned by the frame
-/// slot, so it is reused after the render thread releases the slot and never mutates while the packet
-/// is ready or rendering.
-/// </para>
+/// A value snapshot of the camera matrices, viewport, clear state, and ordered draws, so the render
+/// thread never reads a live <see cref="Camera"/>. Recording is tick-thread only until
+/// <see cref="Seal"/>; the pooled buffers belong to the frame slot and are reused after the render
+/// thread releases it.
 /// </remarks>
 internal sealed class CameraPass
 {
@@ -27,10 +17,10 @@ internal sealed class CameraPass
     private int _postProcessEffectCount;
     private bool _sealed;
 
-    /// <summary>Gets the zero-based creation order of the pass inside its frame.</summary>
+    /// <summary>Gets the creation order of the pass inside its frame.</summary>
     internal int Index { get; private set; }
 
-    /// <summary>Gets the world-to-view matrix captured at camera creation.</summary>
+    /// <summary>Gets the world-to-view matrix.</summary>
     internal Matrix4x4 View { get; private set; }
 
     /// <summary>Gets the view-to-clip matrix, including the Vulkan Y-flip.</summary>
@@ -60,9 +50,7 @@ internal sealed class CameraPass
     /// <summary>Gets the linear color written when color is cleared.</summary>
     internal Color ClearColor { get; private set; }
 
-    /// <summary>
-    /// Gets the render target the pass writes, or <c>0</c> for the app's linear HDR scene target.
-    /// </summary>
+    /// <summary>Gets the render target, or <c>0</c> for the app's linear HDR scene target.</summary>
     internal long TargetId { get; private set; }
 
     /// <summary>Gets the sealed draw records in recording order.</summary>
@@ -72,8 +60,7 @@ internal sealed class CameraPass
     internal int DrawCount => _drawCount;
 
     /// <summary>
-    /// Gets the post-process effect snapshots in stack order, including entries that were disabled when
-    /// the camera was created.
+    /// Gets the post-process snapshots in stack order, including entries disabled at camera creation.
     /// </summary>
     internal ReadOnlySpan<PostProcessEffectSnapshot> PostProcessEffects =>
         _postProcessEffects.AsSpan(0, _postProcessEffectCount);
@@ -102,9 +89,7 @@ internal sealed class CameraPass
     /// <summary>Gets whether the pass rejects new draws.</summary>
     internal bool IsSealed => _sealed;
 
-    /// <summary>
-    /// Initializes the pass snapshot. Called by the frame packet before the camera starts recording.
-    /// </summary>
+    /// <summary>Initializes the pass snapshot before the camera starts recording.</summary>
     internal void Begin(
         int index,
         Matrix4x4 view,
@@ -136,12 +121,7 @@ internal sealed class CameraPass
         _sealed = false;
     }
 
-    /// <summary>
-    /// Appends a draw record in recording order and returns it.
-    /// </summary>
-    /// <param name="record">The pooled record rented from the frame packet.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="record"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">The pass is sealed.</exception>
+    /// <summary>Appends a pooled draw record in recording order.</summary>
     internal void Add(RenderDrawRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -160,12 +140,7 @@ internal sealed class CameraPass
         _draws[_drawCount++] = record;
     }
 
-    /// <summary>
-    /// Appends one post-process effect snapshot in run order.
-    /// </summary>
-    /// <param name="effect">The snapshot captured for this camera.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">The pass is sealed.</exception>
+    /// <summary>Appends one post-process snapshot in run order.</summary>
     internal void AddPostProcessEffect(PostProcessEffectSnapshot effect)
     {
         ArgumentNullException.ThrowIfNull(effect);
@@ -184,15 +159,11 @@ internal sealed class CameraPass
         _postProcessEffects[_postProcessEffectCount++] = effect;
     }
 
-    /// <summary>
-    /// Stops recording. Idempotent.
-    /// </summary>
+    /// <summary>Stops recording; idempotent.</summary>
     internal void Seal() => _sealed = true;
 
-    /// <summary>
-    /// Clears the pass for reuse by the next frame that owns the slot. Called only while the slot is
-    /// free, so no render thread can observe the partly reset list.
-    /// </summary>
+    /// <summary>Clears the pass for reuse by the next frame that owns the slot.</summary>
+    /// <remarks>Called only while the slot is free, so no render thread observes a partial reset.</remarks>
     internal void Reset()
     {
         Array.Clear(_draws, 0, _drawCount);

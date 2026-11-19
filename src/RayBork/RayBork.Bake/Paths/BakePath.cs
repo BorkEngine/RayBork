@@ -1,16 +1,11 @@
 namespace RayBork.Bake.Paths;
 
-/// <summary>
-/// Path helpers shared by discovery, configuration validation, and diagnostics.
-/// </summary>
+/// <summary>Path helpers for discovery, configuration validation, and diagnostics.</summary>
 internal static class BakePath
 {
     private const string TOML_SUFFIX = ".toml";
 
-    /// <summary>Tests whether a path is inside a root on a directory-separator boundary.</summary>
-    /// <param name="root">The root directory.</param>
-    /// <param name="path">The candidate path.</param>
-    /// <returns><see langword="true"/> when the candidate is the root or is contained by it.</returns>
+    /// <summary>Tests whether a path is inside a root on a separator boundary.</summary>
     internal static bool IsUnderRoot(string root, string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
@@ -31,10 +26,9 @@ internal static class BakePath
         return fullPath.StartsWith(prefix, comparison);
     }
 
-    /// <summary>Converts an absolute path to a project-relative display path with <c>/</c> separators.</summary>
-    /// <param name="projectRoot">The absolute project root.</param>
-    /// <param name="fullPath">The absolute file path.</param>
-    /// <returns>The relative path when under the project, otherwise the absolute path.</returns>
+    /// <summary>
+    /// Gets the project-relative display path with <c>/</c> separators, or the absolute path.
+    /// </summary>
     internal static string ForDiagnostic(string projectRoot, string fullPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
@@ -53,18 +47,10 @@ internal static class BakePath
     }
 
     /// <summary>Normalizes separators to <c>/</c>.</summary>
-    /// <param name="path">The path.</param>
-    /// <returns>The normalized path.</returns>
     internal static string ToSlashes(string path) =>
         path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
 
-    /// <summary>
-    /// Validates a relative configuration path and returns it with <c>/</c> separators.
-    /// </summary>
-    /// <param name="value">The configured path.</param>
-    /// <param name="normalized">The normalized relative path when valid.</param>
-    /// <param name="reason">The failure reason when invalid.</param>
-    /// <returns><see langword="true"/> when the path is relative and traversal-safe.</returns>
+    /// <summary>Validates a relative, traversal-safe path and normalizes separators.</summary>
     internal static bool TryNormalizeRelative(
         string value,
         out string normalized,
@@ -106,13 +92,7 @@ internal static class BakePath
         return true;
     }
 
-    /// <summary>
-    /// Resolves a relative path under a root and verifies containment.
-    /// </summary>
-    /// <param name="root">The absolute root.</param>
-    /// <param name="relativePath">The safe relative path.</param>
-    /// <param name="fullPath">The resolved absolute path.</param>
-    /// <returns><see langword="true"/> when the path is contained by the root.</returns>
+    /// <summary>Resolves a relative path under a root and verifies containment.</summary>
     internal static bool TryResolveUnderRoot(string root, string relativePath, out string fullPath)
     {
         fullPath = string.Empty;
@@ -136,14 +116,7 @@ internal static class BakePath
         }
     }
 
-    /// <summary>
-    /// Maps a source-relative path to a canonical asset path by removing one matched extension.
-    /// </summary>
-    /// <param name="relativeSourcePath">The pack-root-relative source path.</param>
-    /// <param name="matchedExtension">The normalized extension without a leading dot, or an empty string.</param>
-    /// <param name="assetPath">The canonical base path when successful.</param>
-    /// <param name="reason">The failure reason when unsuccessful.</param>
-    /// <returns><see langword="true"/> when a canonical path was produced.</returns>
+    /// <summary>Maps a source path to its canonical asset path without one suffix.</summary>
     internal static bool TryToCanonicalBase(
         string relativeSourcePath,
         string matchedExtension,
@@ -182,9 +155,7 @@ internal static class BakePath
         return true;
     }
 
-    /// <summary>Gets the final extension of a file name without the dot, or an empty string.</summary>
-    /// <param name="relativePath">The relative file path.</param>
-    /// <returns>The lowercase extension, or an empty string.</returns>
+    /// <summary>Gets the final dotless lowercase extension, or an empty string.</summary>
     internal static string GetFinalExtension(string relativePath)
     {
         int slash = relativePath.LastIndexOf('/', StringComparison.Ordinal);
@@ -198,8 +169,6 @@ internal static class BakePath
     }
 
     /// <summary>Gets the pack-relative path with its final extension removed.</summary>
-    /// <param name="relativePath">The relative file path.</param>
-    /// <returns>The path without its final extension.</returns>
     internal static string RemoveFinalExtension(string relativePath)
     {
         int slash = relativePath.LastIndexOf('/', StringComparison.Ordinal);
@@ -208,9 +177,6 @@ internal static class BakePath
     }
 
     /// <summary>Gets the pack-relative path with one matched extension removed.</summary>
-    /// <param name="relativePath">The relative file path.</param>
-    /// <param name="matchedExtension">The matched extension, which may be compound.</param>
-    /// <returns>The path without the matched extension.</returns>
     internal static string RemoveMatchedExtension(string relativePath, string matchedExtension)
     {
         if (matchedExtension.Length == 0)
@@ -224,15 +190,11 @@ internal static class BakePath
             : RemoveFinalExtension(relativePath);
     }
 
-    /// <summary>Tests whether a file name ends in the TOML suffix, case-insensitively.</summary>
-    /// <param name="relativePath">The relative file path.</param>
-    /// <returns><see langword="true"/> for a <c>.toml</c> path.</returns>
+    /// <summary>Tests whether a file name ends in <c>.toml</c>, case-insensitively.</summary>
     internal static bool IsToml(string relativePath) =>
         relativePath.EndsWith(TOML_SUFFIX, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Enumerates regular files under a root in ordinal relative-path order.</summary>
-    /// <param name="root">The absolute pack root.</param>
-    /// <returns>The absolute file paths, sorted ordinal by relative path.</returns>
     internal static IReadOnlyList<string> EnumerateFilesSorted(string root)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);

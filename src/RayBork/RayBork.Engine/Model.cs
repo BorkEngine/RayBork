@@ -2,28 +2,11 @@ using System.Numerics;
 
 namespace RayBork;
 
-/// <summary>
-/// A multi-part model: a flat list of <see cref="ModelPart"/> values and their combined bounds.
-/// </summary>
+/// <summary>A flat list of <see cref="ModelPart"/> values and their combined bounds.</summary>
 /// <remarks>
-/// <para>
-/// A model is not an engine asset and has no path or shared identity. It is a caller-owned composition
-/// of shared <see cref="Mesh"/> assets and owned <see cref="Shader"/> materials. Constructing a model
-/// over caller parts acquires one engine reference to every distinct mesh and transfers every distinct
-/// part material to the model. Callers create one material per part and must not dispose a material
-/// after transferring it.
-/// </para>
-/// <para>
-/// <see cref="IAssetCatalog.Load{T}"/> returns a new model wrapper per call over the shared cached
-/// part meshes and programs. Repeated loads never share the model or its materials, but two materials
-/// over the same program still batch together because the internal program is the batch key.
-/// </para>
-/// <para>
-/// <see cref="Dispose"/> is idempotent. It disposes each distinct part material exactly once and
-/// releases each distinct part mesh reference exactly once. <see cref="IsDisposed"/> stays readable
-/// after disposal; every other member throws <see cref="ObjectDisposedException"/>. M4 models are
-/// static: there is no skeletal or morph animation, and the part list is immutable.
-/// </para>
+/// A model is caller-owned, not an engine asset; it references every distinct part mesh and takes
+/// ownership of every distinct part material. <see cref="Dispose"/> disposes each material and
+/// releases each mesh once; repeated loads return a new model over the shared cached meshes.
 /// </remarks>
 public sealed class Model : IDisposable
 {
@@ -33,40 +16,16 @@ public sealed class Model : IDisposable
     private readonly Shader[] _materials;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a model over caller parts.
-    /// </summary>
-    /// <param name="parts">The parts in draw order. The list must contain at least one part.</param>
-    /// <remarks>
-    /// The constructor acquires one engine reference to every distinct part mesh and takes ownership
-    /// of every distinct part material. The caller keeps its own mesh references and must release
-    /// them separately; it must not dispose a material after the model was constructed.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="parts"/> is <c>null</c>, or a part name is <c>null</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="parts"/> is empty, a part name is whitespace, or a part has no mesh or material.
-    /// </exception>
+    /// <summary>Initializes a model over caller parts.</summary>
+    /// <param name="parts">The parts in draw order; at least one is required.</param>
+    /// <exception cref="ArgumentException">The list is empty or a part is invalid.</exception>
     /// <exception cref="ObjectDisposedException">A part mesh or material is disposed.</exception>
     public Model(params ModelPart[] parts)
         : this((IEnumerable<ModelPart>)parts) { }
 
-    /// <summary>
-    /// Initializes a model over caller parts.
-    /// </summary>
-    /// <param name="parts">The parts in draw order. The sequence must contain at least one part.</param>
-    /// <remarks>
-    /// The constructor acquires one engine reference to every distinct part mesh and takes ownership
-    /// of every distinct part material. The caller keeps its own mesh references and must release
-    /// them separately; it must not dispose a material after the model was constructed.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="parts"/> is <c>null</c>, or a part name is <c>null</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="parts"/> is empty, a part name is whitespace, or a part has no mesh or material.
-    /// </exception>
+    /// <summary>Initializes a model over caller parts.</summary>
+    /// <param name="parts">The parts in draw order; at least one is required.</param>
+    /// <exception cref="ArgumentException">The list is empty or a part is invalid.</exception>
     /// <exception cref="ObjectDisposedException">A part mesh or material is disposed.</exception>
     public Model(IEnumerable<ModelPart> parts)
     {
@@ -101,7 +60,6 @@ public sealed class Model : IDisposable
     }
 
     /// <summary>Gets the flat part list in construction order.</summary>
-    /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
     public IReadOnlyList<ModelPart> Parts
     {
         get
@@ -112,7 +70,6 @@ public sealed class Model : IDisposable
     }
 
     /// <summary>Gets the union of every part's model-space bounds.</summary>
-    /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
     public BoundingBox Bounds
     {
         get
@@ -122,18 +79,10 @@ public sealed class Model : IDisposable
         }
     }
 
-    /// <summary>Gets whether the model was disposed. Stays readable after disposal.</summary>
+    /// <summary>Gets whether the model was disposed; readable after disposal.</summary>
     public bool IsDisposed => _disposed;
 
-    /// <summary>
-    /// Disposes every distinct part material and releases one engine reference for every distinct part
-    /// mesh. Idempotent.
-    /// </summary>
-    /// <remarks>
-    /// A part mesh that another model or the game also references stays usable. Every material was
-    /// transferred to this model, so it is disposed here exactly once and must not be disposed by the
-    /// caller.
-    /// </remarks>
+    /// <summary>Disposes every distinct part material and releases every distinct part mesh.</summary>
     public void Dispose()
     {
         if (_disposed)

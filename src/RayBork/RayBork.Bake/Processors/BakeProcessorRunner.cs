@@ -9,9 +9,6 @@ namespace RayBork.Bake.Processors;
 internal sealed class ProcessedSource
 {
     /// <summary>Initializes a processed source.</summary>
-    /// <param name="source">The source.</param>
-    /// <param name="entries">The emitted entries.</param>
-    /// <param name="additionalInputs">Additional tracked input files.</param>
     internal ProcessedSource(
         BakeSource source,
         IReadOnlyList<BakedEntry> entries,
@@ -40,11 +37,7 @@ internal sealed class ProcessedSource
 /// <summary>Runs one processor source and discards every output on failure.</summary>
 internal static class BakeProcessorRunner
 {
-    /// <summary>Processes one source.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="source">The processor source.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <returns>The accepted result, or <see langword="null"/> when the source failed.</returns>
+    /// <summary>Processes one source, or returns <see langword="null"/> when it failed.</summary>
     internal static ProcessedSource? Run(
         BakeProject project,
         BakeSource source,

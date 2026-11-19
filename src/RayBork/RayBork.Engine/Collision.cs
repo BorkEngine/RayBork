@@ -4,39 +4,22 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// Allocation-free collision checks and ray casts over the engine's math types.
+/// Allocation-free collision checks and world-space ray casts over the engine's math types.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The helpers are pure static math. They never query the renderer or the scene, never allocate,
-/// never lock, and are safe to call from any thread. <see cref="GetRayMesh"/> is the only member
-/// that reads an asset; every other member accepts arbitrary values and returns a result.
-/// </para>
-/// <para>
-/// The helpers never throw for numeric input, including negative and non-finite values. A NaN
-/// input reports no collision or a miss. A <see cref="Ray"/> carries a finite origin and a unit
-/// direction, so <see cref="RayCollision.Distance"/> is a world distance; <c>default(Ray)</c> has a
-/// zero direction and every ray query reports a miss for it.
-/// </para>
+/// Pure static math that never allocates, touches the scene, or locks; only
+/// <see cref="GetRayMesh"/> reads an asset. Queries never throw for numeric input — NaN or a
+/// zero-direction <c>default(Ray)</c> reports a miss — and hit distances are world distances
+/// because ray directions are unit length.
 /// </remarks>
 public static class Collision
 {
     private const float PARALLEL_EPSILON = 1e-6f;
     private const float PARALLEL_EPSILON_SQUARED = PARALLEL_EPSILON * PARALLEL_EPSILON;
 
-    /// <summary>
-    /// Tests two spheres for overlap.
-    /// </summary>
-    /// <param name="centerA">The center of the first sphere.</param>
-    /// <param name="radiusA">The radius of the first sphere.</param>
-    /// <param name="centerB">The center of the second sphere.</param>
-    /// <param name="radiusB">The radius of the second sphere.</param>
-    /// <returns>
-    /// <c>true</c> when the distance between the centers is at most
-    /// <paramref name="radiusA"/> + <paramref name="radiusB"/>; touching spheres count as a hit.
-    /// </returns>
+    /// <summary>Tests two spheres for overlap; touching spheres count as a hit.</summary>
     /// <remarks>
-    /// A negative radius on either sphere or a NaN input reports <c>false</c>.
+    /// A negative radius or NaN input reports <c>false</c>.
     /// </remarks>
     public static bool CheckSpheres(Vector3 centerA, float radiusA, Vector3 centerB, float radiusB)
     {
@@ -49,17 +32,9 @@ public static class Collision
         return Vector3.DistanceSquared(centerA, centerB) <= radiusSum * radiusSum;
     }
 
-    /// <summary>
-    /// Tests two axis-aligned boxes for overlap.
-    /// </summary>
-    /// <param name="a">The first box.</param>
-    /// <param name="b">The second box.</param>
-    /// <returns>
-    /// <c>true</c> when the boxes overlap or touch on every axis.
-    /// </returns>
+    /// <summary>Tests two axis-aligned boxes for overlap; touching counts as a hit.</summary>
     /// <remarks>
-    /// The test is inclusive, so boxes that only share a face, edge, or corner count as overlapping.
-    /// A NaN input reports <c>false</c>.
+    /// The test is inclusive on every axis, and a NaN input reports <c>false</c>.
     /// </remarks>
     public static bool CheckBoxes(BoundingBox a, BoundingBox b)
     {
@@ -71,20 +46,9 @@ public static class Collision
             && a.Max.Z >= b.Min.Z;
     }
 
-    /// <summary>
-    /// Tests an axis-aligned box and a sphere for overlap.
-    /// </summary>
-    /// <param name="box">The box.</param>
-    /// <param name="center">The sphere center.</param>
-    /// <param name="radius">The sphere radius.</param>
-    /// <returns>
-    /// <c>true</c> when the squared distance from the sphere center to the closest point of the box
-    /// is at most <paramref name="radius"/> squared.
-    /// </returns>
+    /// <summary>Tests an axis-aligned box against a sphere; touching counts as a hit.</summary>
     /// <remarks>
-    /// The test clamps the center to the box, so a center inside the box always collides. It is
-    /// inclusive: a sphere that only touches the box counts as overlapping. A zero radius is a
-    /// point sphere. A negative radius or a NaN input reports <c>false</c>.
+    /// A center inside the box always collides. A negative radius or NaN input reports <c>false</c>.
     /// </remarks>
     public static bool CheckBoxSphere(BoundingBox box, Vector3 center, float radius)
     {
@@ -99,20 +63,10 @@ public static class Collision
         return Vector3.DistanceSquared(closest, center) <= radius * radius;
     }
 
-    /// <summary>
-    /// Casts a ray against a sphere and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The ray.</param>
-    /// <param name="center">The sphere center.</param>
-    /// <param name="radius">The sphere radius.</param>
-    /// <returns>
-    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses. When the ray origin is
-    /// inside the sphere, the result is the exit intersection with its outward normal.
-    /// </returns>
+    /// <summary>Casts a ray against a sphere and returns the nearest non-negative hit.</summary>
     /// <remarks>
-    /// A zero or negative radius, a non-finite input, or no non-negative root reports a miss.
-    /// Tangency counts as a hit. The ray direction is unit length, so the hit distance is a world
-    /// distance; a <c>default(Ray)</c> has a zero direction and reports a miss.
+    /// Inside the sphere returns the exit hit with its outward normal; a zero or negative radius,
+    /// non-finite input, or no non-negative root misses, and tangency counts as a hit.
     /// </remarks>
     public static RayCollision GetRaySphere(Ray ray, Vector3 center, float radius)
     {
@@ -158,27 +112,10 @@ public static class Collision
         return new RayCollision(distance, point, (point - center) / radius);
     }
 
-    /// <summary>
-    /// Casts a ray against an axis-aligned box and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The ray.</param>
-    /// <param name="box">The box.</param>
-    /// <returns>
-    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses. When the ray origin is
-    /// inside the box, the result is the exit face with its outward normal.
-    /// </returns>
+    /// <summary>Casts a ray against an axis-aligned box and returns the nearest hit.</summary>
     /// <remarks>
-    /// <para>
-    /// The slab method is used. A ray parallel to a slab is a miss when it is outside that slab and
-    /// continues when it is inside. Touching a face at <c>t = 0</c> counts as a hit if the box is
-    /// in front of the ray.
-    /// </para>
-    /// <para>
-    /// An inverted box (any <see cref="BoundingBox.Min"/> component greater than the matching
-    /// <see cref="BoundingBox.Max"/> component), a non-finite input, or a <c>default(Ray)</c>
-    /// (zero direction) reports a miss. The ray direction is unit length, so the hit distance is a
-    /// world distance.
-    /// </para>
+    /// An origin inside the box returns the exit face with its outward normal; an inverted box,
+    /// non-finite input, or zero direction misses. Touching a face at <c>t = 0</c> counts as a hit.
     /// </remarks>
     public static RayCollision GetRayBox(Ray ray, BoundingBox box)
     {
@@ -267,23 +204,10 @@ public static class Collision
         return new RayCollision(distance, ray.Origin + (ray.Direction * distance), normal);
     }
 
-    /// <summary>
-    /// Casts a ray against a triangle and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The ray.</param>
-    /// <param name="a">The first triangle corner.</param>
-    /// <param name="b">The second triangle corner.</param>
-    /// <param name="c">The third triangle corner.</param>
-    /// <returns>
-    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses.
-    /// </returns>
+    /// <summary>Casts a ray against a triangle and returns the nearest non-negative hit.</summary>
     /// <remarks>
-    /// The test uses the double-sided Möller–Trumbore algorithm. <see cref="RayCollision.Normal"/>
-    /// is the normalized geometric normal <c>cross(b - a, c - a)</c> and is not flipped toward the
-    /// ray, so a back-face hit reports the same normal as a front-face hit. A degenerate
-    /// (zero-area) triangle, a parallel ray, a non-finite input, a hit behind the ray origin, or a
-    /// <c>default(Ray)</c> (zero direction) reports a miss. The hit distance is a world distance
-    /// because the ray direction is unit length.
+    /// The test is double-sided and the normal is the geometric normal, not flipped toward the ray.
+    /// A degenerate triangle, parallel ray, hit behind the origin, or non-finite input misses.
     /// </remarks>
     public static RayCollision GetRayTriangle(Ray ray, Vector3 a, Vector3 b, Vector3 c)
     {
@@ -295,24 +219,11 @@ public static class Collision
         return new RayCollision(distance, ray.Origin + (ray.Direction * distance), normal);
     }
 
-    /// <summary>
-    /// Casts a ray against a quad and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The ray.</param>
-    /// <param name="a">The first quad corner.</param>
-    /// <param name="b">The second quad corner.</param>
-    /// <param name="c">The third quad corner.</param>
-    /// <param name="d">The fourth quad corner.</param>
-    /// <returns>
-    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses.
-    /// </returns>
+    /// <summary>Casts a ray against a quad and returns the nearest non-negative hit.</summary>
     /// <remarks>
-    /// The quad is split into triangles <c>(a, b, c)</c> and <c>(a, c, d)</c>, and the nearest hit of
-    /// the two double-sided triangle tests is returned. Both triangles are coplanar for a planar quad;
-    /// a hit on their shared diagonal reports the <c>(a, b, c)</c> result. A degenerate (zero-area)
-    /// quad, a non-finite input, a hit behind the ray origin, or a <c>default(Ray)</c> (zero
-    /// direction) reports a miss. The hit distance is a world distance because the ray direction is
-    /// unit length.
+    /// The quad splits into <c>(a, b, c)</c> and <c>(a, c, d)</c> triangles and the nearer double-sided
+    /// hit wins; a hit on the shared diagonal reports the first. Degenerate, behind-origin, or
+    /// non-finite inputs miss.
     /// </remarks>
     public static RayCollision GetRayQuad(Ray ray, Vector3 a, Vector3 b, Vector3 c, Vector3 d)
     {
@@ -331,20 +242,14 @@ public static class Collision
         return second.Distance < first.Distance ? second : first;
     }
 
-    /// <summary>
-    /// Tests the double-sided Möller–Trumbore ray/triangle intersection the public queries share.
-    /// </summary>
+    /// <summary>Tests the double-sided ray/triangle intersection shared by the queries.</summary>
     /// <param name="ray">The ray.</param>
-    /// <param name="a">The first triangle corner.</param>
-    /// <param name="b">The second triangle corner.</param>
-    /// <param name="c">The third triangle corner.</param>
-    /// <param name="distance">The ray parameter of the hit, or zero on a miss.</param>
+    /// <param name="a">The first triangle vertex.</param>
+    /// <param name="b">The second triangle vertex.</param>
+    /// <param name="c">The third triangle vertex.</param>
+    /// <param name="distance">The hit ray parameter, or zero on a miss.</param>
     /// <param name="normal">The normalized geometric normal, or zero on a miss.</param>
     /// <returns><c>true</c> when the ray hits the triangle in front of its origin.</returns>
-    /// <remarks>
-    /// The validation and numeric behavior match <see cref="GetRayTriangle"/> exactly so the
-    /// brute-force and accelerated mesh paths select and report the same triangle.
-    /// </remarks>
     internal static bool TryGetTriangleIntersection(
         Ray ray,
         Vector3 a,
@@ -405,20 +310,10 @@ public static class Collision
         return true;
     }
 
-    /// <summary>
-    /// Casts a ray against a plane and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The ray.</param>
-    /// <param name="plane">The plane.</param>
-    /// <returns>
-    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses.
-    /// </returns>
+    /// <summary>Casts a ray against a double-sided plane and returns the nearest hit.</summary>
     /// <remarks>
-    /// The plane is double-sided: both faces hit. <see cref="RayCollision.Normal"/> is
-    /// <see cref="Plane.Normal"/> normalized and is not flipped toward the ray. A ray parallel to
-    /// the plane, including one that lies in it, a non-finite input, a hit behind the ray origin, or
-    /// a <c>default(Ray)</c> (zero direction) reports a miss. The plane normal is not required to be
-    /// normalized; the ray direction is unit length, so the hit distance is a world distance.
+    /// <see cref="RayCollision.Normal"/> is <see cref="Plane.Normal"/> normalized and not flipped. A
+    /// parallel ray, including one in the plane, a behind-origin hit, or non-finite input misses.
     /// </remarks>
     public static RayCollision GetRayPlane(Ray ray, Plane plane)
     {
@@ -445,43 +340,16 @@ public static class Collision
         return new RayCollision(distance, point, Vector3.Normalize(plane.Normal));
     }
 
-    /// <summary>
-    /// Casts a ray against a mesh's CPU triangles and returns the nearest non-negative intersection.
-    /// </summary>
-    /// <param name="ray">The world-space ray.</param>
-    /// <param name="mesh">The mesh. Its <see cref="Mesh.Vertices"/> and <see cref="Mesh.Indices"/> are read.</param>
-    /// <param name="transform">The mesh-to-world transform.</param>
-    /// <returns>
-    /// The nearest world-space hit, or <c>default(RayCollision)</c> when the ray misses.
-    /// </returns>
+    /// <summary>Casts a world-space ray against a mesh and returns the nearest hit.</summary>
     /// <remarks>
-    /// <para>
-    /// The transform is treated as mesh-to-world under the row-vector convention:
-    /// <c>world = Vector3.Transform(meshPoint, transform)</c>. The query inverts the transform,
-    /// moves the ray into mesh space, finds the nearest triangle, and maps the result back to world
-    /// space. <see cref="RayCollision.Point"/> is the transformed mesh-space point and
-    /// <see cref="RayCollision.Normal"/> is
-    /// <c>normalize(Vector3.TransformNormal(meshNormal, Matrix4x4.Transpose(inverse)))</c>.
-    /// <see cref="RayCollision.Distance"/> is the world-space ray parameter along the unit world
-    /// direction, so it is also the world distance from the ray origin to the hit.
-    /// </para>
-    /// <para>
-    /// <see cref="PrimitiveTopology.TriangleList"/> uses the indices in groups of three.
-    /// <see cref="PrimitiveTopology.TriangleStrip"/> uses the sliding window with the first two
-    /// indices swapped on odd triangles, matching <see cref="MeshBuilder"/>. Degenerate triangles are
-    /// skipped.
-    /// </para>
-    /// <para>
-    /// When the mesh carries a collision acceleration structure (see
-    /// <see cref="MeshBuilder.GenerateCollisions"/>), the query traverses it; otherwise it tests every
-    /// triangle. Both paths return the same nearest hit.
-    /// </para>
+    /// The transform is mesh-to-world in the row-vector convention, and the hit point and normal are
+    /// mapped back to world space. Triangle list and strip topologies are supported, using a collision
+    /// acceleration structure when present.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="mesh"/> is disposed.</exception>
     /// <exception cref="NotSupportedException">
-    /// The mesh topology is not <see cref="PrimitiveTopology.TriangleList"/> or
-    /// <see cref="PrimitiveTopology.TriangleStrip"/>.
+    /// The mesh topology is not a triangle list or strip.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="transform"/> is not invertible.</exception>
     public static RayCollision GetRayMesh(Ray ray, Mesh mesh, Matrix4x4 transform)

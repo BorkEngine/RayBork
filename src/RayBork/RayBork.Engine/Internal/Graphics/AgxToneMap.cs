@@ -6,30 +6,12 @@ namespace RayBork.Internal;
 /// The CPU reference for the present pass's AgX tone map.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The formulas mirror <c>Shaders/Present.frag.glsl</c> exactly: the combined Rec.709 to Rec.2020 and
-/// AgX inset matrix, the allenwp curve, the clamp to the output maximum, and the combined inverse
-/// outset and Rec.2020 to Rec.709 matrix. A change to the present transform must update both this
-/// type and the pinned values in <c>AgxToneMapTests</c>.
-/// </para>
-/// <para>
-/// The AgX implementation and the curve are derived from Godot 4.7's <c>tonemap.glsl</c> (MIT). The
-/// AgX base transform follows EaryChow's AgX LUT generator that Blender uses
-/// (https://github.com/EaryChow/AgX_LUT_Gen), and the curve is allenwp's tonemapping curve
-/// (https://allenwp.com/blog/2025/05/29/allenwp-tonemapping-curve/). The combined matrices preserve
-/// neutral gray, so a neutral input stays neutral through the inset, curve, and outset.
-/// </para>
-/// <para>
-/// The color math is evaluated in double precision and rounded to <see cref="float"/> only at the
-/// end, so the pinned constants do not drift with the JIT or platform. The present shader evaluates
-/// the same formulas in 32-bit floats, so the GPU probes compare with tolerances that exceed
-/// single-precision rounding. This type is a test and documentation reference; the renderer never
-/// calls it per frame.
-/// </para>
+/// Mirrors the present shader's matrices, allenwp curve, and output clamp in double precision, with
+/// a final rounding to <see cref="float"/>. The renderer never calls it per frame.
 /// </remarks>
 internal static class AgxToneMap
 {
-    /// <summary>The default AgX white in scene-linear units, matching Godot's environment default.</summary>
+    /// <summary>The default AgX white in scene-linear units, matching Godot.</summary>
     internal const float DEFAULT_AGX_WHITE = 16.29f;
 
     /// <summary>The default AgX contrast, matching Godot's environment default.</summary>
@@ -72,13 +54,11 @@ internal static class AgxToneMap
     ];
 
     /// <summary>
-    /// Applies the AgX base transform to a linear scene color, without any look transform.
+    /// Applies the AgX base transform to a linear scene color, without a look transform.
     /// </summary>
     /// <remarks>
-    /// The input must be non-negative; the combined inset matrix has only positive coefficients, so
-    /// the curve never sees a negative channel. The result is the display-linear response after the
-    /// curve's output-maximum clamp and the inverse outset, and it may have small negative channels
-    /// for saturated colors. Callers clamp or reject the negative range.
+    /// The input must be non-negative, and saturated colors may leave small negative channels. The
+    /// result is display-linear after the output-maximum clamp and the inverse outset.
     /// </remarks>
     /// <param name="color">The linear scene color, with HDR values allowed.</param>
     /// <param name="parameters">The curve parameters for the output configuration.</param>
@@ -93,42 +73,26 @@ internal static class AgxToneMap
         return new Vector3((float)r, (float)g, (float)b);
     }
 
-    /// <summary>
-    /// Computes the Rec.709 luminance of a linear RGB color.
-    /// </summary>
-    /// <param name="color">The linear RGB color.</param>
-    /// <returns>The Rec.709 luminance.</returns>
+    /// <summary>Computes the Rec.709 luminance of a linear RGB color.</summary>
     internal static double Luminance(Vector3 color) =>
         (REC709_RED_WEIGHT * color.X)
         + (REC709_GREEN_WEIGHT * color.Y)
         + (REC709_BLUE_WEIGHT * color.Z);
 
-    /// <summary>
-    /// Applies the complete present transform: exposure, tone mapping, and the output encoding.
-    /// </summary>
+    /// <summary>Applies exposure, AgX tone mapping, and the output encoding.</summary>
     /// <remarks>
-    /// <para>
-    /// The SDR encodings apply AgX with an output maximum of <c>1.0</c> and clamp the display-linear
-    /// result to <c>[0, 1]</c>; the manual sRGB encoding is applied before the clamp. The scRGB HDR
-    /// encoding applies AgX with the display headroom as its output maximum, so the curve maps the
-    /// AgX white to the display peak in paper-white units, then scales the result by paper white.
-    /// <see cref="TonemappingMode.None"/> bypasses AgX and writes the exposed scene value directly,
-    /// with no curve or upper clamp beyond the existing encoding behavior.
-    /// </para>
-    /// <para>
-    /// <paramref name="hdr"/> supplies the paper white and the headroom the same way
-    /// <see cref="Vulkan12Backend"/> does, so the reference cannot diverge from the pipeline
-    /// configuration.
-    /// </para>
+    /// SDR output applies AgX with an output maximum of <c>1.0</c> and clamps to <c>[0, 1]</c>;
+    /// scRGB HDR maps AgX white to the display peak and scales by paper white.
+    /// <see cref="TonemappingMode.None"/> bypasses the curve.
     /// </remarks>
-    /// <param name="sceneColor">The linear scene color sampled from the resolved scene target.</param>
+    /// <param name="sceneColor">The linear scene color from the resolved scene target.</param>
     /// <param name="exposureMultiplier">The exposure multiplier, <c>2^exposureEv</c>.</param>
     /// <param name="tonemapping">The tone-mapping mode.</param>
     /// <param name="encoding">The output encoding.</param>
-    /// <param name="hdr">The cached window HDR state.</param>
+    /// <param name="hdr">The cached window HDR state supplying paper white and headroom.</param>
     /// <param name="agxWhite">The AgX white in scene-linear units.</param>
     /// <param name="agxContrast">The AgX contrast.</param>
-    /// <returns>The display-referred present value for the encoding.</returns>
+    /// <returns>The display-referred value for the encoding.</returns>
     internal static Vector3 Present(
         Vector3 sceneColor,
         float exposureMultiplier,
@@ -166,32 +130,18 @@ internal static class AgxToneMap
         return Vector3.Clamp(color, Vector3.Zero, Vector3.One);
     }
 
-    /// <summary>
-    /// Encodes one display-linear channel with the piecewise sRGB transfer function.
-    /// </summary>
-    /// <param name="channel">The display-linear channel.</param>
-    /// <returns>The sRGB-encoded value.</returns>
+    /// <summary>Encodes one display-linear channel with the piecewise sRGB curve.</summary>
     internal static float SrgbEncodeChannel(float channel) =>
         channel <= SRGB_LINEAR_CUTOFF
             ? 12.92f * channel
             : (1.055f * MathF.Pow(channel, 1f / 2.4f)) - 0.055f;
 
-    /// <summary>
-    /// Encodes a display-linear color with the piecewise sRGB transfer function.
-    /// </summary>
-    /// <param name="color">The display-linear color.</param>
-    /// <returns>The sRGB-encoded color.</returns>
+    /// <summary>Encodes a display-linear color with the piecewise sRGB transfer function.</summary>
     internal static Vector3 SrgbEncode(Vector3 color) =>
         new(SrgbEncodeChannel(color.X), SrgbEncodeChannel(color.Y), SrgbEncodeChannel(color.Z));
 
-    /// <summary>
-    /// Decodes one 8-bit sRGB-encoded channel to display-linear.
-    /// </summary>
-    /// <remarks>
-    /// This is the inverse of the 8-bit quantization of <see cref="SrgbEncodeChannel"/>. The render
-    /// target readback uses it to decode an <c>R8G8B8A8_SRGB</c> resolved image into scene-linear
-    /// colors.
-    /// </remarks>
+    /// <summary>Decodes one 8-bit sRGB-encoded channel to display-linear.</summary>
+    /// <remarks>Inverse of the 8-bit quantization of <see cref="SrgbEncodeChannel"/>.</remarks>
     /// <param name="encoded">The sRGB-encoded byte.</param>
     /// <returns>The display-linear channel.</returns>
     internal static float SrgbDecodeChannel(byte encoded)
@@ -202,9 +152,7 @@ internal static class AgxToneMap
             : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
     }
 
-    /// <summary>
-    /// Evaluates the allenwp curve for one non-negative channel.
-    /// </summary>
+    /// <summary>Evaluates the allenwp curve for one non-negative channel.</summary>
     private static double Curve(double x, in AgxCurveParameters parameters)
     {
         double shoulderMax = parameters.OutputMax - AgxCurveParameters.CROSSOVER_POINT;

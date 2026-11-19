@@ -1,23 +1,13 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Validates the Vulkan instance extensions a platform requires before the instance is created.
-/// </summary>
-/// <remarks>
-/// The comparisons are ordinal because Vulkan extension names are case-sensitive ASCII tokens.
-/// </remarks>
+/// <summary>Validates the required Vulkan instance extensions before creation.</summary>
+/// <remarks>Ordinal comparisons: extension names are case-sensitive ASCII tokens.</remarks>
 internal static class VulkanInstanceExtensions
 {
-    /// <summary>
-    /// Returns the required extension names that the loader does not advertise.
-    /// </summary>
-    /// <remarks>
-    /// The result preserves the order of <paramref name="required"/> and contains each missing name
-    /// once. Empty names are ignored.
-    /// </remarks>
+    /// <summary>Returns the required extension names the loader does not advertise.</summary>
     /// <param name="available">The extension names reported by the Vulkan loader.</param>
     /// <param name="required">The extension names the platform requires.</param>
-    /// <returns>The missing extension names, or an empty list when every requirement is met.</returns>
+    /// <returns>The missing names in required order, each once; empty names are ignored.</returns>
     internal static IReadOnlyList<string> Validate(
         IReadOnlyList<string> available,
         IReadOnlyList<string> required
@@ -45,14 +35,9 @@ internal static class VulkanInstanceExtensions
         return missing;
     }
 
-    /// <summary>
-    /// Throws when the loader does not advertise one of the required extension names.
-    /// </summary>
-    /// <param name="available">The extension names reported by the Vulkan loader.</param>
-    /// <param name="required">The extension names the platform requires.</param>
+    /// <summary>Throws when the loader does not advertise a required extension.</summary>
     /// <exception cref="GraphicsException">
-    /// One or more required extensions are missing. The message names the missing extensions and
-    /// the platform extension list; the diagnostic code is <c>RB3001</c>.
+    /// A required extension is missing; the message names it and the code is <c>RB3001</c>.
     /// </exception>
     internal static void Require(IReadOnlyList<string> available, IReadOnlyList<string> required)
     {

@@ -110,11 +110,8 @@ internal sealed class BakeManifestOutput
 internal static class BakeLayoutHash
 {
     /// <summary>
-    /// Hashes the ordinal entry set by path, type, alignment, and payload hash. Compression and
-    /// physical offsets are deliberately excluded.
+    /// Hashes entries by path, type, alignment, and payload hash, excluding compression and offsets.
     /// </summary>
-    /// <param name="entries">The entries in any order.</param>
-    /// <returns>The 64-character digest.</returns>
     internal static string Compute(IReadOnlyList<BakedEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);

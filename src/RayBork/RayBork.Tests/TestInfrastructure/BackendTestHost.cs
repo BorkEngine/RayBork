@@ -10,18 +10,8 @@ namespace RayBork.Tests;
 /// <see cref="Vulkan12Backend"/> for one GPU test.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="TryCreate"/> applies the same environmental-skip policy as <see cref="GpuTestHost"/>:
-/// SDL cannot initialize a Vulkan window, the Vulkan loader is missing, no physical device supports
-/// the surface, or the platform cannot create the surface. A programming or capability failure throws
-/// so the test fails instead of disappearing.
-/// </para>
-/// <para>
-/// The host exposes the backend's device, scene target, and instance for readback and validation
-/// probes. Those are diagnostics, not renderer seam members. GPU test classes run in parallel;
-/// <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader setup while each
-/// test owns its window, device, and backend.
-/// </para>
+/// <see cref="TryCreate"/> skips the test when the environment lacks a Vulkan surface and
+/// throws on programming errors. <see cref="SdlPlatform"/> serializes process-global SDL setup.
 /// </remarks>
 internal sealed class BackendTestHost : IDisposable
 {
@@ -52,46 +42,28 @@ internal sealed class BackendTestHost : IDisposable
         _backend = new Vulkan12Backend();
     }
 
-    /// <summary>
-    /// Gets the SDL host that owns the Vulkan window.
-    /// </summary>
+    /// <summary>Gets the SDL host that owns the Vulkan window.</summary>
     internal SdlTestHost SdlHost => _sdlHost;
 
-    /// <summary>
-    /// Gets the SDL platform. Tests use it to pump events and queue window commands.
-    /// </summary>
+    /// <summary>Gets the SDL platform used to pump events and queue window commands.</summary>
     internal SdlPlatform Platform => _sdlHost.Platform;
 
-    /// <summary>
-    /// Gets the initialized renderer backend.
-    /// </summary>
+    /// <summary>Gets the initialized renderer backend.</summary>
     internal Vulkan12Backend Backend => _backend;
 
-    /// <summary>
-    /// Gets the backend's Vulkan instance for validation checks.
-    /// </summary>
+    /// <summary>Gets the backend's Vulkan instance for validation checks.</summary>
     internal VulkanInstance Instance => _backend.Instance;
 
-    /// <summary>
-    /// Gets the backend's logical device for readback probes.
-    /// </summary>
+    /// <summary>Gets the backend's logical device for readback probes.</summary>
     internal VulkanDevice Device => _backend.Device;
 
-    /// <summary>
-    /// Gets the backend's current scene target for readback probes.
-    /// </summary>
+    /// <summary>Gets the backend's current scene target for readback probes.</summary>
     internal VulkanRenderTarget SceneTarget => _backend.SceneTarget;
 
-    /// <summary>
-    /// Gets the render texture request service the host services on its render thread.
-    /// </summary>
+    /// <summary>Gets the request service the host services on its render thread.</summary>
     internal RenderTextureService RenderTextures { get; } = new();
 
-    /// <summary>
-    /// Creates one runtime render texture through the real service handoff and render-thread allocation.
-    /// </summary>
-    /// <param name="description">The target description.</param>
-    /// <returns>The created render texture.</returns>
+    /// <summary>Creates a render texture through the real service handoff.</summary>
     internal RenderTexture CreateRenderTexture(RenderTextureDescription description)
     {
         Task<RenderTexture> request = RenderTextures.CreateAsync(
@@ -102,16 +74,10 @@ internal sealed class BackendTestHost : IDisposable
         return request.GetAwaiter().GetResult();
     }
 
-    /// <summary>
-    /// Services one pending render texture request or destruction round.
-    /// </summary>
+    /// <summary>Services one pending request or destruction round.</summary>
     internal void ProcessRenderTextures() => _backend.ProcessRenderTextureRequests(RenderTextures);
 
-    /// <summary>
-    /// Queues a color readback and services it on this thread, which plays the render thread.
-    /// </summary>
-    /// <param name="target">The render texture to read.</param>
-    /// <returns>The raw scene-linear colors.</returns>
+    /// <summary>Queues a color readback and services it on this thread as the render thread.</summary>
     internal Task<Color[,]> ReadColorsAsync(RenderTexture target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -121,12 +87,7 @@ internal sealed class BackendTestHost : IDisposable
         return request;
     }
 
-    /// <summary>
-    /// Queues a display-referred pixel readback and services it on this thread, which plays the render
-    /// thread.
-    /// </summary>
-    /// <param name="target">The render texture to read.</param>
-    /// <returns>The display-referred RGBA8 pixels.</returns>
+    /// <summary>Queues a display-referred pixel readback and services it on this thread.</summary>
     internal Task<byte[]> ReadPixelsAsync(RenderTexture target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -136,14 +97,7 @@ internal sealed class BackendTestHost : IDisposable
         return request;
     }
 
-    /// <summary>
-    /// Runs <see cref="RenderTexture.Resize"/> on a second thread while this thread plays the render
-    /// thread and services the real request queue, so the blocking public call is exercised without a
-    /// render loop.
-    /// </summary>
-    /// <param name="target">The render texture to resize.</param>
-    /// <param name="width">The new width in pixels.</param>
-    /// <param name="height">The new height in pixels.</param>
+    /// <summary>Services the queue while another thread runs the blocking resize.</summary>
     /// <exception cref="TimeoutException">The resize neither queued nor completed in time.</exception>
     internal void ResizeRenderTexture(RenderTexture target, int width, int height)
     {
@@ -217,42 +171,20 @@ internal sealed class BackendTestHost : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the direct surface provider the backend creates and destroys the native surface through.
-    /// </summary>
-    /// <remarks>
-    /// Recovery tests use its create and destroy counters to prove that a lost surface was replaced.
-    /// </remarks>
+    /// <summary>Gets the provider that creates and destroys the native surface.</summary>
     internal DirectSurfaceProvider SurfaceProvider => _surfaceProvider;
 
-    /// <summary>
-    /// Gets the render settings the host was created with.
-    /// </summary>
+    /// <summary>Gets the render settings the host was created with.</summary>
     internal RenderSettings Settings => _settings;
 
-    /// <summary>
-    /// Gets or sets the window surface snapshot the backend's provider returns.
-    /// </summary>
-    /// <remarks>
-    /// The initial value is the platform window's size, focus, minimization state, and cached HDR
-    /// state, unless the test supplied an HDR override. Tests that resize the window call
-    /// <see cref="SyncWithWindow"/> after the platform applied the change.
-    /// </remarks>
+    /// <summary>Gets or sets the window surface snapshot the backend's provider returns.</summary>
     internal WindowSurfaceState State
     {
         get => _state;
         set => _state = value;
     }
 
-    /// <summary>
-    /// Creates the host for a GPU test, skipping the test when the host is environmentally
-    /// unavailable.
-    /// </summary>
-    /// <param name="sampleCount">The requested MSAA sample count.</param>
-    /// <param name="presentMode">The requested present mode.</param>
-    /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
-    /// <param name="tonemapping">The startup tone-mapping mode.</param>
-    /// <returns>The created and initialized host.</returns>
+    /// <summary>Creates the host for a GPU test, skipping when unavailable.</summary>
     internal static BackendTestHost CreateOrSkip(
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
@@ -277,16 +209,7 @@ internal sealed class BackendTestHost : IDisposable
         return host!;
     }
 
-    /// <summary>
-    /// Tries to create and initialize the host.
-    /// </summary>
-    /// <param name="host">The created host, or <see langword="null"/> when unavailable.</param>
-    /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
-    /// <param name="sampleCount">The requested MSAA sample count.</param>
-    /// <param name="presentMode">The requested present mode.</param>
-    /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
-    /// <param name="tonemapping">The startup tone-mapping mode.</param>
-    /// <returns><see langword="true"/> when the host was created.</returns>
+    /// <summary>Tries to create and initialize the host, reporting why it was skipped.</summary>
     internal static bool TryCreate(
         out BackendTestHost? host,
         out string skipReason,
@@ -365,12 +288,7 @@ internal sealed class BackendTestHost : IDisposable
         }
     }
 
-    /// <summary>
-    /// Refreshes the size, focus, and minimization snapshot from the platform window.
-    /// </summary>
-    /// <remarks>
-    /// The HDR state is left unchanged so a test can hold an HDR override while the window resizes.
-    /// </remarks>
+    /// <summary>Refreshes the platform size, focus, and minimization snapshot.</summary>
     internal void SyncWithWindow()
     {
         _state = _state with

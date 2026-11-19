@@ -4,24 +4,12 @@ using RayBork;
 namespace RenderTarget;
 
 /// <summary>
-/// A procedural scene that renders an offscreen target, samples it on a rotating monitor in a later
-/// camera pass, toggles a split-screen view and a custom vignette post-process, and reads the target
-/// back for a screenshot.
+/// An offscreen render target sampled on a rotating monitor, with split-screen, a vignette, and a
+/// BMP readback.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The sample owns one app-lifetime <see cref="RenderTexture"/> and one app-lifetime
-/// <see cref="PostProcessStack"/>. Every tick records an offscreen camera into the target, then one
-/// scene camera that samples <see cref="RenderTexture.ColorTexture"/> on the monitor, then a HUD
-/// camera. When split-screen is on, the two scene cameras draw side by side instead of the single
-/// scene camera; they do not take the post-process stack because M8 documents the effect source as
-/// the full target, including content outside a viewport.
-/// </para>
-/// <para>
-/// The main camera is recreated every tick so the effect toggle applies to the next recorded camera.
-/// The stack snapshot freezes the effect order, the enabled state, and the shader cursor at camera
-/// creation, so toggling it never changes a frame that was already recorded.
-/// </para>
+/// The sample owns one <see cref="RenderTexture"/> and one <see cref="PostProcessStack"/>, and
+/// S toggles split-screen, E the vignette, F2 a readback, and R resets the animation.
 /// </remarks>
 internal sealed class RenderTargetGame : IGame
 {
@@ -133,10 +121,7 @@ internal sealed class RenderTargetGame : IGame
     private string _readbackStatus =
         $"F2 reads the offscreen target and saves {SCREENSHOT_FILE_NAME}";
 
-    /// <summary>
-    /// Creates the sample.
-    /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
+    /// <summary>Creates the sample.</summary>
     internal RenderTargetGame(int frameLimit)
     {
         _frameLimit = frameLimit;
@@ -445,14 +430,7 @@ internal sealed class RenderTargetGame : IGame
         return controls + "\n" + scene + "\n" + _readbackStatus;
     }
 
-    /// <summary>
-    /// Reads the offscreen target once and saves the display-referred pixels as a 24-bit BMP.
-    /// </summary>
-    /// <remarks>
-    /// Both readbacks stall the render thread while they wait for the target's last-use fence, so this
-    /// runs only on the F2 press and reports the last completed frame that wrote or sampled the
-    /// target. The target keeps its state and a later frame samples or writes it as usual.
-    /// </remarks>
+    /// <summary>Reads the offscreen target once and saves the pixels as a 24-bit BMP.</summary>
     private void CaptureReadback()
     {
         RenderTexture target = _target!;
@@ -543,21 +521,7 @@ internal sealed class RenderTargetGame : IGame
         return Quaternion.Slerp(_monitorSwayLeft, _monitorSwayRight, eased);
     }
 
-    /// <summary>
-    /// Builds the fixed local transforms of a ring whose parent owns the rotation.
-    /// </summary>
-    /// <param name="count">The number of cubes on the ring.</param>
-    /// <param name="radius">The ring radius.</param>
-    /// <param name="localYawOffsetRadians">
-    /// The local yaw added to each placement angle, or <see langword="null"/> for identity local
-    /// rotations.
-    /// </param>
-    /// <remarks>
-    /// Positions and local yaws come from axis-angle quaternions, so the ring is built without
-    /// trigonometry and a frame only composes a local transform with its parent. The placement angle
-    /// is negated so composing it with the negated ring parent restores the original
-    /// <c>(cos φ, 0, sin φ)</c> world placement.
-    /// </remarks>
+    /// <summary>Builds a ring's fixed local transforms; the parent owns the rotation.</summary>
     private static Transform[] CreateRingLocals(
         int count,
         float radius,

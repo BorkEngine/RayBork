@@ -3,33 +3,10 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The frozen state of one <see cref="BloomEffect"/> inside a recorded camera pass.
-/// </summary>
+/// <summary>The frozen state of one <see cref="BloomEffect"/> inside a recorded camera pass.</summary>
 /// <remarks>
-/// <para>
-/// The snapshot fixes the public settings, then records the fast dual-filter pyramid: a threshold and
-/// soft-knee prefilter into the half-resolution level, one downsample per remaining level (up to 1/32),
-/// one tent upsample back to half resolution with <see cref="BloomSettings.Scatter"/> as the coarse
-/// contribution, and a composite that adds the result to the captured chain input. The composite target
-/// is camera-target-sized, so the engine store-back runs once through the same path a custom effect or
-/// SSAO uses.
-/// </para>
-/// <para>
-/// Every pass rents from the per-extent three-target post set and skips the current chain source, so the
-/// previous effect's output (or the original scene color when bloom is first) is never overwritten. The
-/// prefilter and pyramid levels are released with
-/// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; the composite target is completed with
-/// <see cref="PostProcessContext.CompleteColorTarget"/>. The downsample and upsample programs use fixed
-/// unrolled taps, so there is no per-frame loop and no runtime shader compilation.
-/// </para>
-/// <para>
-/// The snapshot reports its maximum ordered instance-record layout (prefilter, four downsamples, four
-/// upsamples, composite). A small target whose clamped extent stops shrinking runs fewer passes in the
-/// actual prefilter/downsample/upsample/composite order; the maximum layout is an upper bound, so the
-/// frame buffer is never undersized. The snapshot is pooled by the effect and keeps its layout, level,
-/// and target arrays across cameras.
-/// </para>
+/// Freezes the settings and the half-to-1/32 dual-filter pyramid, then composites at camera-target
+/// size. Pyramid levels complete as auxiliary, the composite as color, so store-back runs once.
 /// </remarks>
 internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot
 {
@@ -76,15 +53,8 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot
     /// <inheritdoc/>
     internal override ReadOnlySpan<PostProcessInstanceRecord> InstanceLayout => _instanceLayout;
 
-    /// <summary>
-    /// Rents a snapshot from the effect's pool, or creates one, and fills it with the settings and the
-    /// built-in bloom programs.
-    /// </summary>
-    /// <param name="owner">The effect that will pool the snapshot after its camera pass is recycled.</param>
-    /// <param name="settings">The frozen public settings.</param>
-    /// <param name="assets">The loaded engine-owned bloom assets.</param>
-    /// <returns>The captured snapshot.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="owner"/> or <paramref name="assets"/> is <c>null</c>.</exception>
+    /// <summary>Rents a pooled snapshot filled with the frozen settings and built-in programs.</summary>
+    /// <exception cref="ArgumentNullException">The effect or assets are <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">A bloom asset was disposed.</exception>
     internal static BloomEffectSnapshot Rent(
         PostProcessEffect owner,

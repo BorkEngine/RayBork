@@ -4,23 +4,11 @@ using System.IO.MemoryMappedFiles;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// An opened, validated RAYBORKP v1 pack.
-/// </summary>
+/// <summary>An opened, validated RAYBORKP v1 pack.</summary>
 /// <remarks>
-/// <para>
-/// <see cref="Open(string)"/> memory-maps the file read-only and keeps the mapping alive until
-/// <see cref="Dispose"/>; the runtime mounts packs for the process lifetime and normally does not
-/// dispose them. <see cref="Open(ReadOnlyMemory{byte}, string)"/> serves the embedded built-in pack
-/// without copying its bytes and uses the display path in every diagnostic.
-/// </para>
-/// <para>
-/// Structural validation runs once at open. Payload hashes and decompression are lazy: each
-/// <see cref="ReadPayload"/> copies the stored bytes under an I/O lock and then verifies and
-/// decompresses outside it, so concurrent readers are safe and a failed read leaves the archive
-/// usable. Disposal is idempotent; a payload read or entry lookup after disposal throws
-/// <see cref="ObjectDisposedException"/>.
-/// </para>
+/// <see cref="Open(string)"/> memory-maps the file read-only until <see cref="Dispose"/>; the
+/// embedded overload serves bytes without copying. Validation runs once at open, while payload
+/// hashes and decompression stay lazy and safe for concurrent readers.
 /// </remarks>
 internal sealed class PackArchive : IDisposable
 {
@@ -60,15 +48,12 @@ internal sealed class PackArchive : IDisposable
     /// <summary>Gets the entries in ordinal path order.</summary>
     internal IReadOnlyList<PackEntry> Entries => _entries;
 
-    /// <summary>
-    /// Opens and validates a pack file read-only through a memory map.
-    /// </summary>
-    /// <param name="path">The filesystem path; relative paths resolve against the process directory.</param>
-    /// <returns>The validated archive.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is empty, whitespace, or invalid.</exception>
+    /// <summary>Opens and validates a pack file read-only through a memory map.</summary>
+    /// <param name="path">
+    /// The filesystem path; relative paths resolve against the process directory.
+    /// </param>
     /// <exception cref="AssetPackException">
-    /// The file is missing, unreadable, truncated, or not a valid v1 pack.
+    /// The file is missing, unreadable, truncated, or invalid.
     /// </exception>
     [SuppressMessage(
         "Reliability",
@@ -198,28 +183,14 @@ internal sealed class PackArchive : IDisposable
         return Create(default, mappedFile, view, length, fullPath);
     }
 
-    /// <summary>
-    /// Opens and validates an embedded pack from memory.
-    /// </summary>
-    /// <param name="pack">The complete pack bytes, not copied or owned.</param>
-    /// <param name="displayPath">The non-empty pack identifier used in diagnostics.</param>
-    /// <returns>The validated archive.</returns>
-    /// <exception cref="ArgumentException"><paramref name="displayPath"/> is empty or whitespace.</exception>
-    /// <exception cref="AssetPackException">The bytes are truncated or not a valid v1 pack.</exception>
+    /// <summary>Opens and validates an embedded pack without copying or owning its bytes.</summary>
     internal static PackArchive Open(ReadOnlyMemory<byte> pack, string displayPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayPath);
         return Create(pack, null, null, pack.Length, displayPath);
     }
 
-    /// <summary>
-    /// Looks up an entry by its complete canonical path.
-    /// </summary>
-    /// <param name="path">The canonical path, without a leading slash.</param>
-    /// <param name="entry">The matching entry, when found.</param>
-    /// <returns><see langword="true"/> when the path exists in this pack.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
-    /// <exception cref="ObjectDisposedException">The archive is disposed.</exception>
+    /// <summary>Looks up an entry by its complete canonical path without a leading slash.</summary>
     internal bool TryGetEntry(string path, [NotNullWhen(true)] out PackEntry? entry)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -227,17 +198,10 @@ internal sealed class PackArchive : IDisposable
         return _entriesByPath.TryGetValue(path, out entry);
     }
 
-    /// <summary>
-    /// Reads, verifies, and decompresses one payload.
-    /// </summary>
-    /// <param name="entry">An entry returned by this archive.</param>
-    /// <returns>A fresh array holding the decompressed payload.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
+    /// <summary>Reads, verifies, and decompresses one payload into a fresh array.</summary>
     /// <exception cref="ArgumentException">The entry belongs to another archive.</exception>
-    /// <exception cref="ObjectDisposedException">The archive is disposed.</exception>
     /// <exception cref="AssetLoadException">
-    /// The stored payload hash does not match, or the payload cannot be decompressed to exactly its
-    /// declared size.
+    /// The stored hash or decompressed size does not match.
     /// </exception>
     internal byte[] ReadPayload(PackEntry entry)
     {

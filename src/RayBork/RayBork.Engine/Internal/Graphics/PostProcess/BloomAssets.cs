@@ -1,20 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The engine-owned bloom shader programs loaded from the built-in pack before <c>IGame.Setup</c>.
-/// </summary>
+/// <summary>The engine-owned bloom shader programs loaded from the built-in pack.</summary>
 /// <remarks>
-/// <para>
-/// The app owns one instance for its lifetime and attaches it to <see cref="CameraService"/> so a camera
-/// can snapshot a <see cref="BloomEffect"/> without loading an asset on the render thread. The four
-/// programs are the prefilter, downsample, upsample, and composite stages of the fast dual-filter
-/// pyramid; they share one committed fullscreen vertex payload.
-/// </para>
-/// <para>
-/// <see cref="Dispose"/> releases the owner reference for every loaded asset. A snapshot that retained
-/// a program keeps its own frame hold, so disposal after the tick thread stopped does not invalidate a
-/// recorded frame.
-/// </para>
+/// The four programs (prefilter, downsample, upsample, composite) share one committed fullscreen
+/// vertex payload and load before <c>IGame.Setup</c>. Disposal leaves a retained snapshot valid.
 /// </remarks>
 internal sealed class BloomAssets : IDisposable
 {
@@ -40,14 +29,9 @@ internal sealed class BloomAssets : IDisposable
     /// <summary>Gets whether the engine released the bloom assets.</summary>
     internal bool IsDisposed => _disposed;
 
-    /// <summary>
-    /// Loads and validates every bloom built-in asset from the started catalog.
-    /// </summary>
-    /// <param name="assets">The started asset catalog.</param>
-    /// <returns>The loaded assets, which own one owner reference per shader program.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <summary>Loads and validates every bloom built-in asset from the started catalog.</summary>
     /// <exception cref="AssetLoadException">
-    /// A built-in bloom asset is missing, has the wrong shader ABI contract, or cannot upload.
+    /// A built-in bloom asset is missing, invalid, or cannot upload.
     /// </exception>
     internal static async Task<BloomAssets> LoadAsync(IAssetCatalog assets)
     {
@@ -122,7 +106,6 @@ internal sealed class BloomAssets : IDisposable
     }
 
     /// <summary>Gets the threshold and soft-knee prefilter program.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal ShaderProgram PrefilterProgram
     {
         get
@@ -133,7 +116,6 @@ internal sealed class BloomAssets : IDisposable
     }
 
     /// <summary>Gets the downsample program.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal ShaderProgram DownsampleProgram
     {
         get
@@ -144,7 +126,6 @@ internal sealed class BloomAssets : IDisposable
     }
 
     /// <summary>Gets the tent upsample program.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal ShaderProgram UpsampleProgram
     {
         get
@@ -155,7 +136,6 @@ internal sealed class BloomAssets : IDisposable
     }
 
     /// <summary>Gets the composite program.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal ShaderProgram CompositeProgram
     {
         get

@@ -1,31 +1,17 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Validates a <see cref="RenderTextureDescription"/> and selects its effective sample count.
-/// </summary>
+/// <summary>Validates render target descriptions and selects the sample count.</summary>
 /// <remarks>
-/// The limits and fallback rule match the procedural texture path: the bake's <c>16384</c> maximum
-/// dimension is the public limit, and the sample count uses
-/// <see cref="VulkanSampleCountSelection.Select"/>. The render thread additionally checks the device's
-/// <c>MaxImageDimension2D</c> before it allocates the images.
+/// Dimensions are limited to <see cref="MAX_DIMENSION"/>, and the render thread also checks the
+/// device's <c>MaxImageDimension2D</c>. Sample counts fall back through
+/// <see cref="VulkanSampleCountSelection.Select"/>.
 /// </remarks>
 internal static class RenderTextureValidation
 {
-    /// <summary>The largest accepted target width or height in pixels. It matches the texture bake limit.</summary>
+    /// <summary>The largest accepted target dimension in pixels.</summary>
     internal const int MAX_DIMENSION = 16384;
 
-    /// <summary>
-    /// Validates the description before any request is queued.
-    /// </summary>
-    /// <param name="description">The description to validate.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>, or the sample count is not
-    /// <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// The color format is not <see cref="TextureFormat.Rgba16Float"/>,
-    /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
-    /// </exception>
+    /// <summary>Validates a description before any request is queued.</summary>
     internal static void Validate(RenderTextureDescription description) =>
         Validate(
             description.Width,
@@ -34,18 +20,14 @@ internal static class RenderTextureValidation
             description.SampleCount
         );
 
-    /// <summary>
-    /// Validates the description components.
-    /// </summary>
-    /// <param name="width">The target width in pixels.</param>
-    /// <param name="height">The target height in pixels.</param>
-    /// <param name="colorFormat">The target color format.</param>
-    /// <param name="sampleCount">The requested MSAA sample count.</param>
+    /// <summary>Validates dimensions, color format, and sample count together.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>, or the sample count is not
     /// <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.
     /// </exception>
-    /// <exception cref="ArgumentException">The color format is not a supported render-target format.</exception>
+    /// <exception cref="ArgumentException">
+    /// The color format is not <c>Rgba16Float</c>, <c>Rgba8Unorm</c>, or <c>Rgba8Srgb</c>.
+    /// </exception>
     internal static void Validate(int width, int height, TextureFormat colorFormat, int sampleCount)
     {
         ValidateDimensions(width, height);
@@ -69,14 +51,7 @@ internal static class RenderTextureValidation
         }
     }
 
-    /// <summary>
-    /// Validates that a render target width and height are positive and within the public limit.
-    /// </summary>
-    /// <param name="width">The target width in pixels.</param>
-    /// <param name="height">The target height in pixels.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>.
-    /// </exception>
+    /// <summary>Validates that dimensions are positive and at most <see cref="MAX_DIMENSION"/>.</summary>
     internal static void ValidateDimensions(int width, int height)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -85,29 +60,14 @@ internal static class RenderTextureValidation
         ArgumentOutOfRangeException.ThrowIfGreaterThan(height, MAX_DIMENSION);
     }
 
-    /// <summary>
-    /// Gets whether a format is a supported render-target color format.
-    /// </summary>
-    /// <param name="format">The color format.</param>
-    /// <returns><see langword="true"/> for the three uncompressed RGBA render-target formats.</returns>
+    /// <summary>Gets whether a format is a supported render-target color format.</summary>
     internal static bool IsSupportedColorFormat(TextureFormat format) =>
         format is TextureFormat.Rgba16Float or TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb;
 
-    /// <summary>
-    /// Gets whether a render-target color format stores linear HDR values.
-    /// </summary>
-    /// <param name="format">The color format.</param>
-    /// <returns><see langword="true"/> for <see cref="TextureFormat.Rgba16Float"/>.</returns>
+    /// <summary>Gets whether a format stores linear HDR values.</summary>
     internal static bool IsHdr(TextureFormat format) => format == TextureFormat.Rgba16Float;
 
-    /// <summary>
-    /// Selects the effective sample count with the documented fallback rule.
-    /// </summary>
-    /// <param name="requested">The requested sample count.</param>
-    /// <param name="supported">The sample counts the device supports.</param>
-    /// <returns>The highest supported count that does not exceed the request, or <c>1</c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="requested"/> is not positive.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="supported"/> is <c>null</c>.</exception>
+    /// <summary>Selects the highest supported count not above the request, or <c>1</c>.</summary>
     internal static int SelectSampleCount(int requested, IReadOnlyList<int> supported) =>
         VulkanSampleCountSelection.Select(requested, supported);
 }

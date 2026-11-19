@@ -1,8 +1,6 @@
 namespace RayBork.Bake.Diagnostics;
 
-/// <summary>
-/// Collects bake diagnostics and renders them in deterministic order.
-/// </summary>
+/// <summary>Collects bake diagnostics and renders them in deterministic order.</summary>
 internal sealed class BakeDiagnostics
 {
     private readonly List<BakeDiagnostic> _items = [];
@@ -45,18 +43,9 @@ internal sealed class BakeDiagnostics
     }
 
     /// <summary>Adds a diagnostic.</summary>
-    /// <param name="diagnostic">The diagnostic to add.</param>
     internal void Add(BakeDiagnostic diagnostic) => _items.Add(diagnostic);
 
     /// <summary>Adds a diagnostic with the given fields.</summary>
-    /// <param name="severity">The severity.</param>
-    /// <param name="code">The stable code.</param>
-    /// <param name="message">The message.</param>
-    /// <param name="filePath">The optional file path.</param>
-    /// <param name="line">The optional 1-based line.</param>
-    /// <param name="column">The optional 1-based column.</param>
-    /// <param name="assetPath">The optional canonical asset path.</param>
-    /// <param name="memberPath">The optional member path.</param>
     internal void Add(
         BakeSeverity severity,
         string code,
@@ -90,8 +79,6 @@ internal sealed class BakeDiagnostics
     }
 
     /// <summary>Counts diagnostics that fail the invocation under the given warning policy.</summary>
-    /// <param name="warningsAsErrors">Whether warnings fail the invocation.</param>
-    /// <returns>The count of failing diagnostics.</returns>
     internal int CountFailures(bool warningsAsErrors)
     {
         int count = 0;

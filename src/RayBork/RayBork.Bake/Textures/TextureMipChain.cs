@@ -1,29 +1,14 @@
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// Generates the full mip chain of a texture as straight-alpha RGBA8 levels.
-/// </summary>
+/// <summary>Generates the full mip chain of a texture as straight-alpha RGBA8 levels.</summary>
 /// <remarks>
-/// <para>
-/// Every level is produced by one deterministic box filter: the destination level has
-/// <c>max(1, width / 2)</c> by <c>max(1, height / 2)</c> pixels and each destination pixel averages
-/// the source rectangle it covers, so odd source dimensions are still fully represented. All data is
-/// linear, so there is no gamma conversion, premultiplication, or resampling beyond the box average.
-/// Channel rounding is half-up integer arithmetic.
-/// </para>
-/// <para>
-/// The channel type controls which values the chain preserves: <see cref="TextureChannelType.Rgb"/>
-/// forces alpha to <c>255</c> at the base level and therefore at every level. The other types leave
-/// the channels they do not consume unchanged; only the storage step for the final format reads them.
-/// </para>
+/// Each level halves the previous dimension with a minimum of one, averaging each source rectangle
+/// half-up. <see cref="TextureChannelType.Rgb"/> forces alpha to <c>255</c>; no gamma conversion or
+/// premultiplication occurs.
 /// </remarks>
 internal static class TextureMipChain
 {
     /// <summary>Gets the number of levels in a full chain for the given base dimensions.</summary>
-    /// <param name="width">The base-level pixel width.</param>
-    /// <param name="height">The base-level pixel height.</param>
-    /// <returns>The level count, at least one.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not supported.</exception>
     internal static int LevelCount(int width, int height)
     {
         ValidateDimensions(width, height);
@@ -41,38 +26,21 @@ internal static class TextureMipChain
         return levels;
     }
 
-    /// <summary>Gets one level's pixel width in a full chain.</summary>
-    /// <param name="width">The base-level pixel width.</param>
-    /// <param name="level">The zero-based level index.</param>
-    /// <returns>The level width, at least one.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The level index is unsupported.</exception>
+    /// <summary>Gets one level's pixel width, at least one.</summary>
     internal static int LevelWidth(int width, int level)
     {
         ValidateLevel(level);
         return Math.Max(1, width >> level);
     }
 
-    /// <summary>Gets one level's pixel height in a full chain.</summary>
-    /// <param name="height">The base-level pixel height.</param>
-    /// <param name="level">The zero-based level index.</param>
-    /// <returns>The level height, at least one.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The level index is unsupported.</exception>
+    /// <summary>Gets one level's pixel height, at least one.</summary>
     internal static int LevelHeight(int height, int level)
     {
         ValidateLevel(level);
         return Math.Max(1, height >> level);
     }
 
-    /// <summary>Generates the complete RGBA8 mip chain.</summary>
-    /// <param name="rgba8Pixels">The base-level straight-alpha RGBA8 pixels.</param>
-    /// <param name="width">The base-level pixel width.</param>
-    /// <param name="height">The base-level pixel height.</param>
-    /// <param name="channelType">The channel type whose values the chain preserves.</param>
-    /// <returns>Every level of the chain, base level first.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not supported.</exception>
-    /// <exception cref="ArgumentException">
-    /// The pixel length is not <c>width × height × 4</c>.
-    /// </exception>
+    /// <summary>Generates the complete RGBA8 mip chain, base level first.</summary>
     internal static TextureLevel[] Generate(
         ReadOnlySpan<byte> rgba8Pixels,
         int width,

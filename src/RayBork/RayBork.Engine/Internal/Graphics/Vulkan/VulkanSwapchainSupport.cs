@@ -6,9 +6,7 @@ namespace RayBork.Internal;
 /// An immutable snapshot of what the window surface supports for a swapchain.
 /// </summary>
 /// <remarks>
-/// The render thread queries this value at device creation and re-queries it when the swapchain is
-/// recreated. A surface is usable only when it advertises at least one format and one present mode;
-/// the swapchain task turns this snapshot into images and views.
+/// A surface is usable only when it advertises at least one format and one present mode.
 /// </remarks>
 internal sealed class VulkanSwapchainSupport
 {
@@ -26,70 +24,35 @@ internal sealed class VulkanSwapchainSupport
         _presentModes = presentModes;
     }
 
-    /// <summary>
-    /// Gets the surface capabilities, including the current extent and image count limits.
-    /// </summary>
+    /// <summary>Gets the surface capabilities, including extent and image count limits.</summary>
     internal SurfaceCapabilitiesKHR Capabilities { get; }
 
-    /// <summary>
-    /// Gets the surface format and color-space pairs available for the swapchain.
-    /// </summary>
+    /// <summary>Gets the surface format and color-space pairs available for the swapchain.</summary>
     internal IReadOnlyList<VulkanSurfaceFormat> Formats => _formats;
 
-    /// <summary>
-    /// Gets the present modes available for the swapchain.
-    /// </summary>
+    /// <summary>Gets the present modes available for the swapchain.</summary>
     internal IReadOnlyList<PresentModeKHR> PresentModes => _presentModes;
 
-    /// <summary>
-    /// Gets whether the surface can support a swapchain.
-    /// </summary>
+    /// <summary>Gets whether the surface can support a swapchain.</summary>
     internal bool IsUsable => _formats.Length > 0 && _presentModes.Length > 0;
 
-    /// <summary>
-    /// Gets whether the surface advertises a format with any color space.
-    /// </summary>
-    /// <param name="format">The format to look for.</param>
-    /// <returns><see langword="true"/> when at least one pair uses the format.</returns>
+    /// <summary>Gets whether the surface advertises the format with any color space.</summary>
     internal bool HasFormat(Format format) => Array.Exists(_formats, pair => pair.Format == format);
 
-    /// <summary>
-    /// Gets whether the surface advertises a specific format and color-space pair.
-    /// </summary>
-    /// <param name="format">The format to look for.</param>
-    /// <param name="colorSpace">The color space to look for.</param>
-    /// <returns><see langword="true"/> when the exact pair is advertised.</returns>
+    /// <summary>Gets whether the surface advertises the exact format and color-space pair.</summary>
     internal bool HasFormat(Format format, ColorSpaceKHR colorSpace) =>
         Array.Exists(_formats, pair => pair.Format == format && pair.ColorSpace == colorSpace);
 
-    /// <summary>
-    /// Gets whether the surface advertises a scRGB float pair that can carry HDR values.
-    /// </summary>
+    /// <summary>Gets whether the surface advertises a half-float pair that can carry HDR.</summary>
     internal bool SupportsHdrFloatFormat =>
         HasFormat(Format.R16G16B16A16Sfloat, ColorSpaceKHR.SpaceExtendedSrgbLinearExt)
         || HasFormat(Format.R16G16B16A16Sfloat, ColorSpaceKHR.SpaceSrgbNonlinearKhr);
 
-    /// <summary>
-    /// Gets whether the surface advertises the extended sRGB linear (scRGB) color space for a
-    /// half-float surface format.
-    /// </summary>
+    /// <summary>Gets whether the surface advertises scRGB linear for a half-float format.</summary>
     internal bool SupportsExtendedSrgbLinear =>
         HasFormat(Format.R16G16B16A16Sfloat, ColorSpaceKHR.SpaceExtendedSrgbLinearExt);
 
-    /// <summary>
-    /// Queries the swapchain support of a surface.
-    /// </summary>
-    /// <remarks>
-    /// Runs on the render thread. The call uses the current Vulkan instance tracked by
-    /// <paramref name="vulkan"/> to resolve the surface commands.
-    /// </remarks>
-    /// <param name="vulkan">The loaded Vulkan API.</param>
-    /// <param name="device">The physical device.</param>
-    /// <param name="surface">The window surface.</param>
-    /// <returns>The surface support snapshot.</returns>
-    /// <exception cref="GraphicsException">
-    /// A surface query failed or the instance is not current. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Queries the swapchain support of a surface on the render thread.</summary>
     internal static VulkanSwapchainSupport Query(
         Vk vulkan,
         PhysicalDevice device,

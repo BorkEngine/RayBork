@@ -4,25 +4,14 @@ using RayBork.Internal;
 namespace RayBork.Tests;
 
 /// <summary>
-/// GPU integration tests for the M6 camera text draws: they record the production
-/// <see cref="Camera.DrawText"/> helper over the built-in Fira Sans font, submit the sealed camera
-/// packet through <see cref="Vulkan12Backend"/>, and assert validation-layer cleanliness, render
-/// statistics, and stable linear scene-target pixel probes.
+/// GPU integration tests for the M6 camera text draws through <see cref="Camera.DrawText"/> and
+/// <see cref="Vulkan12Backend"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Every test loads <c>/fonts/fira-sans</c> from the built-in pack through the real catalog loader and
-/// warms the glyph textures through the real generation service. The waits pump the GPU upload bridge
-/// instead of sleeping, and the pixel probes read single pixels with explicit tolerances. A glyph
-/// texture is one padded quad, so the probes sit on deterministic interior pixels: the capital L's
-/// bottom arm and its mirrored blank for the orientation check, and the capital I's stem center for the
-/// occlusion and batching checks.
-/// </para>
-/// <para>
-/// The tests run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan
-/// loader setup. They use a single-sample target so a probe pixel is not resolved from multiple
-/// samples.
-/// </para>
+/// Every test loads <c>/fonts/fira-sans</c> through the real catalog loader and warms glyph textures
+/// through the real generation service, pumping the GPU upload bridge instead of sleeping. GPU test
+/// classes run in parallel while <see cref="SdlPlatform"/> serializes the process-global SDL and
+/// Vulkan loader setup.
 /// </remarks>
 public sealed class TextDrawGpuTests
 {
@@ -182,9 +171,7 @@ public sealed class TextDrawGpuTests
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
-    /// <summary>
-    /// Lays the text out with the engine layout engine over the loaded font's metrics.
-    /// </summary>
+    /// <summary>Lays the text out with the engine layout engine.</summary>
     private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(
         Font font,
         string text
@@ -204,19 +191,14 @@ public sealed class TextDrawGpuTests
         return (result, buffer.Glyphs.ToArray());
     }
 
-    /// <summary>
-    /// Places the layout origin so the block's layout bounds are centered on the world origin in the
-    /// plane at <paramref name="z"/>.
-    /// </summary>
+    /// <summary>Places the layout origin so its bounds center on the world origin at the plane.</summary>
     private static Transform CenteredTransform(TextLayoutResult layout, float z)
     {
         Vector2 center = (layout.BoundsMin + layout.BoundsMax) * 0.5f;
         return new Transform(new Vector3(-center.X, -center.Y, z));
     }
 
-    /// <summary>
-    /// Gets the center pixel of one laid-out glyph's padded quad.
-    /// </summary>
+    /// <summary>Gets the center pixel of one laid-out glyph's padded quad.</summary>
     private static (uint X, uint Y) GlyphCenterPixel(
         Camera camera,
         TextGlyphInstance glyph,
@@ -228,9 +210,7 @@ public sealed class TextDrawGpuTests
         return (Pixel(screen.X), Pixel(screen.Y));
     }
 
-    /// <summary>
-    /// Gets the clamped screen-pixel rectangle of one local layout rectangle.
-    /// </summary>
+    /// <summary>Gets the clamped screen-pixel rectangle of a local layout rectangle.</summary>
     private static InkArea ScreenArea(
         Camera camera,
         PrimitiveDrawGpuHarness harness,

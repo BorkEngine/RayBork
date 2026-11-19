@@ -4,28 +4,12 @@ using RayBork.Internal;
 namespace RayBork.Tests;
 
 /// <summary>
-/// GPU integration tests for the per-instance draw texture path: draw records with their own texture per
-/// instance are recorded directly, submitted through the real <see cref="Vulkan12Backend"/>, and probed
-/// with linear scene-target readbacks.
+/// GPU integration tests for the per-instance draw texture path through <see cref="Vulkan12Backend"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The tests use the production GPU asset bridge and worker through
-/// <see cref="PrimitiveDrawGpuHarness"/> (the engine quad and the built-in <c>/shaders/mesh</c> and
-/// <c>/shaders/msdf</c> programs) or <see cref="VulkanDrawTestHarness"/> for a two-binding program
-/// compiled at test time. The bindless slots, the geometry pipeline, the instance writer, and the
-/// readback are the production ones. Instances of one record sit side by side and bind different
-/// textures, so a correct per-instance write samples each instance's own texture; a shared-set draw would
-/// sample one texture twice.
-/// </para>
-/// <para>
-/// The draws are recorded into a detached <see cref="RenderFramePacket"/> because the public
-/// <see cref="Camera"/> does not expose the per-instance texture path yet; the record API is the same one
-/// the text draw path uses. A frame retains every texture it references in its retention set, exactly as
-/// a recorder must, and releases the set after the backend reaches frame idleness. GPU test classes
-/// run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader
-/// setup, and the tests report a skip with the reason when the host cannot open a GPU device.
-/// </para>
+/// Tests use the production GPU asset bridge and worker through <see cref="PrimitiveDrawGpuHarness"/>
+/// or <see cref="VulkanDrawTestHarness"/>, and record detached packets that retain every texture they
+/// reference. GPU test classes run in parallel; a host without a usable Vulkan device is skipped.
 /// </remarks>
 public sealed class PerInstanceTextureGpuTests
 {
@@ -36,13 +20,10 @@ public sealed class PerInstanceTextureGpuTests
     private const float CAMERA_HEIGHT = 2f;
     private const float INSTANCE_OFFSET = 1f;
 
-    /// <summary>The odd pixel width of the distance-ramp quad; odd keeps a middle pixel at its center.</summary>
+    /// <summary>The odd pixel width of the distance-ramp quad.</summary>
     private const int QUAD_PIXEL_WIDTH = 5;
 
-    /// <summary>
-    /// The window the half-coverage probe allows for filtering quantization. The pre-fix
-    /// <c>rgb * coverage</c> blend lands about 0.06 to 0.15 per channel outside the halfway color.
-    /// </summary>
+    /// <summary>The window the half-coverage probe allows for filtering quantization.</summary>
     private const float HALF_COVERAGE_TOLERANCE = 0.02f;
 
     [Fact]
@@ -414,13 +395,7 @@ public sealed class PerInstanceTextureGpuTests
         }
         """;
 
-    /// <summary>
-    /// Builds the two-texel linear distance ramp the glyph probes use. An 8-bit field cannot store
-    /// <c>0.5</c> exactly, but the midpoint of 64 and 191 is exactly <c>0.5</c>, and the 0.25/0.75 range
-    /// makes the derivative band roughly 0.1 in distance units, so a driver that rounds the filtered
-    /// texel to UNORM8 or quantizes subtexel weights to Vulkan's 4-bit minimum moves the sampled distance
-    /// by far less than one band.
-    /// </summary>
+    /// <summary>Builds the two-texel linear distance ramp the glyph probes use.</summary>
     private static Texture CreateDistanceRamp(PrimitiveDrawGpuHarness harness)
     {
         float low = 64f / 255f;
@@ -516,10 +491,7 @@ public sealed class PerInstanceTextureGpuTests
         packet.Retention.Release();
     }
 
-    /// <summary>
-    /// Projects a world-space position to a render pixel with a top-left origin, mirroring
-    /// <see cref="Camera.WorldToScreen"/> for a full-target viewport.
-    /// </summary>
+    /// <summary>Projects a world-space position to a render pixel with a top-left origin.</summary>
     private static (uint X, uint Y) PixelOf(
         Vector3 world,
         Matrix4x4 viewProjection,
@@ -585,9 +557,7 @@ public sealed class PerInstanceTextureGpuTests
         );
     }
 
-    /// <summary>
-    /// A full-target orthographic camera snapshot for the manual packets.
-    /// </summary>
+    /// <summary>A full-target orthographic camera snapshot for the manual packets.</summary>
     private readonly record struct OrthographicView(
         Matrix4x4 View,
         Matrix4x4 Projection,

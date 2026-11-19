@@ -2,22 +2,11 @@ using StbImageSharp;
 
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// The single texture decode implementation: probes the source header, decodes with StbImageSharp to
-/// straight-alpha RGBA8, and validates dimensions and payload size.
-/// </summary>
+/// <summary>Decodes a texture source to straight-alpha RGBA8.</summary>
 /// <remarks>
-/// <para>
-/// Decoding is StbImageSharp to straight alpha: no premultiplication, gamma, ICC, flipping, or
-/// resampling. The codec normalizes palette, grayscale, and JPEG sources and supplies alpha
-/// <c>255</c> where the source has none. The top-left origin is preserved.
-/// </para>
-/// <para>
-/// Every failure is reported through the supplied error callback with <c>RB4007</c> and no partial
-/// payload is returned. A PNG whose IHDR declares a 16-bit channel depth is rejected before the
-/// decoder runs, as is a source whose declared dimensions exceed the bake's size policy. Malformed
-/// and truncated sources are left to the decoder and become a decode diagnostic.
-/// </para>
+/// StbImageSharp decodes with a top-left origin and no premultiplication, gamma, ICC, flipping, or
+/// resampling. Every failure is reported through the callback as <c>RB4007</c>; 16-bit PNG sources
+/// and sources outside the size policy are rejected before the decoder runs.
 /// </remarks>
 internal static class TextureSourceReader
 {
@@ -39,14 +28,8 @@ internal static class TextureSourceReader
 
     private static readonly byte[] _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    /// <summary>Decodes one texture source.</summary>
-    /// <param name="sourcePath">The absolute source path.</param>
-    /// <param name="displayPath">The path used in diagnostic messages.</param>
-    /// <param name="error">The callback that receives an <c>RB4007</c> code and message.</param>
-    /// <param name="payload">The RGBA8 payload when decoding succeeded, otherwise an empty array.</param>
-    /// <param name="width">The decoded width when decoding succeeded, otherwise zero.</param>
-    /// <param name="height">The decoded height when decoding succeeded, otherwise zero.</param>
-    /// <returns><see langword="true"/> when the source decoded and validated successfully.</returns>
+    /// <summary>Decodes one texture source, reporting failures through the callback.</summary>
+    /// <returns><see langword="true"/> when the source decoded successfully.</returns>
     internal static bool TryDecode(
         string sourcePath,
         string displayPath,

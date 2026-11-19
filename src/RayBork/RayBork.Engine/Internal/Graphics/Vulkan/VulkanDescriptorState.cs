@@ -3,28 +3,11 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The shared descriptor state of the M4 geometry path: one set layout, one update-after-bind
-/// descriptor pool, and the single pipeline layout every geometry pipeline uses.
-/// </summary>
+/// <summary>The shared descriptor state of the geometry path.</summary>
 /// <remarks>
-/// <para>
-/// Set 0 binding 0 is the frame storage buffer that holds one 256-byte <c>RayBorkFrame</c> element per
-/// camera pass, binding 1 is the fixed-size bindless combined-image-sampler array, and binding 2 is
-/// the per-instance storage buffer. The array binding has exactly
-/// <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/> descriptors to match <c>RayBorkTextures[2048]</c> in
-/// every geometry shader; it is partially bound and update-after-bind, so the renderer can write a
-/// newly allocated slot while frames are in flight. The frame and instance storage-buffer bindings are
-/// ordinary descriptors. The set layout and pool carry the update-after-bind flags the array binding
-/// requires. The pipeline layout declares one 4-byte push-constant range, the shader ABI's per-pass
-/// frame index, visible to the vertex and fragment stages.
-/// </para>
-/// <para>
-/// The state is created on the render thread with the logical device and destroyed before the device.
-/// The frame descriptor sets are allocated by <see cref="VulkanFrameResources"/>; the bindless table
-/// writes image descriptors into those sets. Every member is render-thread only and the call is not
-/// thread-safe.
-/// </para>
+/// Set 0 binds the frame buffer, the fixed <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/>
+/// bindless texture array, and the per-instance buffer; the array binding is update-after-bind. The
+/// state is render-thread only, created with the device, and destroyed before it.
 /// </remarks>
 internal sealed unsafe class VulkanDescriptorState : IDisposable
 {
@@ -61,31 +44,18 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         _resources = resources;
     }
 
-    /// <summary>
-    /// Gets the descriptor set layout shared by every geometry pipeline.
-    /// </summary>
+    /// <summary>Gets the set layout shared by every geometry pipeline.</summary>
     internal DescriptorSetLayout SetLayout => _resources.SetLayout;
 
-    /// <summary>
-    /// Gets the pipeline layout with the single geometry set layout and the 4-byte pass-index push
-    /// constant.
-    /// </summary>
+    /// <summary>Gets the pipeline layout with the pass-index push constant.</summary>
     internal PipelineLayout PipelineLayout => _resources.PipelineLayout;
 
-    /// <summary>
-    /// Creates the set layout, descriptor pool, and pipeline layout.
-    /// </summary>
-    /// <param name="device">The device that owns the state.</param>
-    /// <param name="bindlessCapacity">The bindless texture array capacity; it must equal
-    /// <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/>.</param>
-    /// <param name="maxSets">The number of frame descriptor sets to pool.</param>
-    /// <returns>The created descriptor state.</returns>
+    /// <summary>Creates the set layout, descriptor pool, and pipeline layout.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="bindlessCapacity"/> does not match the fixed shader array, or
-    /// <paramref name="maxSets"/> is zero.
+    /// The capacity is not <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/> or the set count is zero.
     /// </exception>
     /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
+    /// A Vulkan object could not be created (<c>RB3001</c>).
     /// </exception>
     internal static VulkanDescriptorState Create(
         VulkanDevice device,
@@ -136,13 +106,8 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         }
     }
 
-    /// <summary>
-    /// Allocates one descriptor set from the shared pool.
-    /// </summary>
-    /// <returns>The allocated set, already bound to <see cref="SetLayout"/>.</returns>
-    /// <exception cref="GraphicsException">
-    /// The pool could not allocate the set. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Allocates one descriptor set from the shared pool.</summary>
+    /// <exception cref="GraphicsException">Allocation failed (<c>RB3001</c>).</exception>
     internal DescriptorSet AllocateSet()
     {
         DescriptorSetLayout setLayout = SetLayout;
@@ -170,12 +135,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         return descriptorSet;
     }
 
-    /// <summary>
-    /// Writes the frame storage-buffer descriptor of one frame set.
-    /// </summary>
-    /// <param name="set">The frame set to update.</param>
-    /// <param name="buffer">The host-visible frame storage buffer.</param>
-    /// <param name="size">The buffer size in bytes.</param>
+    /// <summary>Writes the frame storage-buffer descriptor of one frame set.</summary>
     internal void WriteFrameStorageBuffer(DescriptorSet set, Buffer buffer, ulong size)
     {
         DescriptorBufferInfo bufferInfo = new()
@@ -197,12 +157,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         _vulkan.UpdateDescriptorSets(_device, 1, &write, 0, null);
     }
 
-    /// <summary>
-    /// Writes the per-instance storage-buffer descriptor of one frame set.
-    /// </summary>
-    /// <param name="set">The frame set to update.</param>
-    /// <param name="buffer">The host-visible instance buffer.</param>
-    /// <param name="size">The buffer size in bytes.</param>
+    /// <summary>Writes the per-instance storage-buffer descriptor of one frame set.</summary>
     internal void WriteInstanceStorageBuffer(DescriptorSet set, Buffer buffer, ulong size)
     {
         DescriptorBufferInfo bufferInfo = new()
@@ -224,18 +179,11 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         _vulkan.UpdateDescriptorSets(_device, 1, &write, 0, null);
     }
 
-    /// <summary>
-    /// Writes one bindless texture slot into every frame descriptor set.
-    /// </summary>
-    /// <remarks>
-    /// A newly allocated slot is never referenced by an in-flight frame, so the update-after-bind
-    /// array binding makes this write safe while earlier frames are still executing. The caller must
-    /// not rewrite a slot that an in-flight frame can reference.
-    /// </remarks>
-    /// <param name="sets">The frame descriptor sets.</param>
-    /// <param name="slot">The bindless slot to write.</param>
-    /// <param name="view">The texture image view.</param>
-    /// <param name="sampler">The sampler for the texture's state.</param>
+    /// <summary>Writes one bindless texture slot into every frame descriptor set.</summary>
+    /// <remarks>A new slot is never referenced by an in-flight frame, so the write is safe.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="slot"/> exceeds the table capacity.
+    /// </exception>
     internal void WriteBindlessTexture(
         DescriptorSet[] sets,
         uint slot,
@@ -283,9 +231,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable
         _vulkan.UpdateDescriptorSets(_device, (uint)sets.Length, writes, 0, null);
     }
 
-    /// <summary>
-    /// Destroys the pipeline layout, descriptor pool, and set layout. The call is idempotent.
-    /// </summary>
+    /// <summary>Destroys the state. The call is idempotent.</summary>
     public void Dispose()
     {
         if (_resources.Disposed)

@@ -1,11 +1,9 @@
 namespace RayBork;
 
-/// <summary>
-/// The immutable depth, culling, and blending state baked for a shader.
-/// </summary>
+/// <summary>The immutable depth, culling, and blending state of a shader pipeline.</summary>
 /// <remarks>
-/// The geometry pipelines consume this value as their immutable depth, culling, and blending state.
-/// <see cref="Opaque"/> is the default.
+/// Every preset culls back faces and uses reverse-Z greater-or-equal depth testing; only
+/// <see cref="Opaque"/> writes depth.
 /// </remarks>
 public readonly record struct RenderState
 {
@@ -21,10 +19,7 @@ public readonly record struct RenderState
     /// <summary>Gets whether passing fragments write depth.</summary>
     public bool DepthWrite { get; init; }
 
-    /// <summary>
-    /// Gets the opaque preset: opaque blending, back-face culling, reverse-Z greater-or-equal depth
-    /// testing, and depth writes.
-    /// </summary>
+    /// <summary>Opaque blending with depth writes; the default.</summary>
     public static RenderState Opaque =>
         new()
         {
@@ -34,10 +29,7 @@ public readonly record struct RenderState
             DepthWrite = true,
         };
 
-    /// <summary>
-    /// Gets the alpha-blend preset: source-over blending, back-face culling, reverse-Z
-    /// greater-or-equal depth testing, and no depth writes.
-    /// </summary>
+    /// <summary>Source-over alpha blending without depth writes.</summary>
     public static RenderState AlphaBlend =>
         new()
         {
@@ -47,10 +39,7 @@ public readonly record struct RenderState
             DepthWrite = false,
         };
 
-    /// <summary>
-    /// Gets the additive preset: additive blending, back-face culling, reverse-Z greater-or-equal
-    /// depth testing, and no depth writes.
-    /// </summary>
+    /// <summary>Additive blending without depth writes.</summary>
     public static RenderState Additive =>
         new()
         {
@@ -60,10 +49,7 @@ public readonly record struct RenderState
             DepthWrite = false,
         };
 
-    /// <summary>
-    /// Gets the multiply preset: multiplicative blending, back-face culling, reverse-Z
-    /// greater-or-equal depth testing, and no depth writes.
-    /// </summary>
+    /// <summary>Multiplicative blending without depth writes.</summary>
     public static RenderState Multiply =>
         new()
         {

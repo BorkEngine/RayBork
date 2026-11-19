@@ -1,13 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The CFF Standard Encoding (Adobe Technical Note #5176 Appendix B) as character-code to SID values.
-/// </summary>
+/// <summary>The CFF Standard Encoding as character-code to SID values.</summary>
 /// <remarks>
-/// The table is used only by the deprecated <c>seac</c> form of <c>endchar</c>: its base and accent
-/// operands are codes in this encoding, which the interpreter maps to SIDs and then resolves through
-/// the face charset. SID 0 means the code is unassigned. These are standard-string SIDs, identical in
-/// CFF 1.0 faces because SIDs 0..390 are fixed by the specification.
+/// Only the deprecated <c>seac</c> form of <c>endchar</c> uses this table: codes map to SIDs that the
+/// charset then resolves, and SID 0 means the code is unassigned. SIDs 0..390 are fixed by the
+/// specification.
 /// </remarks>
 internal static class CffStandardEncoding
 {
@@ -275,7 +272,5 @@ internal static class CffStandardEncoding
         ];
 
     /// <summary>Gets the standard SID for one character code.</summary>
-    /// <param name="code">The character code, in <c>[0, CODE_COUNT)</c>.</param>
-    /// <returns>The SID, or zero when the code is unassigned.</returns>
     internal static int GetSid(int code) => Values[code];
 }

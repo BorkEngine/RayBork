@@ -1,25 +1,12 @@
 namespace RayBork.Bake;
 
-/// <summary>
-/// The per-source state handed to a processor.
-/// </summary>
-/// <remarks>
-/// A context is created for exactly one source and must not be retained after <c>Process</c> returns.
-/// Additional tracked dependencies, such as the GLSL files named by a shader TOML, are registered
-/// with <see cref="AddInput"/>.
-/// </remarks>
+/// <summary>The per-source state handed to a processor.</summary>
+/// <remarks>A context belongs to one source and must not be retained after processing.</remarks>
 public sealed class AssetProcessorContext
 {
     private readonly List<string> _additionalInputs = [];
 
     /// <summary>Initializes a per-source context.</summary>
-    /// <param name="sourcePath">The absolute source path.</param>
-    /// <param name="relativePath">The source path relative to its pack root, with <c>/</c> separators.</param>
-    /// <param name="baseAssetPath">The canonical base asset path.</param>
-    /// <param name="sourceFileName">The source file name.</param>
-    /// <param name="sourceFileNameWithoutExtension">The source file name without its final extension.</param>
-    /// <param name="outputs">The output sink.</param>
-    /// <param name="diagnostics">The diagnostic sink.</param>
     internal AssetProcessorContext(
         string sourcePath,
         string relativePath,
@@ -64,13 +51,8 @@ public sealed class AssetProcessorContext
     public IReadOnlyList<string> AdditionalInputs => _additionalInputs;
 
     /// <summary>
-    /// Registers one additional file dependency for incremental hashing.
+    /// Registers an existing input file, absolute or relative to the source directory, for hashing.
     /// </summary>
-    /// <param name="path">
-    /// An absolute path or a path relative to the source file's directory. The file must exist.
-    /// </param>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or invalid.</exception>
-    /// <exception cref="FileNotFoundException">The file does not exist.</exception>
     public void AddInput(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

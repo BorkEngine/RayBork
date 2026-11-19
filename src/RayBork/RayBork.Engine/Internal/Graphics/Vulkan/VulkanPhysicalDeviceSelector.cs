@@ -4,27 +4,18 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Chooses the physical device the renderer uses.
-/// </summary>
+/// <summary>Chooses the physical device the renderer uses.</summary>
 /// <remarks>
-/// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
-/// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, the
-/// M4 descriptor-indexing subset the bindless texture table needs, enough update-after-bind sampled
-/// images for the fixed <c>RayBorkTextures[2048]</c> array, and the Vulkan 1.2 sample-zero depth resolve
-/// mode. A device without the bindless subset, the capacity, or sample-zero depth resolve is not
-/// suitable; the renderer never falls back to one texture per draw, a smaller array, a min/max resolve,
-/// or an unsampleable depth view.
+/// A device must support Vulkan 1.2, graphics and presentation queues,
+/// <c>VK_KHR_swapchain</c>, the M4 descriptor-indexing subset, 2048 update-after-bind sampled
+/// images, and sample-zero depth resolve. There is no fallback to per-draw textures, a smaller
+/// array, min/max resolve, or an unsampleable depth view.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector
 {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
 
-    /// <summary>
-    /// Determines whether a device satisfies every M4 requirement.
-    /// </summary>
-    /// <param name="candidate">The device facts.</param>
-    /// <returns><see langword="true"/> when the device is suitable.</returns>
+    /// <summary>Returns whether a device satisfies every M4 requirement.</summary>
     internal static bool IsSuitable(in VulkanPhysicalDeviceCandidate candidate) =>
         candidate.ApiVersion >= REQUIRED_API_VERSION
         && candidate.SupportsGraphicsQueue
@@ -36,19 +27,13 @@ internal static class VulkanPhysicalDeviceSelector
         && VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
             != ResolveModeFlags.None;
 
-    /// <summary>
-    /// Selects the preferred suitable device and returns its index in the loader's device array.
-    /// </summary>
+    /// <summary>Returns the index of the preferred suitable device.</summary>
     /// <remarks>
-    /// A discrete GPU is preferred over an integrated GPU, then a virtual GPU, then a CPU device,
-    /// then any other device. Equal device types are ordered by the higher API version and then by
-    /// the lower index so the result is deterministic.
+    /// Discrete GPUs are preferred, then integrated, virtual, CPU, and other types; ties prefer
+    /// the higher API version, then the lower index.
     /// </remarks>
-    /// <param name="candidates">The facts for every physical device, in loader order.</param>
-    /// <returns>The index of the selected device in the loader's physical-device array.</returns>
     /// <exception cref="GraphicsException">
-    /// No candidate is suitable. The message contains one line per rejected candidate naming the
-    /// rejection reasons; the diagnostic code is <c>RB3001</c>.
+    /// No candidate is suitable; the message lists each rejection and the code is <c>RB3001</c>.
     /// </exception>
     internal static int Select(IReadOnlyList<VulkanPhysicalDeviceCandidate> candidates)
     {

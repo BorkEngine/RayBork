@@ -2,12 +2,10 @@ using PolyType;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// One part of a packed model.
-/// </summary>
+/// <summary>One part of a packed model.</summary>
 /// <remarks>
-/// <see cref="LocalTransform"/> carries ten floats: position X/Y/Z, rotation X/Y/Z/W, and scale
-/// X/Y/Z. <see cref="Bounds"/> carries six floats: minimum X/Y/Z and maximum X/Y/Z.
+/// <see cref="LocalTransform"/> carries ten floats (position XYZ, rotation XYZW, scale XYZ) and
+/// <see cref="Bounds"/> carries six (minimum XYZ, maximum XYZ).
 /// </remarks>
 [GenerateShape]
 internal sealed partial class ModelPartAsset

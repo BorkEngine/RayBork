@@ -1,28 +1,16 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when a requested asset path is not present in any mounted pack.
-/// </summary>
+/// <summary>Thrown when a requested asset is not in any mounted pack.</summary>
 public sealed class AssetNotFoundException : AssetException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetNotFoundException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="AssetNotFoundException"/>.</summary>
     public AssetNotFoundException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetNotFoundException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetNotFoundException"/>.</summary>
     public AssetNotFoundException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetNotFoundException"/> class with a message and
-    /// an inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetNotFoundException"/>.</summary>
     public AssetNotFoundException(string message, Exception? innerException)
         : base(message, innerException) { }
 

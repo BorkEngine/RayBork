@@ -1,29 +1,16 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when an asset payload is corrupt, cannot be decoded, fails a shape deserialization, or
-/// cannot be uploaded to the GPU.
-/// </summary>
+/// <summary>Thrown when an asset payload is corrupt or cannot be decoded or uploaded.</summary>
 public sealed class AssetLoadException : AssetException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetLoadException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="AssetLoadException"/>.</summary>
     public AssetLoadException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetLoadException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetLoadException"/>.</summary>
     public AssetLoadException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetLoadException"/> class with a message and an
-    /// inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetLoadException"/>.</summary>
     public AssetLoadException(string message, Exception? innerException)
         : base(message, innerException) { }
 

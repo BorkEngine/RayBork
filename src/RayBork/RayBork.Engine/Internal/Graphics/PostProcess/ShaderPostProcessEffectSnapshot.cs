@@ -1,27 +1,11 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The frozen state of one <see cref="ShaderPostProcessEffect"/> inside a recorded camera pass: the
-/// internal shader program, the material cursor's per-instance uniform bytes, the material's texture
-/// bindings, and the reserved source binding slots the engine overrides.
-/// </summary>
+/// <summary>The frozen state of one <see cref="ShaderPostProcessEffect"/> inside a camera pass.</summary>
 /// <remarks>
-/// <para>
-/// The snapshot is created on the tick thread when the camera is created and copied into the frame's
-/// <see cref="PostProcessEffectSnapshot"/> array. It owns no engine reference itself; the camera adds
-/// the program and every bound texture to the frame's retention set with <see cref="Retain"/>, so
-/// disposing the material after camera creation cannot corrupt the recorded frame.
-/// </para>
-/// <para>
-/// The engine resolves the reserved <c>sourceColor</c> and <c>sourceDepth</c> texture index slots at
-/// record time, so any texture the material had bound to those names is ignored. Every other uniform
-/// and texture binding comes from the snapshot.
-/// </para>
-/// <para>
-/// A snapshot is pooled by its effect and reused for a later camera: the uniform buffer, texture array,
-/// and instance layout are kept and refilled instead of reallocated. The custom effect records exactly
-/// one entry in <see cref="InstanceLayout"/>.
-/// </para>
+/// It freezes the internal shader program, the material's per-instance uniform bytes, its texture
+/// bindings, and the reserved source binding slots the engine overrides. The snapshot owns no engine
+/// reference; <see cref="Retain"/> keeps the program and textures alive for the recorded frame, and the
+/// engine resolves the reserved <c>sourceColor</c> and <c>sourceDepth</c> slots at record time.
 /// </remarks>
 internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapshot
 {
@@ -36,9 +20,7 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
 
     private ShaderPostProcessEffectSnapshot() { }
 
-    /// <summary>
-    /// Gets the captured per-instance uniform bytes, without the 96-byte instance header.
-    /// </summary>
+    /// <summary>Gets the captured per-instance uniform bytes, without the 96-byte instance header.</summary>
     internal ReadOnlySpan<byte> InstanceData => _instanceData.AsSpan(0, _instanceDataLength);
 
     /// <summary>Gets the frozen instance-record stride of the effect's one fullscreen pass.</summary>
@@ -47,10 +29,7 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     /// <summary>Gets the texture binding index that receives the source color.</summary>
     internal int SourceColorBinding => _sourceColorBinding;
 
-    /// <summary>
-    /// Gets the texture binding index that receives the target's resolved depth, or <c>-1</c> when the
-    /// shader does not declare one.
-    /// </summary>
+    /// <summary>Gets the binding index that receives the target depth, or <c>-1</c> when undeclared.</summary>
     internal int SourceDepthBinding => _sourceDepthBinding;
 
     /// <inheritdoc/>
@@ -63,30 +42,8 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     internal override bool IsReservedTextureBinding(int index) =>
         index == _sourceColorBinding || index == _sourceDepthBinding;
 
-    /// <summary>
-    /// Rents a snapshot from the effect's pool, or creates one, and fills it from a shader program and
-    /// one material cursor state.
-    /// </summary>
-    /// <param name="owner">The effect that will pool the snapshot after its camera pass is recycled.</param>
-    /// <param name="program">The shader program the material uses.</param>
-    /// <param name="instanceData">The material's captured uniform data without the instance header.</param>
-    /// <param name="textures">The material's captured texture bindings in declaration order.</param>
-    /// <param name="sourceColorBinding">The binding index of the reserved <c>sourceColor</c> name.</param>
-    /// <param name="sourceDepthBinding">
-    /// The binding index of the reserved <c>sourceDepth</c> name, or <c>-1</c> when it is not declared.
-    /// </param>
-    /// <param name="targetHasDepth">
-    /// Whether the camera target has a resolved depth image for the source depth binding.
-    /// </param>
-    /// <param name="targetDescription">The target name used in the depthless-target error.</param>
-    /// <returns>The captured snapshot.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="owner"/> or <paramref name="program"/> is <c>null</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// The texture array does not hold one binding per program texture, or a reserved slot is outside
-    /// the declared bindings.
-    /// </exception>
+    /// <summary>Rents a snapshot from the effect's pool, or creates one, and fills it.</summary>
+    /// <remarks>The uniform bytes exclude the instance header; bindings follow declaration order.</remarks>
     /// <exception cref="InvalidOperationException">
     /// The shader declares <c>sourceDepth</c> but the target has no depth attachment.
     /// </exception>

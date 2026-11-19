@@ -1,20 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The CID-keyed CFF FDSelect table: the Font DICT index that each glyph uses.
-/// </summary>
+/// <summary>The CID-keyed CFF FDSelect table mapping glyphs to Font DICTs.</summary>
 /// <remarks>
-/// <para>
-/// Format 0 stores one byte per glyph. Format 3 stores ranges of <c>(first glyph, Font DICT index)</c>
-/// pairs followed by one sentinel; the ranges must start at glyph 0, increase strictly, and end at the
-/// face's glyph count. Format 4 belongs to CFF2 and raises
-/// <see cref="FontUnsupportedException"/>. Every Font DICT index is validated against the FDArray
-/// count at parse time, so a glyph read can index the per-FD private tables directly.
-/// </para>
-/// <para>
-/// The instance is immutable and safe to read from any thread. Format 0 keeps the table slice;
-/// format 3 keeps one parallel pair of arrays and resolves a glyph with a binary search.
-/// </para>
+/// Format 0 stores one index per glyph and format 3 stores glyph ranges; format 4 is CFF2 and is
+/// unsupported. Every index is validated against the FDArray count at parse time, and the instance is
+/// immutable and thread-safe.
 /// </remarks>
 internal sealed class CffFdSelect
 {
@@ -42,17 +32,6 @@ internal sealed class CffFdSelect
     }
 
     /// <summary>Parses an FDSelect table.</summary>
-    /// <param name="table">The complete <c>CFF </c> table.</param>
-    /// <param name="glyphCount">The face's glyph count.</param>
-    /// <param name="fontDictCount">The FDArray Font DICT count.</param>
-    /// <param name="offset">The Top DICT FDSelect offset.</param>
-    /// <param name="context">A description used in failure reasons.</param>
-    /// <returns>The parsed FDSelect.</returns>
-    /// <exception cref="FontFormatException">
-    /// The table is truncated, uses an unknown format, has decreasing or out-of-range ranges, does
-    /// not end at the glyph count, or names a Font DICT outside the FDArray.
-    /// </exception>
-    /// <exception cref="FontUnsupportedException">The table uses FDSelect format 4, which is CFF2.</exception>
     internal static CffFdSelect Parse(
         ReadOnlyMemory<byte> table,
         int glyphCount,
@@ -188,8 +167,6 @@ internal sealed class CffFdSelect
     }
 
     /// <summary>Gets the Font DICT index of one glyph.</summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, glyphCount)</c>.</param>
-    /// <returns>The Font DICT index, in <c>[0, FDArray count)</c>.</returns>
     internal int GetFontDictIndex(int glyphId)
     {
         if (!_fontDictIndices.IsEmpty)

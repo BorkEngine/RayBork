@@ -7,55 +7,23 @@ namespace RayBork.Internal;
 /// destructions, and device-recovery replays.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Any thread may call <see cref="UploadAsync"/> and <see cref="Destroy"/>; the render thread calls
-/// <see cref="ProcessPending"/>, <see cref="Restore"/>, and <see cref="Close"/>. An upload is queued
-/// with one completion task, and the render thread starts it through the
-/// <see cref="IAssetGpuWorker"/> attached by the renderer backend. <see cref="ProcessPending"/> starts
-/// as many queued uploads as the in-flight bounds allow, polls the running ones without blocking, and
-/// completes each request exactly once. The bridge retains the upload description of every live
-/// resource so <see cref="Restore"/> can recreate it after a device recovery.
-/// </para>
-/// <para>
-/// The render loop waits on <see cref="Signal"/> together with the frame-ring ready signal and calls
-/// <see cref="ProcessPending"/> on every loop turn, so an upload queued during <c>Setup</c> starts
-/// before the first tick. While an upload is in flight the loop uses a short bounded wait so it keeps
-/// polling the GPU copy without publishing frames; a deferred upload therefore never stalls frame
-/// submission. A canceled request completes as canceled and, when the worker already created or
-/// partially created a resource, that operation is canceled so nothing leaks. A failed request
-/// completes with <see cref="AssetLoadException"/> and never stops the render loop. Destroy requests
-/// are deduplicated and run on the render thread exactly once.
-/// </para>
-/// <para>
-/// Shutdown order: the main thread completes and drains the frame ring, the render loop exits, and
-/// <see cref="Close"/> runs before the backend is disposed. Close fails every queued and in-flight
-/// upload with the render failure (or <see cref="ObjectDisposedException"/>), cancels the in-flight
-/// operations before destroying every live and queued resource, and rejects later uploads, so no
-/// caller can hang on a stopped render thread.
-/// </para>
+/// Any thread queues through <see cref="UploadAsync"/> and <see cref="Destroy"/>; only the render
+/// thread drains them, completes each upload once, and retires resources when no frame references
+/// them. The bridge keeps every live resource's upload description so <see cref="Restore"/> can
+/// replay it after a device recovery.
 /// </remarks>
 internal sealed class GpuAssetBridge
 {
-    /// <summary>
-    /// The maximum number of queued uploads. The asset loader coalesces loads, so the bound is a
-    /// backstop against a render thread that stopped draining, not a normal concurrency limit.
-    /// </summary>
+    /// <summary>The maximum number of queued uploads; a stalled-loop backstop.</summary>
     internal const int MAX_PENDING_UPLOADS = 1024;
 
-    /// <summary>
-    /// The maximum number of uploads that may be copying on the GPU at the same time.
-    /// </summary>
+    /// <summary>The maximum number of uploads copying on the GPU at the same time.</summary>
     internal const int MAX_IN_FLIGHT_UPLOADS = 8;
 
-    /// <summary>
-    /// The maximum number of payload bytes the in-flight uploads may retain together.
-    /// </summary>
+    /// <summary>The maximum payload bytes the in-flight uploads may retain together.</summary>
     internal const long MAX_IN_FLIGHT_UPLOAD_BYTES = 256L * 1024 * 1024;
 
-    /// <summary>
-    /// The maximum number of queued destructions. A resource is queued at most once and only after it
-    /// left the live table, so the bound is reached only when the render thread stopped draining.
-    /// </summary>
+    /// <summary>The maximum number of queued destructions; each resource is queued once.</summary>
     private const int MAX_PENDING_DESTROYS = 4096;
 
     private readonly Lock _gate = new();
@@ -71,18 +39,13 @@ internal sealed class GpuAssetBridge
     private bool _closed;
     private long _inFlightBytes;
 
-    /// <summary>
-    /// Initializes a bridge with the production in-flight bounds.
-    /// </summary>
+    /// <summary>Initializes a bridge with the production in-flight bounds.</summary>
     internal GpuAssetBridge()
         : this(MAX_IN_FLIGHT_UPLOADS, MAX_IN_FLIGHT_UPLOAD_BYTES) { }
 
-    /// <summary>
-    /// Initializes a bridge with explicit in-flight bounds. Tests use small values.
-    /// </summary>
+    /// <summary>Initializes a bridge with explicit in-flight bounds.</summary>
     /// <param name="maxInFlightUploads">The maximum number of concurrent GPU copies.</param>
-    /// <param name="maxInFlightUploadBytes">The maximum payload bytes the concurrent copies retain.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A bound is not positive.</exception>
+    /// <param name="maxInFlightUploadBytes">The maximum payload bytes the copies retain.</param>
     internal GpuAssetBridge(int maxInFlightUploads, long maxInFlightUploadBytes)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInFlightUploads);
@@ -92,15 +55,10 @@ internal sealed class GpuAssetBridge
         _maxInFlightUploadBytes = maxInFlightUploadBytes;
     }
 
-    /// <summary>
-    /// Gets the wait handle the render loop waits on with the frame-ring ready signal. It is signaled
-    /// while upload or destroy work is queued and is auto-reset by the wait.
-    /// </summary>
+    /// <summary>Gets the wait handle the render loop waits on with the frame-ring signal.</summary>
     internal WaitHandle Signal => _workAvailable;
 
-    /// <summary>
-    /// Gets whether <see cref="Close"/> already ran.
-    /// </summary>
+    /// <summary>Gets whether <see cref="Close"/> already ran.</summary>
     internal bool IsClosed
     {
         get
@@ -112,9 +70,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets whether a worker is attached and the bridge accepts uploads.
-    /// </summary>
+    /// <summary>Gets whether a worker is attached and the bridge accepts uploads.</summary>
     internal bool HasWorker
     {
         get
@@ -126,10 +82,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets whether the bridge still has a queued or in-flight upload. The render loop uses it to
-    /// choose the short polling wait while an upload is still copying on the GPU.
-    /// </summary>
+    /// <summary>Gets whether an upload is still queued or copying on the GPU.</summary>
     internal bool HasPendingWork
     {
         get
@@ -141,9 +94,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets the number of queued upload requests. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the number of queued upload requests; diagnostic, for tests.</summary>
     internal int PendingUploadCount
     {
         get
@@ -155,9 +106,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets the number of uploads whose GPU copy is in flight. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the number of uploads whose GPU copy is in flight; diagnostic, for tests.</summary>
     internal int InFlightUploadCount
     {
         get
@@ -169,9 +118,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets the estimated payload bytes retained by the in-flight uploads. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the estimated payload bytes retained by the in-flight uploads.</summary>
     internal long InFlightUploadBytes
     {
         get
@@ -183,10 +130,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets whether a destroy request is queued. The render loop uses it to keep polling while a
-    /// submitted frame still references the resource, so a minimized window cannot strand the destroy.
-    /// </summary>
+    /// <summary>Gets whether a destroy request is queued and awaiting frame idle.</summary>
     internal bool HasPendingDestroys
     {
         get
@@ -198,9 +142,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets the number of queued destroy requests. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the number of queued destroy requests; diagnostic, for tests.</summary>
     internal int PendingDestroyCount
     {
         get
@@ -212,9 +154,7 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Gets the number of live resources. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the number of live resources; diagnostic, for tests.</summary>
     internal int LiveResourceCount
     {
         get
@@ -226,14 +166,8 @@ internal sealed class GpuAssetBridge
         }
     }
 
-    /// <summary>
-    /// Attaches the worker for the backend's current device. The render loop calls it on the render
-    /// thread after the backend initialized and before the loop publishes readiness.
-    /// </summary>
+    /// <summary>Attaches the worker for the current device; render-thread only.</summary>
     /// <param name="worker">The worker that creates, recreates, and destroys GPU resources.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The bridge is closed.</exception>
-    /// <exception cref="InvalidOperationException">A worker is already attached.</exception>
     internal void AttachWorker(IAssetGpuWorker worker)
     {
         ArgumentNullException.ThrowIfNull(worker);
@@ -251,16 +185,12 @@ internal sealed class GpuAssetBridge
     }
 
     /// <summary>
-    /// Queues a GPU upload and returns the task that completes after the render thread created the
-    /// resource. Safe to call from any thread.
+    /// Queues a GPU upload from any thread; the task completes after the render thread creates it.
     /// </summary>
-    /// <param name="upload">The retained upload description.</param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>
-    /// The created resource, or a canceled or faulted task. A canceled request that had already
-    /// created a resource destroys it instead of leaking it.
-    /// </returns>
-    /// <exception cref="ArgumentNullException"><paramref name="upload"/> is <c>null</c>.</exception>
+    /// <param name="upload">The retained upload description, kept for recovery replay.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the request; an already-created resource is destroyed.
+    /// </param>
     internal Task<GpuAssetResource> UploadAsync(
         AssetGpuUpload upload,
         CancellationToken cancellationToken
@@ -316,14 +246,10 @@ internal sealed class GpuAssetBridge
     }
 
     /// <summary>
-    /// Queues the destruction of a live resource. Safe to call from any thread; the render thread
-    /// destroys the resource exactly once. Destroying an unknown or already-queued resource is a
-    /// no-op, and a call after <see cref="Close"/> is ignored because Close already destroyed every
-    /// live resource.
+    /// Queues a live resource for destruction on the render thread once; unknown, duplicate, or
+    /// post-<see cref="Close"/> requests are ignored.
     /// </summary>
-    /// <param name="resource">The resource to destroy.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="resource"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">The destroy queue is full.</exception>
+    /// <param name="resource">The live resource to destroy.</param>
     internal void Destroy(GpuAssetResource resource)
     {
         ArgumentNullException.ThrowIfNull(resource);
@@ -351,19 +277,14 @@ internal sealed class GpuAssetBridge
     }
 
     /// <summary>
-    /// Drains the queued uploads and destructions on the render thread, starts uploads while the
-    /// in-flight bounds allow it, polls the running ones, and completes every finished upload's task.
-    /// The call never blocks on a fence and a single failed upload or destruction never throws out of
-    /// it.
+    /// Drains uploads and destructions on the render thread without blocking on a fence.
     /// </summary>
+    /// <param name="worker">The worker for the current device.</param>
     /// <remarks>
     /// Destructions are drained only when <see cref="IAssetGpuWorker.AreFrameResourcesIdle"/> is
-    /// <see langword="true"/>. A resource destroyed after the tick that drew it stays queued while a
-    /// submitted frame can still reference it; a later loop turn retries, and the render loop's short
-    /// wait covers a window that publishes no frames.
+    /// <see langword="true"/>, so a resource stays queued while a submitted frame can still reference
+    /// it. A failed upload or destruction never escapes.
     /// </remarks>
-    /// <param name="worker">The worker for the current device.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
     internal void ProcessPending(IAssetGpuWorker worker)
     {
         ArgumentNullException.ThrowIfNull(worker);
@@ -393,17 +314,12 @@ internal sealed class GpuAssetBridge
     }
 
     /// <summary>
-    /// Recreates every live resource from its retained upload after a successful device recovery. Runs
-    /// on the render thread and keeps each resource's identity, so public asset objects stay valid.
+    /// Recreates every live resource from its retained upload after a device recovery, keeping its
+    /// identity.
     /// </summary>
-    /// <remarks>
-    /// A recovery is rare and runs with the device idle, so this stays synchronous: the worker may
-    /// wait for the recreated upload's fence before the bridge adopts its handles.
-    /// </remarks>
     /// <param name="worker">The worker for the recreated device.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
     /// <exception cref="AssetLoadException">
-    /// One or more resources could not be recreated. The diagnostic code is <c>RB1010</c>.
+    /// One or more resources could not be recreated (<c>RB1010</c>).
     /// </exception>
     [SuppressMessage(
         "Design",
@@ -470,14 +386,11 @@ internal sealed class GpuAssetBridge
     }
 
     /// <summary>
-    /// Stops the bridge during teardown: fails every queued and in-flight upload, cancels the in-flight
-    /// operations, destroys every live and queued resource, and rejects later uploads. Runs on the
-    /// render thread after the frame ring is complete and drained, and before the backend is disposed.
-    /// Idempotent.
+    /// Fails uploads, cancels copies, destroys every live resource; idempotent.
     /// </summary>
     /// <param name="failure">
-    /// The render loop failure that stopped the app, or <see langword="null"/> for a graceful stop.
-    /// Pending uploads receive it; a graceful stop uses <see cref="ObjectDisposedException"/>.
+    /// The render-loop failure pending uploads receive; <see langword="null"/> for a graceful stop, which
+    /// fails them with <see cref="ObjectDisposedException"/>.
     /// </param>
     internal void Close(Exception? failure)
     {
@@ -840,9 +753,7 @@ internal sealed class GpuAssetBridge
             "The GPU asset bridge is closed; the render loop has stopped servicing GPU assets."
         );
 
-    /// <summary>
-    /// One upload that the render thread started and has not completed or canceled yet.
-    /// </summary>
+    /// <summary>One started upload the render thread has not completed or canceled.</summary>
     private sealed class InFlightUpload
     {
         internal InFlightUpload(UploadRequest request, long bytes)
@@ -858,9 +769,7 @@ internal sealed class GpuAssetBridge
         internal GpuAssetUploadOperation? Operation { get; set; }
     }
 
-    /// <summary>
-    /// One queued upload and its single completion task.
-    /// </summary>
+    /// <summary>One queued upload and its single completion task.</summary>
     private sealed class UploadRequest
     {
         private readonly GpuAssetBridge _owner;

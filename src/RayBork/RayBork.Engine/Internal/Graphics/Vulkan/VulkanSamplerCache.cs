@@ -5,24 +5,12 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The per-device sampler cache: one sampler per <see cref="SamplerState"/>, shared by every texture
-/// that uses the state.
+/// The per-device sampler cache: one sampler per <see cref="SamplerState"/>, shared by all textures.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A texture upload asks the cache for its sampler instead of creating one per texture, so a hundred
-/// textures with the same filter, wrap, and anisotropy own one sampler. The cache owns every sampler
-/// it creates; a texture resource keeps only the handle and never destroys it. The cache is bound to
-/// the logical device by the accessor it is constructed with; <see cref="DestroyAll"/> runs on the
-/// render thread before the device is destroyed, and a device recreation clears the cache so the
-/// restored textures create their samplers on the new device.
-/// </para>
-/// <para>
-/// The sampler uses an unbounded maximum LOD and lets the image view's mip count clamp the LOD, which
-/// keeps the cache key exactly the public sampler state. Anisotropic filtering is enabled only when
-/// the device advertises and the backend enables <c>samplerAnisotropy</c>; otherwise the sampler falls
-/// back to linear filtering with a warning. Every member is render-thread only.
-/// </para>
+/// The cache owns every sampler it creates and a texture keeps only the handle. The cache is cleared
+/// on device recreation, and <see cref="DestroyAll"/> runs on the render thread before the device
+/// is destroyed.
 /// </remarks>
 internal sealed unsafe class VulkanSamplerCache : IDisposable
 {
@@ -33,11 +21,7 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable
     private readonly Dictionary<SamplerState, Sampler> _samplers = [];
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes the cache for the backend's current logical device.
-    /// </summary>
-    /// <param name="deviceAccessor">Returns the backend's current logical device.</param>
-    /// <param name="logger">The renderer logger for anisotropy fallback diagnostics.</param>
+    /// <summary>Initializes the cache for the backend's current logical device.</summary>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal VulkanSamplerCache(Func<VulkanDevice> deviceAccessor, ILogger logger)
     {
@@ -48,24 +32,13 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable
         _logger = logger;
     }
 
-    /// <summary>
-    /// Gets the number of samplers the cache owns. Diagnostic, for tests.
-    /// </summary>
+    /// <summary>Gets the number of samplers the cache owns.</summary>
     internal int Count => _samplers.Count;
 
-    /// <summary>
-    /// Returns the cached sampler for a texture state, creating it on first use.
-    /// </summary>
-    /// <param name="filter">The texture filter.</param>
-    /// <param name="wrap">The texture wrap mode.</param>
-    /// <param name="maxAnisotropy">The requested maximum anisotropy; ignored unless the filter is anisotropic.</param>
-    /// <param name="canonicalPath">The canonical asset path, for upload diagnostics.</param>
-    /// <param name="payloadPath">The packed payload path, for decode diagnostics.</param>
+    /// <summary>Returns the cached sampler for a texture state, creating it on first use.</summary>
     /// <returns>The cached sampler.</returns>
     /// <exception cref="AssetLoadException">
-    /// The filter or wrap is undefined, the anisotropy is invalid, or the sampler could not be created.
-    /// The diagnostic code is <c>RB1008</c> for an invalid state and <c>RB1010</c> for a device
-    /// failure.
+    /// The state is invalid (<c>RB1008</c>) or sampler creation failed (<c>RB1010</c>).
     /// </exception>
     internal Sampler GetOrCreate(
         TextureFilter filter,
@@ -111,14 +84,8 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable
         return sampler;
     }
 
-    /// <summary>
-    /// Destroys every cached sampler with the current device and clears the cache.
-    /// </summary>
-    /// <remarks>
-    /// The caller has waited for the device to idle, and every texture resource that references a
-    /// sampler is either already destroyed or about to be recreated. The call is idempotent and safe
-    /// when no device is available.
-    /// </remarks>
+    /// <summary>Destroys every cached sampler with the device and clears the cache.</summary>
+    /// <remarks>The caller has waited for device idleness; the call is idempotent.</remarks>
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -168,9 +135,7 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable
         _samplers.Clear();
     }
 
-    /// <summary>
-    /// Destroys every cached sampler. The call is idempotent.
-    /// </summary>
+    /// <summary>Destroys the cache. The call is idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)

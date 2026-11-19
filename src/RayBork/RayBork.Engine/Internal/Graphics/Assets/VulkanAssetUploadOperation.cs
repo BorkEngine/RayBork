@@ -3,38 +3,18 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// One Vulkan upload that was submitted to the graphics queue and may still be copying.
-/// </summary>
+/// <summary>One submitted Vulkan upload that may still be copying.</summary>
 /// <remarks>
-/// <para>
-/// A texture or mesh operation owns the destination resource, the staging buffer and its memory, and
-/// the one-shot command pool and fence of the submission. The worker adds the destination resource to
-/// its live set and frees the staging and submission objects only when the fence signals. A shader
-/// operation records no GPU copy, so its first <see cref="IAssetGpuWorker.TryComplete"/> poll finishes
-/// it immediately.
-/// </para>
-/// <para>
-/// The operation is render-thread affine. <see cref="ClearTransients"/> makes the cleanup idempotent:
-/// after the worker freed the staging and submission objects it clears the handles, and
-/// <see cref="ClearResource"/> clears the destination resource after its destruction, so a later
-/// <see cref="IAssetGpuWorker.Cancel"/> cannot destroy anything twice.
-/// </para>
+/// It owns the destination resource, the staging buffer and its memory, and the submission's
+/// command pool and fence, which the worker frees once the fence signals.
+/// <see cref="ClearTransients"/> and <see cref="ClearResource"/> keep cleanup idempotent.
 /// </remarks>
 internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
 {
     private int _finished;
     private int _canceled;
 
-    /// <summary>
-    /// Initializes an upload operation.
-    /// </summary>
-    /// <param name="upload">The retained upload description.</param>
-    /// <param name="device">The device that owns the submission and the created objects.</param>
-    /// <param name="submission">The submitted command pool and fence; default when no copy is needed.</param>
-    /// <param name="stagingBuffer">The staging buffer to free after the copy, or a default handle.</param>
-    /// <param name="stagingMemory">The staging memory to free after the copy, or a default handle.</param>
-    /// <param name="resource">The created destination resource.</param>
+    /// <summary>Initializes an upload operation.</summary>
     internal VulkanAssetUploadOperation(
         AssetGpuUpload upload,
         VulkanDevice device,
@@ -56,24 +36,17 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
     }
 
     /// <summary>
-    /// Gets the device that owns the submission. It is captured at begin time so cancellation never
-    /// touches a recreated device.
+    /// Gets the device captured at begin time, so cancellation never touches a recreated device.
     /// </summary>
     internal VulkanDevice Device { get; }
 
-    /// <summary>
-    /// Gets the submitted command pool and fence.
-    /// </summary>
+    /// <summary>Gets the submitted command pool and fence.</summary>
     internal VulkanAssetUploadCommands.UploadSubmission Submission { get; private set; }
 
-    /// <summary>
-    /// Gets the staging buffer, or a default handle when the upload records no GPU copy.
-    /// </summary>
+    /// <summary>Gets the staging buffer, or a default handle when no copy is recorded.</summary>
     internal Buffer StagingBuffer { get; private set; }
 
-    /// <summary>
-    /// Gets the staging memory, or a default handle when the upload records no GPU copy.
-    /// </summary>
+    /// <summary>Gets the staging memory, or a default handle when no copy is recorded.</summary>
     internal DeviceMemory StagingMemory { get; private set; }
 
     /// <summary>
@@ -81,36 +54,22 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
     /// </summary>
     internal bool HasCopy => Submission.Fence.Handle != 0;
 
-    /// <summary>
-    /// Gets the created destination resource. It is not in the worker's live set until the copy
-    /// finished or the worker canceled the operation.
-    /// </summary>
+    /// <summary>Gets the destination resource, or <see langword="null"/> once it was destroyed.</summary>
     internal VulkanAssetResource? Resource { get; private set; }
 
-    /// <summary>
-    /// Gets the failure the operation finished with, or <see langword="null"/>.
-    /// </summary>
+    /// <summary>Gets the failure the operation finished with, or <see langword="null"/>.</summary>
     internal Exception? Error { get; private set; }
 
-    /// <summary>
-    /// Gets whether the operation finished, successfully or with an error.
-    /// </summary>
+    /// <summary>Gets whether the operation finished, successfully or with an error.</summary>
     internal bool IsFinished => Volatile.Read(ref _finished) != 0;
 
-    /// <summary>
-    /// Gets whether the operation was canceled.
-    /// </summary>
+    /// <summary>Gets whether the operation was canceled.</summary>
     internal bool IsCanceled => Volatile.Read(ref _canceled) != 0;
 
-    /// <summary>
-    /// Marks the operation finished successfully.
-    /// </summary>
+    /// <summary>Marks the operation finished successfully.</summary>
     internal void MarkFinished() => Volatile.Write(ref _finished, 1);
 
-    /// <summary>
-    /// Marks the operation finished with an error.
-    /// </summary>
-    /// <param name="error">The failure to report to the bridge.</param>
+    /// <summary>Marks the operation finished with the given failure.</summary>
     internal void MarkFailed(Exception error)
     {
         ArgumentNullException.ThrowIfNull(error);
@@ -119,16 +78,10 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
         MarkFinished();
     }
 
-    /// <summary>
-    /// Marks the operation canceled so a repeated cancel is a no-op.
-    /// </summary>
-    /// <returns><see langword="true"/> for the first call; <see langword="false"/> afterwards.</returns>
+    /// <summary>Marks the operation canceled; only the first call returns <see langword="true"/>.</summary>
     internal bool TryMarkCanceled() => Interlocked.Exchange(ref _canceled, 1) == 0;
 
-    /// <summary>
-    /// Clears the staging and submission handles after the worker released them. A later
-    /// <see cref="IAssetGpuWorker.Cancel"/> then cannot destroy them twice.
-    /// </summary>
+    /// <summary>Clears the staging and submission handles after the worker freed them.</summary>
     internal void ClearTransients()
     {
         Submission = default;
@@ -136,8 +89,6 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
         StagingMemory = default;
     }
 
-    /// <summary>
-    /// Clears the destination resource after the worker destroyed it.
-    /// </summary>
+    /// <summary>Clears the destination resource after the worker destroyed it.</summary>
     internal void ClearResource() => Resource = null;
 }

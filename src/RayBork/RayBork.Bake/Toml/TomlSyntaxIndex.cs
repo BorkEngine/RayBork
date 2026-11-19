@@ -2,9 +2,7 @@ using Tomlyn.Syntax;
 
 namespace RayBork.Bake.Toml;
 
-/// <summary>
-/// Maps segment-aware TOML key paths to their syntax-tree spans and records duplicate keys.
-/// </summary>
+/// <summary>Maps segment-aware key paths to syntax spans and records duplicate keys.</summary>
 internal sealed class TomlSyntaxIndex
 {
     private readonly Dictionary<string, SourceSpan> _keySpans = new(StringComparer.Ordinal);
@@ -20,8 +18,6 @@ internal sealed class TomlSyntaxIndex
     internal IReadOnlyList<(string DisplayPath, SourceSpan Span)> Duplicates => _duplicates;
 
     /// <summary>Builds the span index for a parsed document.</summary>
-    /// <param name="document">The parsed TOML document.</param>
-    /// <returns>The span index.</returns>
     internal static TomlSyntaxIndex Create(DocumentSyntax document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -80,24 +76,14 @@ internal sealed class TomlSyntaxIndex
     }
 
     /// <summary>Looks up the key-token span for a path.</summary>
-    /// <param name="path">The path.</param>
-    /// <param name="span">The span when found.</param>
-    /// <returns><see langword="true"/> when the path has a key span.</returns>
     internal bool TryGetKeySpan(TomlPath path, out SourceSpan span) =>
         _keySpans.TryGetValue(path.Key, out span);
 
     /// <summary>Looks up the value-token span for a path.</summary>
-    /// <param name="path">The path.</param>
-    /// <param name="span">The span when found.</param>
-    /// <returns><see langword="true"/> when the path has a value span.</returns>
     internal bool TryGetValueSpan(TomlPath path, out SourceSpan span) =>
         _valueSpans.TryGetValue(path.Key, out span);
 
-    /// <summary>
-    /// Adds a span alias so a value moved out of a metadata table keeps its source location.
-    /// </summary>
-    /// <param name="alias">The path used by the binder.</param>
-    /// <param name="source">The original syntax path.</param>
+    /// <summary>Adds a span alias so a moved metadata value keeps its source location.</summary>
     internal void AddAlias(TomlPath alias, TomlPath source)
     {
         if (_keySpans.TryGetValue(source.Key, out SourceSpan keySpan))

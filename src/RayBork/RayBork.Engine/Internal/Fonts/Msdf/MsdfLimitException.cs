@@ -1,20 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// A controlled failure for an MSDF generation request that exceeds a documented defensive limit.
-/// </summary>
+/// <summary>An MSDF request that exceeds a defensive generation limit.</summary>
 /// <remarks>
-/// <para>
-/// The outline is not corrupt and the request is well formed; it is simply too large to generate in
-/// bounded time and memory. The reason always names the limit: <see cref="MsdfGenerator"/> caps the
-/// flattened edge count, the texture texel count, and the number of edge-texel pairs. The flattener's
-/// per-curve subdivision cap is a clamp rather than a failure, so it never raises this exception.
-/// </para>
-/// <para>
-/// The exception carries no state beyond <see cref="Reason"/> and is not serializable.
-/// <see cref="FontGlyphPipeline"/> treats it as a font-data failure: the glyph metrics fall back to
-/// the face advance with a zero quad and the glyph is never generated.
-/// </para>
+/// The outline is valid but too large for the bounded generator. <see cref="FontGlyphPipeline"/>
+/// treats it as a font-data failure and falls back to face metrics without generating a glyph.
 /// </remarks>
 internal sealed class MsdfLimitException : Exception
 {

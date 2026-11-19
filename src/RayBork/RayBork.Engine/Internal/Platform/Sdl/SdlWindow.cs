@@ -3,12 +3,11 @@ using SDL3;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The SDL3 window implementation. Getter snapshots may be read from any thread; every setter queues
-/// a command and every native SDL call happens on the main thread in
-/// <see cref="ApplyPendingCommands"/>. Tick-boundary flags are synchronized with the tick thread
-/// through a <see cref="Lock"/>.
-/// </summary>
+/// <summary>The SDL3 window implementation.</summary>
+/// <remarks>
+/// Snapshot getters are any-thread; setters queue commands, and SDL calls run on the main thread
+/// in <see cref="ApplyPendingCommands"/>.
+/// </remarks>
 internal sealed class SdlWindow : IPlatformWindow
 {
     private const float DEFAULT_DPI_SCALE = 1f;
@@ -89,9 +88,7 @@ internal sealed class SdlWindow : IPlatformWindow
         _cursorOnScreen = SDL.GetMouseFocus() == handle;
     }
 
-    /// <summary>
-    /// Gets the SDL3 window id used to filter window events.
-    /// </summary>
+    /// <summary>Gets the SDL3 window id used to filter window events.</summary>
     internal uint WindowId => _windowId;
 
     /// <inheritdoc />
@@ -388,9 +385,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
     }
 
-    /// <summary>
-    /// Applies every queued command on the main thread and reports whether any command was pending.
-    /// </summary>
+    /// <summary>Applies every queued command and reports whether any were pending.</summary>
     internal bool ApplyCommands()
     {
         bool applied = false;
@@ -403,9 +398,7 @@ internal sealed class SdlWindow : IPlatformWindow
         return applied;
     }
 
-    /// <summary>
-    /// Marks a resize for the next <see cref="BeginTick"/> without clearing a pending flag.
-    /// </summary>
+    /// <summary>Marks a resize for the next <see cref="BeginTick"/>.</summary>
     internal void MarkResizePending()
     {
         lock (_gate)
@@ -414,24 +407,17 @@ internal sealed class SdlWindow : IPlatformWindow
         }
     }
 
-    /// <summary>
-    /// Handles a resize-like window event on the main thread: refreshes the snapshot and marks the
-    /// resize for the next tick.
-    /// </summary>
+    /// <summary>Handles a resize-like event: refresh the snapshot and mark a resize.</summary>
     internal void HandleResizeEvent()
     {
         MarkResizePending();
         RefreshSnapshot();
     }
 
-    /// <summary>
-    /// Handles a window state, focus, or visibility event on the main thread.
-    /// </summary>
+    /// <summary>Handles a window state, focus, or visibility event.</summary>
     internal void HandleStateEvent() => RefreshSnapshot();
 
-    /// <summary>
-    /// Stores the Any-thread cursor-on-screen snapshot. Runs on the main thread.
-    /// </summary>
+    /// <summary>Stores the any-thread cursor-on-screen snapshot.</summary>
     internal void SetCursorOnScreen(bool onScreen)
     {
         lock (_gate)
@@ -440,14 +426,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
     }
 
-    /// <summary>
-    /// Refreshes the cursor-on-screen snapshot from the platform instead of assuming a value. Runs on
-    /// the main thread.
-    /// </summary>
-    /// <remarks>
-    /// The pointer is only on screen when SDL reports this window as the mouse focus and the native
-    /// window is neither minimized nor hidden. A focus change must not preserve a stale value.
-    /// </remarks>
+    /// <summary>Refreshes cursor-on-screen from SDL mouse focus and window visibility.</summary>
     internal void RefreshCursorOnScreen()
     {
         SDL.WindowFlags flags = SDL.GetWindowFlags(_handle);
@@ -455,30 +434,18 @@ internal sealed class SdlWindow : IPlatformWindow
         SetCursorOnScreen(!unavailable && SDL.GetMouseFocus() == _handle);
     }
 
-    /// <summary>
-    /// Cancels a pending engine fullscreen entry after SDL reports that the window left fullscreen,
-    /// then refreshes the snapshot. Runs on the main thread.
-    /// </summary>
-    /// <remarks>
-    /// The window manager can abandon an engine-requested entry before the compositor confirms it.
-    /// The leave event is the only notification that the transition will not complete, so the
-    /// engine must not wait for a confirmation that will never arrive. The cached kind is not
-    /// cleared here: SDL queues the leave event, so this handler can run after a newer entry has
-    /// already been confirmed in the same command drain. The trailing refresh keeps the kind for a
-    /// native fullscreen state and clears it for a windowed state with no pending entry, including
-    /// the abandoned entry this method cancels.
-    /// </remarks>
+    /// <summary>Cancels a pending engine fullscreen entry and refreshes the snapshot.</summary>
     internal void HandleFullscreenLeave()
     {
         _fullscreenEntryPending = false;
         RefreshSnapshot();
     }
 
-    /// <summary>
-    /// Marks the window close requested and invokes the exit callback once. Runs on the main thread.
-    /// The callback runs while the platform video gate is held; it must not call a gated platform
-    /// method such as Initialize, Pump, or Dispose.
-    /// </summary>
+    /// <summary>Marks close requested and invokes the exit callback once.</summary>
+    /// <remarks>
+    /// Runs on the main thread while the video gate is held; the callback must not call gated
+    /// platform methods such as <see cref="IEnginePlatform.Initialize"/>.
+    /// </remarks>
     internal void RequestClose()
     {
         bool shouldNotify;
@@ -494,10 +461,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
     }
 
-    /// <summary>
-    /// Applies the requested startup state and shows the window unless it starts hidden. Runs on the
-    /// main thread before the first event pump.
-    /// </summary>
+    /// <summary>Applies the startup state and shows the window unless it starts hidden.</summary>
     internal void ApplyStartupState(WindowState state)
     {
         if (!Enum.IsDefined(state))
@@ -543,9 +507,7 @@ internal sealed class SdlWindow : IPlatformWindow
         RefreshSnapshot();
     }
 
-    /// <summary>
-    /// Refreshes the Any-thread snapshot from the native window. Runs on the main thread.
-    /// </summary>
+    /// <summary>Refreshes the any-thread snapshot from the native window.</summary>
     internal void RefreshSnapshot()
     {
         int width = _width;
@@ -621,26 +583,13 @@ internal sealed class SdlWindow : IPlatformWindow
         }
     }
 
-    /// <summary>
-    /// Gets whether the cached fullscreen kind must be cleared after a snapshot. The kind survives a
-    /// native fullscreen confirmation and an engine entry that is still pending, and is cleared for a
-    /// windowed native state with no pending entry.
-    /// </summary>
+    /// <summary>Gets whether the cached fullscreen kind must be cleared after a snapshot.</summary>
     internal static bool ShouldClearFullscreenKind(bool nativeFullscreen, bool entryPending)
     {
         return !nativeFullscreen && !entryPending;
     }
 
-    /// <summary>
-    /// Gets whether the window is fullscreen, the live native Fullscreen flag is set, or an
-    /// engine-requested entry is still pending. Runs on the main thread.
-    /// </summary>
-    /// <remarks>
-    /// Some video drivers complete fullscreen transitions asynchronously, so a successful
-    /// SDL_SetWindowFullscreen(true) can leave the native flag unset until the compositor confirms.
-    /// The dummy test driver confirms synchronously. While an entry is pending, size and monitor
-    /// commands must be remembered for the windowed restore instead of being applied.
-    /// </remarks>
+    /// <summary>Gets whether fullscreen is active natively or through a pending entry.</summary>
     internal bool IsFullscreenActive()
     {
         bool snapshotFullscreen;

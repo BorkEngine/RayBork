@@ -5,21 +5,13 @@ using Silk.NET.Core.Loader;
 namespace RayBork.Tests;
 
 /// <summary>
-/// Owns one SDL Vulkan window, a direct surface provider, and an initialized
-/// <see cref="Vulkan12Backend"/> with a chosen <see cref="TonemappingMode"/>, for the HDR present
-/// probes.
+/// Owns an SDL Vulkan window, a direct surface provider, and an initialized
+/// <see cref="Vulkan12Backend"/> with a chosen <see cref="TonemappingMode"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="BackendTestHost"/> fixes AgX in its render settings. The HDR present probes also cover
-/// <see cref="TonemappingMode.None"/> as the direct HDR authoring path, so this host mirrors the same
-/// initialization, skip policy, and teardown order with a configurable tone-mapping mode.
-/// </para>
-/// <para>
-/// Every GPU test class runs in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL
-/// and Vulkan loader setup. The host exposes the backend, device, and instance as diagnostics, not
-/// renderer seam members.
-/// </para>
+/// The host mirrors <see cref="BackendTestHost"/> with a configurable tone-mapping mode so the HDR
+/// probes cover <see cref="TonemappingMode.None"/>. GPU test classes run in parallel;
+/// <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader setup.
 /// </remarks>
 internal sealed class HdrPresentTestHost : IDisposable
 {
@@ -60,13 +52,7 @@ internal sealed class HdrPresentTestHost : IDisposable
     /// <summary>Gets the render settings the host was created with.</summary>
     internal RenderSettings Settings => _settings;
 
-    /// <summary>
-    /// Creates the host for a GPU test, skipping the test when the host is environmentally
-    /// unavailable.
-    /// </summary>
-    /// <param name="tonemapping">The tone mapping the renderer applies.</param>
-    /// <param name="hdr">The window HDR state override.</param>
-    /// <param name="sampleCount">The requested MSAA sample count.</param>
+    /// <summary>Creates the host, or skips when the GPU host is unavailable.</summary>
     /// <returns>The created and initialized host.</returns>
     internal static HdrPresentTestHost CreateOrSkip(
         TonemappingMode tonemapping,
@@ -90,14 +76,7 @@ internal sealed class HdrPresentTestHost : IDisposable
         return host!;
     }
 
-    /// <summary>
-    /// Tries to create and initialize the host.
-    /// </summary>
-    /// <param name="host">The created host, or <see langword="null"/> when unavailable.</param>
-    /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
-    /// <param name="tonemapping">The tone mapping the renderer applies.</param>
-    /// <param name="hdr">The window HDR state override.</param>
-    /// <param name="sampleCount">The requested MSAA sample count.</param>
+    /// <summary>Tries to create and initialize the host.</summary>
     /// <returns><see langword="true"/> when the host was created.</returns>
     internal static bool TryCreate(
         out HdrPresentTestHost? host,

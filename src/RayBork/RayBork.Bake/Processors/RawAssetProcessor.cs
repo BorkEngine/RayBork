@@ -1,15 +1,12 @@
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The raw fallback processor: it copies any unclaimed non-TOML source to a raw pack entry.
-/// </summary>
+/// <summary>The raw fallback processor for unclaimed non-TOML sources.</summary>
 internal sealed class RawAssetProcessor : IAssetProcessor
 {
     /// <inheritdoc/>
     public string Name => "raw";
 
-    /// <inheritdoc/>
-    /// <remarks><c>*</c> is the registry's fallback marker, not a source suffix.</remarks>
+    /// <summary>Gets the fallback marker <c>*</c>, which is not a source suffix.</summary>
     public IReadOnlyList<string> Extensions => ["*"];
 
     /// <inheritdoc/>

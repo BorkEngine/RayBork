@@ -3,30 +3,17 @@ using System.Diagnostics.CodeAnalysis;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The built-in packed font format: it decodes the descriptor, reads the whole face payload, parses
-/// the sfnt face, and creates the per-font glyph pipeline.
+/// The built-in packed font format: it decodes the descriptor, reads the whole face, parses it, and
+/// creates the per-font glyph pipeline.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The format is stateless, so one shared instance serves every font load on the loader thread. The
-/// face is parsed once per load and retained by the pipeline; no glyph texture is generated here. A
-/// <c>Load&lt;Font&gt;</c> is therefore CPU-only and completes without a GPU upload.
-/// </para>
-/// <para>
-/// A face, payload, outline-source, or settings rejection is <see cref="AssetLoadException"/>
-/// <c>RB1011</c> and names the cause: an unavailable or wrong-length face payload, an invalid face, an
-/// unsupported outline source or parser feature, or invalid MSDF settings. A descriptor payload that
-/// MessagePack cannot deserialize is reported as <c>RB1008</c> by the catalog instead, because it never
-/// reaches the font validation. The runtime supports TrueType <c>glyf</c> and CFF 1.0 outlines; a CFF2
-/// face parses structurally but cannot resolve glyphs, so it is rejected at load with an
-/// unsupported-feature message instead of failing every glyph later.
-/// </para>
+/// The format is stateless and runs on the loader thread; a font load is CPU-only and never
+/// uploads to the GPU. Only TrueType <c>glyf</c> and CFF 1.0 outlines are supported, and a face,
+/// payload, outline, or MSDF rejection is an <see cref="AssetLoadException"/> <c>RB1011</c>.
 /// </remarks>
 internal sealed class FontAssetFormat : IEngineAssetFormat<Font>
 {
-    /// <summary>
-    /// The shared format instance.
-    /// </summary>
+    /// <summary>The shared format instance.</summary>
     internal static readonly FontAssetFormat Instance = new();
 
     private FontAssetFormat() { }

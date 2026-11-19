@@ -1,18 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Creates the coded exceptions the pack reader reports, with messages that always name the pack
-/// display path and, where available, the offending entry path.
-/// </summary>
+/// <summary>Creates the coded exceptions reported by the pack reader.</summary>
 internal static class PackFailure
 {
-    /// <summary>
-    /// A pack is missing, unreadable, or truncated before its header or index is complete.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="reason">The concrete failure.</param>
-    /// <param name="innerException">The underlying I/O failure, when there is one.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>A pack is missing, unreadable, or truncated before its header or index.</summary>
     internal static AssetPackException ReadFailed(
         string displayPath,
         string reason,
@@ -24,12 +15,7 @@ internal static class PackFailure
             innerException
         );
 
-    /// <summary>
-    /// A pack has an unsupported magic, version, or header flag.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="reason">The concrete failure.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>A pack has an unsupported magic, version, or header flag.</summary>
     internal static AssetPackException UnsupportedFormat(string displayPath, string reason) =>
         new(
             $"Asset pack '{displayPath}' uses an unsupported format: {reason}.",
@@ -37,13 +23,7 @@ internal static class PackFailure
             null
         );
 
-    /// <summary>
-    /// A pack index is structurally invalid.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="reason">The concrete failure.</param>
-    /// <param name="innerException">The underlying failure, when there is one.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>A pack index is structurally invalid.</summary>
     internal static AssetPackException InvalidIndex(
         string displayPath,
         string reason,
@@ -55,13 +35,7 @@ internal static class PackFailure
             innerException
         );
 
-    /// <summary>
-    /// The index hash does not match the index bytes.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="storedHash">The hash stored in the header.</param>
-    /// <param name="actualHash">The hash computed over the index bytes.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>The index hash does not match the index bytes.</summary>
     internal static AssetPackException IndexHashMismatch(
         string displayPath,
         uint storedHash,
@@ -74,14 +48,7 @@ internal static class PackFailure
             null
         );
 
-    /// <summary>
-    /// A stored payload hash does not match the index.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="entryPath">The canonical entry path.</param>
-    /// <param name="storedHash">The hash stored in the index.</param>
-    /// <param name="actualHash">The hash computed over the stored bytes.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>A stored payload hash does not match the index.</summary>
     internal static AssetLoadException PayloadHashMismatch(
         string displayPath,
         string entryPath,
@@ -95,14 +62,7 @@ internal static class PackFailure
             null
         );
 
-    /// <summary>
-    /// A stored payload could not be decompressed to its declared size.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="entryPath">The canonical entry path.</param>
-    /// <param name="reason">The concrete failure.</param>
-    /// <param name="innerException">The decoder failure, when there is one.</param>
-    /// <returns>The exception to throw.</returns>
+    /// <summary>A stored payload could not be decompressed to its declared size.</summary>
     internal static AssetLoadException PayloadDecodeFailed(
         string displayPath,
         string entryPath,

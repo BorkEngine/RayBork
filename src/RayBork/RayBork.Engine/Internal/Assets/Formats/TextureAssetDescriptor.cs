@@ -2,12 +2,9 @@ using PolyType;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The packed descriptor of a texture asset. Its payload is a KTX2 2.0 file in a sibling raw entry.
-/// </summary>
+/// <summary>The packed descriptor of a texture; its payload is a KTX2 2.0 file.</summary>
 /// <remarks>
-/// Paths are canonical pack paths without a leading slash. The descriptor is serialized as MessagePack
-/// with a compiled shape and never uses reflection.
+/// Paths are canonical pack paths without a leading slash, and the payload is a sibling raw entry.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class TextureAssetDescriptor

@@ -2,29 +2,16 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Selects and allocates the Vulkan device memory behind one uploaded asset resource.
-/// </summary>
+/// <summary>Selects and allocates device memory for one uploaded asset resource.</summary>
 /// <remarks>
-/// The worker asks for device-local memory for images and mesh buffers and host-visible coherent
-/// memory for staging. The memory type must satisfy the resource's <c>memoryTypeBits</c>; a device that
-/// offers no matching type is an upload failure (<c>RB1010</c>), never a fallback to a different
-/// resource. Uploads run on the render thread, so no member is thread-safe.
+/// Resources ask for device-local memory and staging for host-visible coherent memory; no matching
+/// type is an upload failure (<c>RB1010</c>), never a fallback. Render-thread only.
 /// </remarks>
 internal static unsafe class VulkanAssetMemory
 {
-    /// <summary>
-    /// Allocates device memory for one image or buffer.
-    /// </summary>
-    /// <param name="device">The device that owns the allocation.</param>
-    /// <param name="memoryProperties">The physical device's memory heap snapshot.</param>
-    /// <param name="requirements">The resource's memory requirements.</param>
-    /// <param name="requiredProperties">The memory properties the resource needs.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <param name="description">The resource description, for diagnostics.</param>
-    /// <returns>The allocated memory.</returns>
+    /// <summary>Allocates device memory for one image or buffer.</summary>
     /// <exception cref="AssetLoadException">
-    /// No memory type matches or the allocation failed. The diagnostic code is <c>RB1010</c>.
+    /// No memory type matches or the allocation failed (<c>RB1010</c>).
     /// </exception>
     internal static DeviceMemory Allocate(
         VulkanDevice device,
@@ -44,19 +31,9 @@ internal static unsafe class VulkanAssetMemory
             description
         );
 
-    /// <summary>
-    /// Allocates device memory for a combined resource such as a mesh's vertex and index buffers.
-    /// </summary>
-    /// <param name="device">The device that owns the allocation.</param>
-    /// <param name="memoryProperties">The physical device's memory heap snapshot.</param>
-    /// <param name="size">The allocation size in bytes.</param>
-    /// <param name="memoryTypeBits">The memory types the resource accepts.</param>
-    /// <param name="requiredProperties">The memory properties the resource needs.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <param name="description">The resource description, for diagnostics.</param>
-    /// <returns>The allocated memory.</returns>
+    /// <summary>Allocates one block for several related buffers.</summary>
     /// <exception cref="AssetLoadException">
-    /// No memory type matches or the allocation failed. The diagnostic code is <c>RB1010</c>.
+    /// No memory type matches or the allocation failed (<c>RB1010</c>).
     /// </exception>
     internal static DeviceMemory Allocate(
         VulkanDevice device,
@@ -95,17 +72,9 @@ internal static unsafe class VulkanAssetMemory
         return memory;
     }
 
-    /// <summary>
-    /// Finds a memory type that satisfies a resource's type bits and required properties.
-    /// </summary>
-    /// <param name="memoryTypeBits">The memory types the resource accepts.</param>
-    /// <param name="requiredProperties">The memory properties the resource needs.</param>
-    /// <param name="memoryProperties">The physical device's memory heap snapshot.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <param name="description">The resource description, for diagnostics.</param>
-    /// <returns>The memory type index.</returns>
+    /// <summary>Finds a memory type that satisfies the type bits and required properties.</summary>
     /// <exception cref="AssetLoadException">
-    /// No memory type satisfies the request. The diagnostic code is <c>RB1010</c>.
+    /// No memory type satisfies the request (<c>RB1010</c>).
     /// </exception>
     internal static uint FindMemoryType(
         uint memoryTypeBits,

@@ -5,15 +5,8 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Incremental;
 
-/// <summary>
-/// The loaded per-source incremental state for one invocation.
-/// </summary>
-/// <remarks>
-/// A cache is created only when the manifest schema, tool version, configuration hash, mode, pack
-/// list, and physical pack hashes all match. Any mismatch disables reuse and runs a full bake. The
-/// caller checks <see cref="IsUpToDate"/> before processing; otherwise each source with a valid hit
-/// can reuse its previous entries and only the misses run.
-/// </remarks>
+/// <summary>The loaded per-source incremental state for one invocation.</summary>
+/// <remarks>A cache needs matching schema, tool, configuration, mode, and pack hashes.</remarks>
 internal sealed class BakeIncrementalCache
 {
     private readonly Dictionary<(int PackIndex, string SourceId), CachedSource> _sources;
@@ -35,11 +28,7 @@ internal sealed class BakeIncrementalCache
     /// <summary>Gets a value indicating every current source and pack is unchanged.</summary>
     internal bool IsUpToDate { get; }
 
-    /// <summary>Loads a compatible cache and prepares every reusable source.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="options">The invocation options.</param>
-    /// <param name="sources">The current discovered sources.</param>
-    /// <returns>The cache, or <see langword="null"/> when a full bake is required.</returns>
+    /// <summary>Loads a compatible cache, or <see langword="null"/> for a full bake.</summary>
     internal static BakeIncrementalCache? TryCreate(
         BakeProject project,
         BakeOptions options,
@@ -204,10 +193,6 @@ internal sealed class BakeIncrementalCache
     }
 
     /// <summary>Tries to reuse the entries of one source.</summary>
-    /// <param name="pack">The source's pack.</param>
-    /// <param name="source">The source.</param>
-    /// <param name="cached">The cached source record when unchanged.</param>
-    /// <returns><see langword="true"/> when the source can be reused.</returns>
     internal bool TryGet(BakePack pack, BakeSource source, out CachedSource? cached)
     {
         ArgumentNullException.ThrowIfNull(pack);
@@ -216,10 +201,6 @@ internal sealed class BakeIncrementalCache
     }
 
     /// <summary>Tries to reuse the entries of one source by identifier.</summary>
-    /// <param name="pack">The source's pack.</param>
-    /// <param name="sourceId">The stable source identifier.</param>
-    /// <param name="cached">The cached source record when unchanged.</param>
-    /// <returns><see langword="true"/> when the source can be reused.</returns>
     internal bool TryGet(BakePack pack, string sourceId, out CachedSource? cached)
     {
         ArgumentNullException.ThrowIfNull(pack);
@@ -383,9 +364,6 @@ internal sealed class BakeIncrementalCache
 internal sealed class CachedSource
 {
     /// <summary>Initializes a cached source.</summary>
-    /// <param name="manifest">The previous source record.</param>
-    /// <param name="inputs">The verified input hashes.</param>
-    /// <param name="entries">The payloads read from the previous pack.</param>
     internal CachedSource(
         BakeManifestSource manifest,
         IReadOnlyList<BakeManifestInput> inputs,

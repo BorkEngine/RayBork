@@ -1,23 +1,16 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Chooses the graphics and presentation queue families for the logical device.
-/// </summary>
+/// <summary>Chooses the graphics and presentation queue families for the device.</summary>
 /// <remarks>
-/// Selection is pure so it can be unit tested without a GPU. When one family supports both
-/// operations, the device creates one queue for both; otherwise it creates one queue in the lowest
-/// graphics family and one in the lowest presentation family.
+/// A family supporting both operations provides both queues; otherwise the lowest graphics
+/// family and the lowest presentation family are used.
 /// </remarks>
 internal static class VulkanQueueFamilySelection
 {
-    /// <summary>
-    /// Selects the graphics and presentation queue-family indices.
-    /// </summary>
-    /// <param name="families">The queue-family facts, in Vulkan order.</param>
-    /// <returns>The selected graphics and presentation queue-family indices.</returns>
+    /// <summary>Selects the graphics and presentation queue-family indices.</summary>
     /// <exception cref="GraphicsException">
-    /// No family supports graphics or presentation. The message names the missing capability; the
-    /// diagnostic code is <c>RB3001</c>.
+    /// No family supports graphics or presentation; the message names the missing capability and
+    /// the code is <c>RB3001</c>.
     /// </exception>
     internal static (uint Graphics, uint Present) Select(
         IReadOnlyList<VulkanQueueFamilyInfo> families

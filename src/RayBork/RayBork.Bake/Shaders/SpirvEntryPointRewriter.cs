@@ -3,22 +3,10 @@ using System.Text;
 
 namespace RayBork.Bake.Shaders;
 
-/// <summary>
-/// Rewrites the name of one SPIR-V <c>OpEntryPoint</c> instruction.
-/// </summary>
+/// <summary>Rewrites the name of one SPIR-V <c>OpEntryPoint</c> instruction.</summary>
 /// <remarks>
-/// <para>
-/// shaderc ignores the entry point name for GLSL input and always compiles the source's <c>main</c>
-/// function. The shared compiler therefore renames the authoring entry point to <c>main</c> with a
-/// preprocessor macro before compilation and uses this helper to restore the requested name in the
-/// compiled module. The result is a module whose <c>OpEntryPoint</c> name is the fixed M3 entry point,
-/// which is what Vulkan pipeline creation consumes.
-/// </para>
-/// <para>
-/// The rewrite keeps the module's instruction stream valid: it replaces the target instruction with a
-/// new one whose word count covers the new null-terminated name and copies the interface list
-/// unchanged. The inspector validates the rewritten module before it reaches the pack.
-/// </para>
+/// The rewrite replaces the instruction with one whose word count covers the new null-terminated
+/// name and copies the interface list unchanged. The rewritten module is validated before packing.
 /// </remarks>
 internal static class SpirvEntryPointRewriter
 {
@@ -28,12 +16,6 @@ internal static class SpirvEntryPointRewriter
     private const int ENTRY_POINT_FIXED_WORD_COUNT = 3;
 
     /// <summary>Renames the module's entry point for one stage.</summary>
-    /// <param name="module">The compiled SPIR-V module bytes.</param>
-    /// <param name="executionModel">The execution model whose entry point is renamed.</param>
-    /// <param name="expectedName">The compiled entry point name.</param>
-    /// <param name="requestedName">The authoring entry point name to store.</param>
-    /// <param name="renamed">The rewritten module bytes when the rename succeeded.</param>
-    /// <param name="message">The failure reason when the rename did not happen.</param>
     /// <returns><see langword="true"/> when the entry point was renamed.</returns>
     internal static bool TryRename(
         ReadOnlySpan<byte> module,

@@ -1,34 +1,20 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when a pack is missing, truncated, has a bad magic or version, fails an integrity hash, or
-/// has an invalid index.
-/// </summary>
+/// <summary>Thrown when a pack is missing, truncated, corrupt, or has a bad index.</summary>
 /// <remarks>
-/// A pack passed to <c>RayBorkAppBuilder.WithAssetsPack</c> is validated when the app starts.
-/// A corrupt entry inside an otherwise valid pack is an <see cref="AssetLoadException"/> for that
-/// path instead.
+/// A pack passed to the app builder is validated at startup; a corrupt entry in a valid pack
+/// throws <see cref="AssetLoadException"/> for that path.
 /// </remarks>
 public sealed class AssetPackException : AssetException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetPackException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="AssetPackException"/>.</summary>
     public AssetPackException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetPackException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetPackException"/>.</summary>
     public AssetPackException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetPackException"/> class with a message and an
-    /// inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetPackException"/>.</summary>
     public AssetPackException(string message, Exception? innerException)
         : base(message, innerException) { }
 

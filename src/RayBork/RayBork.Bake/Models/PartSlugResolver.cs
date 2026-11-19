@@ -3,16 +3,11 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Sanitizes part names and allocates deterministic, collision-free part, payload, and collision paths.
-/// </summary>
+/// <summary>Sanitizes part names and allocates collision-free output paths.</summary>
 /// <remarks>
-/// A part contributes three output paths: <c>&lt;base&gt;/&lt;slug&gt;</c> for its mesh descriptor,
-/// <c>&lt;base&gt;/&lt;slug&gt;-mesh</c> for its vertex/index payload, and
-/// <c>&lt;base&gt;/&lt;slug&gt;-collision</c> for its baked ray-mesh collision payload. A second part
-/// whose slug is <c>&lt;slug&gt;-mesh</c> or <c>&lt;slug&gt;-collision</c> would collide with an
-/// earlier part's payload, so all three paths are reserved and checked together. The slug length cap
-/// leaves room for the longest suffix, <c>-collision</c>.
+/// Each part reserves <c>&lt;base&gt;/&lt;slug&gt;</c>, <c>&lt;base&gt;/&lt;slug&gt;-mesh</c>, and
+/// <c>&lt;base&gt;/&lt;slug&gt;-collision</c> together, so all three are checked for collisions. A
+/// slug is at most 64 characters.
 /// </remarks>
 internal sealed class PartSlugResolver
 {
@@ -33,9 +28,6 @@ internal sealed class PartSlugResolver
     }
 
     /// <summary>Creates a resolver for one model base path.</summary>
-    /// <param name="basePath">The canonical model base path.</param>
-    /// <param name="resolver">The resolver when the base path leaves room for a part.</param>
-    /// <param name="reason">The failure reason when the base path is too long.</param>
     /// <returns><see langword="true"/> when a resolver was created.</returns>
     internal static bool TryCreate(
         string basePath,
@@ -59,10 +51,6 @@ internal sealed class PartSlugResolver
     }
 
     /// <summary>Allocates the next part, payload, and collision paths.</summary>
-    /// <param name="name">The source name, or <see langword="null"/> when unnamed.</param>
-    /// <param name="meshPath">The canonical mesh descriptor path.</param>
-    /// <param name="payloadPath">The canonical mesh payload path.</param>
-    /// <param name="collisionPath">The canonical ray-mesh collision payload path.</param>
     /// <returns>The canonical part slug, used as the part name.</returns>
     internal string Allocate(
         string? name,
@@ -98,10 +86,7 @@ internal sealed class PartSlugResolver
         }
     }
 
-    /// <summary>Maps a source name to a canonical lowercase asset path segment.</summary>
-    /// <param name="name">The source name, or <see langword="null"/>.</param>
-    /// <param name="maxLength">The maximum segment length.</param>
-    /// <returns>A non-empty segment of <c>a-z0-9_-</c>.</returns>
+    /// <summary>Maps a source name to a non-empty lowercase segment of <c>a-z0-9_-</c>.</summary>
     internal static string Sanitize(string? name, int maxLength)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxLength, 1);

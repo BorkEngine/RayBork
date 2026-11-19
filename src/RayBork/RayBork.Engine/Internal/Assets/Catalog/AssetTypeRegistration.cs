@@ -4,18 +4,12 @@ namespace RayBork.Internal;
 /// One custom asset type registered with <see cref="RayBork.RayBorkAppBuilder.WithAssetType{T}"/>.
 /// </summary>
 /// <remarks>
-/// The registration binds the registered CLR type to the pack entry type and the loader that produce
-/// instances of it. The bake must register the same type independently; the runtime never scans
-/// assemblies. Registrations are immutable, so they are safe to share across threads.
+/// A registration binds the CLR type to the pack entry type and the loader that creates it; it is
+/// immutable and safe to share across threads. The bake registers the same type independently.
 /// </remarks>
 internal abstract class AssetTypeRegistration
 {
-    /// <summary>
-    /// Initializes a registration for one asset type.
-    /// </summary>
-    /// <param name="assetType">The registered CLR type.</param>
-    /// <param name="entryType">The pack entry type the registration accepts.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
+    /// <summary>Initializes a registration for one asset type.</summary>
     private protected AssetTypeRegistration(Type assetType, AssetEntryType entryType)
     {
         ArgumentNullException.ThrowIfNull(assetType);
@@ -24,13 +18,9 @@ internal abstract class AssetTypeRegistration
         EntryType = entryType;
     }
 
-    /// <summary>
-    /// Gets the registered CLR type.
-    /// </summary>
+    /// <summary>Gets the registered CLR type.</summary>
     internal Type AssetType { get; }
 
-    /// <summary>
-    /// Gets the pack entry type the registration accepts.
-    /// </summary>
+    /// <summary>Gets the pack entry type the registration accepts.</summary>
     internal AssetEntryType EntryType { get; }
 }

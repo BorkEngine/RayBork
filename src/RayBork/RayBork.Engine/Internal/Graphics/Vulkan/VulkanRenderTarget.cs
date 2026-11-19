@@ -3,35 +3,13 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// One render target: the color attachment (multisampled or single-sample), the single-sample resolved
-/// color image a shader samples, the optional depth attachment with its resolved depth image, and the
-/// render pass and framebuffer every camera pass renders into.
+/// One render target: its color and optional depth attachments, the single-sample images a shader
+/// samples, and the render pass and framebuffer every camera pass renders into.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The app scene target and a public <see cref="RenderTexture"/> are the same kind of resource. Every
-/// camera pass is its own render pass instance with a viewport-sized render area. The color and depth
-/// attachments load the previous pass' stored content and store their own, so a later camera with
-/// <see cref="ClearMode.None"/> sees the earlier pass' pixels and depth, and a camera that clears only
-/// touches its clamped viewport with <c>vkCmdClearAttachments</c>. A multisampled target resolves color
-/// and depth into their single-sample images for its render area only. Vulkan 1.2 performs the depth
-/// resolve through <c>VkSubpassDescriptionDepthStencilResolve</c> in a <c>vkCreateRenderPass2</c> render
-/// pass; a single-sample target has no resolve attachment because its depth image is the resolved depth.
-/// </para>
-/// <para>
-/// The scene target discards its content at the start of every frame, so a first camera that does not
-/// clear sees undefined content. A runtime render target keeps its content across frames: the target
-/// records the layout of its attachments, transitions the color and depth images to their attachment
-/// layouts before a writing pass, and transitions the single-sample resolved images to
-/// <c>ShaderReadOnlyOptimal</c> after the pass so a later camera can sample them. A later pass that
-/// writes the same target transitions the resolved images back. The caller waits for the previous frame
-/// that used a runtime target before it records a new use, so a frame never overwrites content another
-/// in-flight frame still reads.
-/// </para>
-/// <para>
-/// Every member is render-thread only. The caller recreates a target only after a device wait-idle and
-/// disposes it before the device. Dispose is idempotent.
-/// </para>
+/// A multisampled target resolves color and depth into the images shaders sample; a runtime target
+/// tracks their layouts and keeps content across frames. The scene target discards content at frame
+/// start; every member is render-thread only, and Dispose is idempotent.
 /// </remarks>
 internal sealed unsafe class VulkanRenderTarget : IDisposable
 {
@@ -110,16 +88,12 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     internal ImageView ResolvedColorView => _resolvedColorView;
 
     /// <summary>
-    /// Gets the color image view a store-back render pass attaches: the multisampled color attachment
-    /// for a multisampled target, or the single-sample resolved color image for a single-sample target.
+    /// Gets the color view a store-back pass attaches: the multisampled or resolved color image.
     /// </summary>
     internal ImageView ColorAttachmentView =>
         IsMultisampled ? _multisampledColorView : _resolvedColorView;
 
-    /// <summary>
-    /// Gets the single-sample depth image a shader samples. It is the depth attachment itself for a
-    /// single-sample target and the resolved depth image for a multisampled target.
-    /// </summary>
+    /// <summary>Gets the single-sample depth image a shader samples.</summary>
     internal Image ResolvedDepthImage => _resolvedDepthImage;
 
     /// <summary>Gets the single-sample depth image view a shader samples.</summary>
@@ -131,19 +105,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     /// <summary>Gets the current layout of the single-sample resolved depth image.</summary>
     internal ImageLayout ResolvedDepthLayout => _resolvedDepthLayout;
 
-    /// <summary>
-    /// Creates the target images, render pass, and framebuffer.
-    /// </summary>
-    /// <param name="device">The device that owns the target.</param>
-    /// <param name="extent">The positive target extent.</param>
-    /// <param name="sampleCount">The effective MSAA sample count.</param>
-    /// <param name="colorFormat">The color attachment and resolved color format.</param>
-    /// <param name="depth">Whether the target owns a depth attachment.</param>
-    /// <returns>The created target.</returns>
-    /// <exception cref="GraphicsException">
-    /// The device does not support the color format, or an image, image view, memory allocation, render
-    /// pass, or framebuffer could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates the target images, render pass, and framebuffer.</summary>
     internal static VulkanRenderTarget Create(
         VulkanDevice device,
         Extent2D extent,
@@ -185,9 +147,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
         }
     }
 
-    /// <summary>
-    /// Destroys the framebuffer, render pass, image views, images, and memory. The call is idempotent.
-    /// </summary>
+    /// <summary>Destroys every Vulkan object the target owns. The call is idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)
@@ -241,11 +201,9 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Transitions every attachment to its attachment layout from <c>Undefined</c>, discarding the
-    /// previous content. The scene target calls it once at the start of a frame.
+    /// Transitions every attachment to its attachment layout from <c>Undefined</c>, discarding the stored
+    /// content. The scene target calls it at the start of every frame.
     /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void DiscardContentAndTransitionToAttachments(Vk vulkan, CommandBuffer commandBuffer)
     {
         bool multisampled = IsMultisampled;
@@ -320,19 +278,11 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
         );
     }
 
-    /// <summary>
-    /// Transitions the color and depth images to their attachment layouts for a writing pass and
-    /// synchronizes them with the previous pass that wrote or sampled the target.
-    /// </summary>
+    /// <summary>Transitions the color and depth images to their attachment layouts.</summary>
     /// <remarks>
-    /// The method is also the between-pass barrier for two consecutive writing passes. It reads the
-    /// tracked layouts, so it covers the previous frame's write, a read in an earlier pass of the same
-    /// frame, and a resolve a previous pass wrote. A multisampled target transitions both the
-    /// multisampled depth attachment and the resolved depth image; the depth attachment is
-    /// synchronized only when the target has one.
+    /// It prepares a writing pass and is also the between-pass barrier: it reads the tracked layouts, so it
+    /// covers the previous frame's write, an earlier pass's read, and a resolve a previous pass wrote.
     /// </remarks>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void TransitionForWrite(Vk vulkan, CommandBuffer commandBuffer)
     {
         bool multisampled = IsMultisampled;
@@ -415,12 +365,9 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Transitions the single-sample resolved color and depth images to <c>ShaderReadOnlyOptimal</c>
-    /// after a writing pass, so a later camera can sample them and a later writing pass can transition
-    /// them back.
+    /// Returns the resolved color and depth images to <c>ShaderReadOnlyOptimal</c> after a writing pass so a
+    /// later camera can sample them.
     /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void TransitionResolvedToShaderRead(Vk vulkan, CommandBuffer commandBuffer)
     {
         bool colorReadable = _resolvedColorLayout == ImageLayout.ShaderReadOnlyOptimal;
@@ -471,24 +418,12 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
         );
     }
 
-    /// <summary>
-    /// Prepares the target's color images for a post-process store-back render pass.
-    /// </summary>
+    /// <summary>Prepares the target's color images for a post-process store-back pass.</summary>
     /// <remarks>
-    /// <para>
-    /// A store-back pass renders only color: a multisampled target attaches its multisampled color
-    /// attachment and resolves into the single-sample resolved color image; a single-sample target
-    /// attaches the resolved color image directly. The resolved color image is transitioned from its
-    /// current read layout to <c>ColorAttachmentOptimal</c> and a same-layout barrier orders the
-    /// multisampled attachment's previous camera-pass write before the pass load.
-    /// </para>
-    /// <para>
-    /// The depth images are untouched: the store-back writes the camera viewport's color only, and the
-    /// target's depth content stays exactly as the camera pass left it.
-    /// </para>
+    /// Only color is touched: a multisampled target attaches its multisampled color image and resolves into
+    /// the resolved color image, which moves to <c>ColorAttachmentOptimal</c>, and the depth content stays as
+    /// the camera pass left it.
     /// </remarks>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void PrepareStoreBack(Vk vulkan, CommandBuffer commandBuffer)
     {
         bool multisampled = IsMultisampled;
@@ -527,11 +462,9 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Returns the target's resolved color image to <c>ShaderReadOnlyOptimal</c> after a store-back
-    /// pass, so a later camera, the present pass, or a readback observes the post-processed content.
+    /// Returns the resolved color image to <c>ShaderReadOnlyOptimal</c> after a store-back pass so a later
+    /// camera, the present pass, or a readback sees the post-processed content.
     /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void CompleteStoreBack(Vk vulkan, CommandBuffer commandBuffer)
     {
         if (_resolvedColorLayout == ImageLayout.ShaderReadOnlyOptimal)
@@ -559,12 +492,9 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Prepares the resolved color and depth images for a sampling pass: transitions them to
-    /// <c>ShaderReadOnlyOptimal</c>, or synchronizes the previous frame's writes with the read when they
-    /// are already in that layout.
+    /// Transitions the resolved color and depth images to <c>ShaderReadOnlyOptimal</c> for a sampling pass,
+    /// or orders the previous frame's writes when they are already readable.
     /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
     internal void PrepareSampled(Vk vulkan, CommandBuffer commandBuffer)
     {
         Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[_hasDepth ? 2 : 1];

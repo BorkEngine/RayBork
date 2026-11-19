@@ -4,14 +4,12 @@ using RayBork.Bake.Processors;
 
 namespace RayBork.Bake.Incremental;
 
-/// <summary>Computes the deterministic builder-configuration hash recorded in the manifest.</summary>
+/// <summary>Computes the 64-character configuration hash recorded in the manifest.</summary>
 internal static class BakeConfigurationHash
 {
     private const string HASH_SHAPE = "raybork.bake.configuration.v1";
 
     /// <summary>Computes the configuration hash of a validated project.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <returns>The 64-character digest.</returns>
     internal static string Compute(BakeProject project)
     {
         ArgumentNullException.ThrowIfNull(project);

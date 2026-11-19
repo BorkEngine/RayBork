@@ -1,18 +1,11 @@
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The narrow bridge over the public required-sidecar base so the framework can create and invoke a
-/// typed sidecar without knowing its generic argument.
-/// </summary>
+/// <summary>A bridge over the required-sidecar base for a runtime-typed sidecar.</summary>
 internal interface ITypedAssetProcessor
 {
     /// <summary>Creates the in-memory default sidecar for a missing optional sidecar.</summary>
-    /// <param name="context">The per-source context.</param>
-    /// <returns>The default sidecar instance.</returns>
     object CreateDefaultSidecar(AssetProcessorContext context);
 
-    /// <summary>Processes one source with its bound sidecar.</summary>
-    /// <param name="context">The per-source context.</param>
-    /// <param name="sidecar">The bound sidecar instance.</param>
+    /// <summary>Processes one source with its bound sidecar instance.</summary>
     void Process(AssetProcessorContext context, object sidecar);
 }

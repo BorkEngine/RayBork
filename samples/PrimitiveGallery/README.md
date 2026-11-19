@@ -224,11 +224,11 @@ lavapipe ICD.
 - **Overload completeness.** The gallery shows one representative call per helper family instead of
   every overload. The start/end `DrawCylinder` form, the other `Transform` overloads, the non-facing
   billboard forms, and the billboard origin pivot are documented in
-  [docs/api/rendering/camera.md](../../docs/api/rendering/camera.md) and
-  [docs/api/rendering/draws.md](../../docs/api/rendering/draws.md).
+  [docs/cheatsheet.md](../../docs/cheatsheet.md#camera) and
+  [docs/cheatsheet.md](../../docs/cheatsheet.md#primitive-draws).
 - **Generated-mesh coverage.** The generated row shows five of the nine `Generate*` methods.
   `GeneratePoly`, `GeneratePlane`, `GenerateHemiSphere`, and `GenerateCylinder` are documented in
-  [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) and are not drawn, and the row
+  [docs/cheatsheet.md](../../docs/cheatsheet.md#meshbuilder) and are not drawn, and the row
   uses the default render state with no texture binding. `DrawInstanced`, `ComputeNormals`,
   `ComputeTangents`, and `GenerateCollisions` are likewise documented but not shown.
 - **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the M5 gate

@@ -4,79 +4,47 @@ namespace RayBork;
 /// A connected gamepad and its state for the current tick.
 /// </summary>
 /// <remarks>
-/// Read gamepad state on the tick thread. RayBork applies no deadzone and no trigger curve; games
-/// choose their own.
+/// Read on the tick thread. RayBork applies no deadzone or trigger curve; games choose their own.
 /// </remarks>
 public interface IGamepad
 {
-    /// <summary>
-    /// Gets the position of this pad in <see cref="IInput.Gamepads"/> for the current tick. The value
-    /// can change across a hotplug.
-    /// </summary>
+    /// <summary>Gets this pad's index in <see cref="IInput.Gamepads"/>; hotplug moves it.</summary>
     int Index { get; }
 
     /// <summary>
-    /// Gets the device instance id, which is stable for the lifetime of the connected device. Use it
-    /// for per-device state.
+    /// Gets the device instance id, stable while connected, for per-device state.
     /// </summary>
     int InstanceId { get; }
 
-    /// <summary>
-    /// Gets the device name reported by the platform.
-    /// </summary>
+    /// <summary>Gets the platform-reported device name.</summary>
     string Name { get; }
 
-    /// <summary>
-    /// Gets whether the device is still connected.
-    /// </summary>
+    /// <summary>Gets whether the device is still connected.</summary>
     bool IsConnected { get; }
 
-    /// <summary>
-    /// Determines whether a button is held down.
-    /// </summary>
-    /// <param name="button">The button to test.</param>
-    /// <returns><see langword="true"/> while the button is down.</returns>
+    /// <summary>Gets whether a button is held down.</summary>
     bool IsButtonDown(GamepadButton button);
 
-    /// <summary>
-    /// Determines whether a button was pressed during the current tick.
-    /// </summary>
-    /// <param name="button">The button to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a button was pressed this tick.</summary>
     bool IsButtonPressed(GamepadButton button);
 
-    /// <summary>
-    /// Determines whether a button was released during the current tick.
-    /// </summary>
-    /// <param name="button">The button to test.</param>
-    /// <returns><see langword="true"/> for exactly one tick.</returns>
+    /// <summary>Gets whether a button was released this tick.</summary>
     bool IsButtonReleased(GamepadButton button);
 
-    /// <summary>
-    /// Gets the raw value of an analog stick axis.
-    /// </summary>
-    /// <param name="axis">The axis to read.</param>
-    /// <returns>The axis value in the range <c>[-1, 1]</c>, with no deadzone applied.</returns>
+    /// <summary>Gets an analog stick axis in <c>[-1, 1]</c>, with no deadzone.</summary>
     float GetAxis(GamepadAxis axis);
 
-    /// <summary>
-    /// Gets the raw value of an analog trigger.
-    /// </summary>
-    /// <param name="trigger">The trigger to read.</param>
-    /// <returns>The trigger value in the range <c>[0, 1]</c>.</returns>
+    /// <summary>Gets an analog trigger in <c>[0, 1]</c>, with no curve.</summary>
     float GetTrigger(GamepadTrigger trigger);
 
     /// <summary>
-    /// Requests vibration for the given duration. Rumble is best effort; an unsupported device logs
-    /// at Debug and ignores the call. The request is queued to the platform.
+    /// Queues best-effort vibration for the given duration; unsupported devices log at Debug.
     /// </summary>
-    /// <param name="lowFrequency">The low-frequency motor intensity in the range <c>[0, 1]</c>.</param>
-    /// <param name="highFrequency">The high-frequency motor intensity in the range <c>[0, 1]</c>.</param>
+    /// <param name="lowFrequency">The low-frequency intensity in <c>[0, 1]</c>.</param>
+    /// <param name="highFrequency">The high-frequency intensity in <c>[0, 1]</c>.</param>
     /// <param name="seconds">The duration in seconds.</param>
     void SetVibration(float lowFrequency, float highFrequency, double seconds);
 
-    /// <summary>
-    /// Stops vibration. The request is queued to the platform.
-    /// </summary>
+    /// <summary>Queues a request to stop vibration.</summary>
     void StopVibration();
 }

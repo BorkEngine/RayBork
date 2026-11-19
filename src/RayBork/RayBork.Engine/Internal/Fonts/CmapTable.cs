@@ -3,27 +3,11 @@ using System.Text;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The selected Unicode <c>cmap</c> subtable of a face and its codepoint lookup.
-/// </summary>
+/// <summary>The selected Unicode <c>cmap</c> subtable and its codepoint lookup.</summary>
 /// <remarks>
-/// <para>
-/// The selected subtable is one of formats 0, 4, 6, or 12. Selection is deterministic: a
-/// Unicode-encoded subtable wins over a symbol or legacy one, and within that group format 12 is
-/// preferred over 4, 6, and 0, then the full-repertoire encodings over the BMP encodings, then
-/// directory order. A face with no supported subtable fails to parse. A symbol or legacy subtable is
-/// used only when the face has no Unicode subtable, and its codepoints are then looked up unchanged.
-/// </para>
-/// <para>
-/// Lookups are read-only over the retained face bytes, allocate nothing, and take O(log segments) or
-/// O(log groups) time. A mapping to glyph 0 (the <c>.notdef</c> glyph) or to an identifier that is not
-/// below <c>numGlyphs</c> is treated as unmapped, as is an indirect format 4 reference that points
-/// outside its subtable. The mapped-glyph count excludes surrogate codepoints so it is comparable
-/// across subtable formats.
-/// </para>
-/// <para>
-/// The instance is immutable after construction and safe to read from any thread without locks.
-/// </para>
+/// Formats 0, 4, 6, and 12 are chosen deterministically: Unicode subtables win, then format 12,
+/// 4, 6, and 0, followed by full-repertoire over BMP encodings and directory order. A mapping to
+/// glyph 0 or past <c>numGlyphs</c> is unmapped, and the instance is immutable and thread-safe.
 /// </remarks>
 internal sealed class CmapTable
 {
@@ -66,27 +50,14 @@ internal sealed class CmapTable
     /// <summary>Gets the selected subtable format: 0, 4, 6, or 12.</summary>
     internal int Format => _format;
 
-    /// <summary>
-    /// Gets the number of codepoints that map to a nonzero glyph identifier below <c>numGlyphs</c>.
-    /// Surrogate codepoints (U+D800..U+DFFF) are excluded because no <see cref="Rune"/> can represent
-    /// them, so the count means the same thing for every supported subtable format.
-    /// </summary>
+    /// <summary>Gets the mapped-glyph count, excluding surrogate codepoints.</summary>
     internal int MappedGlyphCount => _mappedGlyphCount;
 
-    /// <summary>Resolves a Unicode scalar value to a glyph identifier.</summary>
-    /// <param name="rune">The Unicode scalar value.</param>
-    /// <param name="glyphId">The glyph identifier, or zero when the codepoint is unmapped.</param>
-    /// <returns><see langword="true"/> when the codepoint maps to a real glyph.</returns>
+    /// <summary>Resolves a Unicode scalar value to a real glyph identifier, if mapped.</summary>
     internal bool TryGetGlyphId(Rune rune, out int glyphId) =>
         TryGetGlyphId(rune.Value, out glyphId);
 
     /// <summary>Parses and selects the face's Unicode cmap subtable.</summary>
-    /// <param name="cmap">The complete <c>cmap</c> table bytes.</param>
-    /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
-    /// <returns>The selected subtable and its lookup.</returns>
-    /// <exception cref="FontFormatException">
-    /// The table, the selected subtable, or its segments are malformed or unsupported.
-    /// </exception>
     internal static CmapTable Parse(ReadOnlyMemory<byte> cmap, int glyphCount)
     {
         SfntReader reader = new(cmap.Span, "the 'cmap' table");

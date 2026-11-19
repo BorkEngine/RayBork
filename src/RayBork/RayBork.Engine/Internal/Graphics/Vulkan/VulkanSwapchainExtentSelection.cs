@@ -6,21 +6,14 @@ namespace RayBork.Internal;
 /// Chooses the swapchain image extent from the surface capabilities and the window's render size.
 /// </summary>
 /// <remarks>
-/// The policy is pure so it can be unit tested without a GPU. A surface that defines its current
-/// extent fixes the swapchain size; a surface that leaves the extent to the swapchain uses the
-/// requested render size clamped to the supported range. The result is never smaller than one by one.
+/// A defined current extent fixes the size; otherwise the render size is clamped to the supported
+/// range. The result is never smaller than one by one.
 /// </remarks>
 internal static class VulkanSwapchainExtentSelection
 {
     private const uint UNDEFINED_EXTENT = uint.MaxValue;
 
-    /// <summary>
-    /// Selects the swapchain image extent.
-    /// </summary>
-    /// <param name="capabilities">The surface capabilities.</param>
-    /// <param name="renderWidth">The requested physical render width in pixels.</param>
-    /// <param name="renderHeight">The requested physical render height in pixels.</param>
-    /// <returns>The selected extent, which is always at least one by one pixel.</returns>
+    /// <summary>Selects the extent, which is always at least one by one pixel.</summary>
     internal static Extent2D Select(
         SurfaceCapabilitiesKHR capabilities,
         int renderWidth,

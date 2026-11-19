@@ -1,29 +1,14 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// A custom asset type registration backed by an <see cref="IAssetLoader{T}"/>.
-/// </summary>
+/// <summary>A custom asset type registration backed by an <see cref="IAssetLoader{T}"/>.</summary>
 /// <remarks>
-/// The registration is immutable. The loader it holds is stateless and thread-safe, so the catalog
-/// can call it from its loader thread for every load of the type. The failure description is the
-/// message fragment the catalog inserts when the loader fails with an exception that is not an asset
-/// exception; custom data overrides it so a MessagePack failure keeps the custom-data wording.
+/// The registration is immutable and its loader is stateless and thread-safe, so the catalog may call
+/// it from the loader thread. The failure description is inserted when a loader fails with an
+/// exception that is not an asset exception.
 /// </remarks>
-/// <typeparam name="T">The registered custom asset type.</typeparam>
 internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration
 {
-    /// <summary>
-    /// Initializes a registration from a loader.
-    /// </summary>
-    /// <param name="loader">The loader that creates instances of <typeparamref name="T"/>.</param>
-    /// <param name="failureDescription">
-    /// The description inserted into a wrapped loader failure. The default is
-    /// <c>"could not be loaded"</c>.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="loader"/> or <paramref name="failureDescription"/> is <c>null</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException"><paramref name="failureDescription"/> is empty or whitespace.</exception>
+    /// <summary>Initializes a registration from a loader.</summary>
     internal LoaderAssetTypeRegistration(
         IAssetLoader<T> loader,
         string failureDescription = "could not be loaded"
@@ -36,15 +21,10 @@ internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration
         FailureDescription = failureDescription;
     }
 
-    /// <summary>
-    /// Gets the loader that creates instances of <typeparamref name="T"/>.
-    /// </summary>
+    /// <summary>Gets the loader that creates instances of the registered type.</summary>
     internal IAssetLoader<T> Loader { get; }
 
-    /// <summary>
-    /// Gets the description the catalog inserts when it wraps a loader failure that is not an asset
-    /// exception.
-    /// </summary>
+    /// <summary>Gets the message fragment inserted when a loader failure is wrapped.</summary>
     internal string FailureDescription { get; }
 
     private static AssetEntryType GetEntryType(IAssetLoader<T> loader)

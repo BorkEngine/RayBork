@@ -2,48 +2,16 @@ using System.Numerics;
 
 namespace RayBork;
 
-/// <summary>
-/// One part of a multi-part <see cref="Model"/>: a mesh, its material, and the part-local transform.
-/// </summary>
+/// <summary>One part of a <see cref="Model"/>: a mesh, material, and local transform.</summary>
 /// <remarks>
-/// <para>
-/// A model is a flat list of parts; it has no node hierarchy. glTF node transforms are baked into
-/// <see cref="LocalTransform"/>, which is applied before the draw's instance transform:
-/// <c>world = LocalTransform.ToMatrix() * instanceTransform.ToMatrix()</c> under the row-vector
-/// convention. A draw never composes transforms through <see cref="Transform.WithParent"/>, which can
-/// throw on shear.
-/// </para>
-/// <para>
-/// <see cref="Shader"/> is the part material and is never <see langword="null"/>. The material starts
-/// with the program's bake-default uniform values, and a draw snapshots its current uniform cursor and
-/// texture bindings at call time. A <see cref="Model"/> takes ownership of every distinct part
-/// material and disposes it with the model; construct one material per part.
-/// </para>
-/// <para>
-/// <see cref="Bounds"/> is computed from <see cref="Mesh.Bounds"/> transformed by
-/// <see cref="LocalTransform"/>; it is the axis-aligned box of the eight transformed corners and is not
-/// passed in. It is model-space bounds after the part's local transform.
-/// </para>
+/// The local transform applies before the draw's instance transform. A <see cref="Model"/> takes
+/// ownership of every distinct part material and disposes it with the model.
 /// </remarks>
 public readonly struct ModelPart
 {
-    /// <summary>
-    /// Initializes a part from its name, mesh, and material.
-    /// </summary>
-    /// <param name="name">The part name from the source scene.</param>
-    /// <param name="mesh">The shared mesh asset.</param>
-    /// <param name="shader">The part material; the model takes ownership of it.</param>
-    /// <param name="renderState">
-    /// The render state for this part, or <see langword="null"/> for
-    /// <see cref="Shader.DefaultRenderState"/>.
-    /// </param>
-    /// <param name="localTransform">
-    /// The part-local transform, or <see langword="null"/> for <see cref="Transform.Identity"/>.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="name"/>, <paramref name="mesh"/>, or <paramref name="shader"/> is <c>null</c>.
-    /// </exception>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or whitespace.</exception>
+    /// <summary>Initializes a part from a name, mesh, material, and options.</summary>
+    /// <remarks>Null state and transform use the material default and identity.</remarks>
+    /// <exception cref="ArgumentException">The name is blank or an argument is invalid.</exception>
     /// <exception cref="ObjectDisposedException">The mesh or material is disposed.</exception>
     public ModelPart(
         string name,
@@ -70,22 +38,19 @@ public readonly struct ModelPart
     /// <summary>Gets the part name from the source scene.</summary>
     public string Name { get; }
 
-    /// <summary>Gets the mesh asset for the part. The model holds one owner reference to it.</summary>
+    /// <summary>Gets the mesh; the model holds one owner reference to it.</summary>
     public Mesh Mesh { get; }
 
-    /// <summary>Gets the material for the part. The model owns it and disposes it with the model.</summary>
+    /// <summary>Gets the material; the model owns and disposes it with the model.</summary>
     public Shader Shader { get; }
 
-    /// <summary>
-    /// Gets the render state used for the part. A <see langword="null"/> constructor argument resolved to
-    /// the material's default render state.
-    /// </summary>
+    /// <summary>Gets the render state used for the part.</summary>
     public RenderState RenderState { get; }
 
-    /// <summary>Gets the part-local transform, applied before the draw's instance transform.</summary>
+    /// <summary>Gets the part-local transform, applied before the instance transform.</summary>
     public Transform LocalTransform { get; }
 
-    /// <summary>Gets the model-space bounds of the part, after its local transform.</summary>
+    /// <summary>Gets the model-space bounds after the local transform.</summary>
     public BoundingBox Bounds { get; }
 
     private static BoundingBox TransformBounds(BoundingBox bounds, Matrix4x4 matrix)

@@ -12,12 +12,7 @@ internal static class BakeDataBinder
     private const string METADATA_TABLE = "raybork";
     private const string TYPE_KEY = "type";
 
-    /// <summary>Binds one data source.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="source">The data source.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="entry">The emitted data entry, when successful.</param>
-    /// <returns><see langword="true"/> when the source bound and validated.</returns>
+    /// <summary>Binds one data source, emitting its entry only when validators pass.</summary>
     internal static bool TryBind(
         BakeProject project,
         BakeSource source,

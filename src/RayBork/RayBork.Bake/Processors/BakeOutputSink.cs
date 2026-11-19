@@ -3,9 +3,7 @@ using RayBork.Bake.Diagnostics;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// Collects and validates the outputs of one processor source.
-/// </summary>
+/// <summary>Collects and validates the outputs of one processor source.</summary>
 internal sealed class BakeOutputSink : IAssetOutputSink
 {
     private readonly List<BakedEntry> _outputs = [];
@@ -16,10 +14,6 @@ internal sealed class BakeOutputSink : IAssetOutputSink
     private readonly BakeDiagnostics _diagnostics;
 
     /// <summary>Initializes a source output sink.</summary>
-    /// <param name="sourceId">The stable source identifier.</param>
-    /// <param name="sourcePath">The diagnostic source path.</param>
-    /// <param name="processorName">The owning processor name.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
     internal BakeOutputSink(
         string sourceId,
         string sourcePath,

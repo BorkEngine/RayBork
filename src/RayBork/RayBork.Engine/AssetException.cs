@@ -1,32 +1,17 @@
 namespace RayBork;
 
-/// <summary>
-/// The base class for asset pipeline failures that carry a stable diagnostic code.
-/// </summary>
-/// <remarks>
-/// Lifecycle and argument errors use the standard BCL exception types instead. Catch a derived type
-/// when the failure category matters, or catch this type for any asset pipeline failure.
-/// </remarks>
+/// <summary>The base class for asset pipeline failures that carry a diagnostic code.</summary>
+/// <remarks>Lifecycle and argument errors use the standard BCL exception types.</remarks>
 public class AssetException : RayBorkException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="AssetException"/>.</summary>
     public AssetException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetException"/>.</summary>
     public AssetException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetException"/> class with a message and an
-    /// inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetException"/>.</summary>
     public AssetException(string message, Exception? innerException)
         : base(message, innerException) { }
 

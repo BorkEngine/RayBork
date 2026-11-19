@@ -6,32 +6,16 @@ using GltfMesh = SharpGLTF.Schema2.Mesh;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Reads a static glTF 2.0 or GLB source into parts with their composed node transforms.
-/// </summary>
+/// <summary>Reads a static glTF or GLB source into parts with their node transforms.</summary>
 /// <remarks>
-/// <para>
-/// The default scene is flattened depth-first. Every mesh primitive becomes one part; a mesh with
-/// several primitives appends the one-based primitive index to the part name. The part transform is
-/// the node's composed world matrix, decomposed to position, rotation, and scale. When a node matrix
-/// contains shear and cannot be represented as TRS, the matrix is baked into the mesh, the part
-/// transform becomes identity, and a warning is reported.
-/// </para>
-/// <para>
-/// Skins and morph targets are rejected because their rest-pose geometry is ambiguous without an
-/// animation system. Animations, cameras, and lights are non-mesh data and are ignored with one
-/// warning each. External <c>.gltf</c> buffers and images are tracked inputs when they exist; a
-/// missing buffer is an error and a missing image is a warning.
-/// </para>
+/// The default scene is flattened depth-first and every mesh primitive becomes one part, with a
+/// one-based suffix when a mesh has several. Skins and morph targets are rejected; animations,
+/// cameras, and lights are ignored with warnings.
 /// </remarks>
 internal static class GltfModelReader
 {
     /// <summary>Reads one glTF or GLB source.</summary>
-    /// <param name="sourcePath">The absolute source path.</param>
-    /// <param name="warning">The warning sink.</param>
-    /// <param name="addInput">The tracked-input sink.</param>
     /// <returns>The non-empty part list.</returns>
-    /// <exception cref="ModelReadException">The source is invalid or contains unsupported data.</exception>
     internal static IReadOnlyList<ModelPartSource> Read(
         string sourcePath,
         Action<string> warning,

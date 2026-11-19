@@ -1,13 +1,9 @@
 namespace RayBork;
 
-/// <summary>
-/// The GPU format of a packed texture asset.
-/// </summary>
+/// <summary>The GPU format of a packed texture asset.</summary>
 /// <remarks>
-/// Packed color textures are usually <see cref="Bc7Srgb"/>; linear data textures use
-/// <see cref="Bc7Unorm"/>, <see cref="Bc5Unorm"/>, or <see cref="R8Unorm"/>. The uncompressed formats
-/// are the lossless fallback and the format used by generated textures. <see cref="Rgba16Float"/> and
-/// <see cref="Depth32Float"/> are render-target formats, not ordinary packed texture formats.
+/// Packed color textures are usually <see cref="Bc7Srgb"/>; uncompressed formats are the lossless
+/// fallback. <see cref="Rgba16Float"/> and <see cref="Depth32Float"/> are render-target formats.
 /// </remarks>
 public enum TextureFormat
 {

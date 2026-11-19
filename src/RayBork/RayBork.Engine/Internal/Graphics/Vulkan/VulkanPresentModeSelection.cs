@@ -6,12 +6,9 @@ namespace RayBork.Internal;
 /// The native present mode selected for the swapchain and its public projection.
 /// </summary>
 /// <remarks>
-/// <see cref="Public"/> is the effective mode reported by <see cref="EngineInfo.PresentMode"/>, and
-/// <see cref="FellBack"/> records that the requested mode was unavailable so the caller can warn.
+/// <see cref="Public"/> is the effective mode reported by <see cref="EngineInfo.PresentMode"/>;
+/// <see cref="FellBack"/> records a substituted mode so the caller can warn.
 /// </remarks>
-/// <param name="Native">The selected Vulkan present mode.</param>
-/// <param name="Public">The selected public present mode.</param>
-/// <param name="FellBack">Whether the requested mode was unavailable and a fallback was used.</param>
 internal readonly record struct VulkanPresentModeChoice(
     PresentModeKHR Native,
     PresentMode Public,
@@ -22,26 +19,15 @@ internal readonly record struct VulkanPresentModeChoice(
 /// Chooses the swapchain present mode from the modes the window surface advertises.
 /// </summary>
 /// <remarks>
-/// The policy is pure so it can be unit tested without a GPU. Mailbox and FIFO fall back to each
-/// other because every surface must advertise at least FIFO and a window without both cannot present
-/// without tearing; immediate mode never falls back because tearing is only used when it was
-/// explicitly requested.
+/// Mailbox and FIFO fall back to each other; a surface advertising neither cannot present without
+/// tearing. Immediate never falls back because tearing is only used when explicitly requested.
 /// </remarks>
 internal static class VulkanPresentModeSelection
 {
-    /// <summary>
-    /// Selects the effective present mode.
-    /// </summary>
-    /// <param name="available">The present modes the surface advertises.</param>
-    /// <param name="requested">The present mode the app requested.</param>
-    /// <returns>The native mode, the public mode, and whether a fallback was used.</returns>
+    /// <summary>Selects the effective present mode.</summary>
+    /// <returns>The native mode, public mode, and whether a fallback was used.</returns>
     /// <exception cref="GraphicsException">
-    /// The surface advertises neither FIFO nor mailbox for a queued request, or the requested
-    /// immediate mode is unavailable. The message names the requested and supported modes and the
-    /// diagnostic code is <c>RB3001</c>.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="requested"/> is not a defined <see cref="PresentMode"/> value.
+    /// The requested mode cannot be satisfied; the diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal static VulkanPresentModeChoice Select(
         IReadOnlyList<PresentModeKHR> available,

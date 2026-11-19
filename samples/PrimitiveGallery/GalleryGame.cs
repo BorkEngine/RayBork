@@ -4,19 +4,12 @@ using RayBork;
 namespace PrimitiveGallery;
 
 /// <summary>
-/// A small orbitable gallery that draws every M5 primitive helper and the procedural mesh path in one
-/// scene camera pass: a reference grid, two rows of solid, wire, line, and textured shapes, a middle
-/// row of generated meshes, and the family pairs that show the completed M5 overloads. A later HUD
-/// camera draws the status line over the scene.
+/// An orbitable gallery of every primitive helper and the procedural mesh path, with a HUD status
+/// line.
 /// </summary>
 /// <remarks>
-/// The world helpers run along the initial view's horizontal axis, so the three rows read left to
-/// right before the first orbit. The lower row runs along the grid and pairs each solid shape with
-/// its wire or tessellated family form. The middle row builds five shapes with <see cref="MeshBuilder"/>
-/// and draws them through a caller-owned mesh material. The upper row groups the wire, line, curve,
-/// ray, and billboard helpers. The scene is procedural: the texture and the generated meshes are built
-/// in <see cref="Setup"/>, and every asset is disposed in <see cref="Shutdown"/>, so the sample needs
-/// no assets executable or pack.
+/// The scene is procedural and needs no asset pack. Drag to orbit, the wheel zooms, and A toggles
+/// SSAO.
 /// </remarks>
 internal sealed class GalleryGame : IGame
 {
@@ -59,10 +52,7 @@ internal sealed class GalleryGame : IGame
     private float _distance;
     private int _frameCount;
 
-    /// <summary>
-    /// Creates the gallery and starts the camera at the same framing it keeps before the first orbit.
-    /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
+    /// <summary>Creates the gallery with the camera at its initial framing.</summary>
     internal GalleryGame(int frameLimit)
     {
         _frameLimit = frameLimit;
@@ -400,15 +390,7 @@ internal sealed class GalleryGame : IGame
     private Vector3 Station(float offset, float height) =>
         (_galleryRight * offset) + (Vector3.UnitY * height);
 
-    /// <summary>
-    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance line at the top-left
-    /// of the view.
-    /// </summary>
-    /// <remarks>
-    /// The line is screen-aligned and drawn on a plane <see cref="OVERLAY_DISTANCE"/> world unit in
-    /// front of the HUD camera. That camera clears depth after the scene pass, so gallery geometry
-    /// cannot occlude the line.
-    /// </remarks>
+    /// <summary>Draws the status statistics at the top-left of the view.</summary>
     private void DrawStatusOverlay(Camera camera, EngineContext context)
     {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local

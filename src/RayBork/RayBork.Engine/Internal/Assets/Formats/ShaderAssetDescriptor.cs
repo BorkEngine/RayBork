@@ -2,22 +2,17 @@ using PolyType;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The packed descriptor of a shader asset. Its stage modules are sibling raw entries.
-/// </summary>
+/// <summary>The packed shader descriptor; its stage modules are sibling raw entries.</summary>
 /// <remarks>
-/// The descriptor records the compiled SPIR-V modules, entry points, reflected metadata declared by
-/// the bake sidecar, the default render state, and the shader ABI version the modules were generated
-/// for. The frame and instance block layouts are documented in the API reference.
+/// The descriptor records the compiled modules, entry points, reflected metadata, default render state,
+/// and shader ABI version.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class ShaderAssetDescriptor
 {
     /// <summary>Gets the shader ABI version the bake wrote the descriptor with.</summary>
     /// <remarks>
-    /// The runtime accepts only <see cref="ShaderAbiNames.ABI_VERSION"/>. The member is optional so a
-    /// descriptor baked before the version existed still deserializes with the default zero and is
-    /// rejected with the rebake diagnostic instead of a serialization failure.
+    /// The runtime accepts only <see cref="ShaderAbiNames.ABI_VERSION"/>, rejecting older descriptors.
     /// </remarks>
     public int AbiVersion { get; init; }
 

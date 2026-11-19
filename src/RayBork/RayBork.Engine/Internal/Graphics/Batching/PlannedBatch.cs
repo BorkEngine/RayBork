@@ -1,30 +1,21 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// One submission-ready batch: every instance shares the mesh, internal shader program, render state,
-/// topology, and polygon mode.
-/// </summary>
-/// <remarks>
-/// A batch appears in <see cref="PassPlan.Batches"/> in submission order. Opaque batches keep their
-/// first-record order; transparent batches and their instances are sorted back-to-front. A batch that
-/// exceeded a <see cref="BatchPlanningOptions"/> limit is split into several batches that preserve
-/// instance order.
-/// </remarks>
+/// <summary>One submission-ready batch sharing mesh, program, render state, topology, and polygon
+/// mode.</summary>
+/// <remarks>Batches follow pass submission order, and split batches preserve instance order.</remarks>
 internal sealed class PlannedBatch
 {
     private readonly List<PlannedInstance> _instances;
 
-    /// <summary>
-    /// Initializes a planned batch.
-    /// </summary>
+    /// <summary>Initializes a planned batch.</summary>
     /// <param name="mesh">The mesh asset shared by every instance.</param>
     /// <param name="program">The internal shader program asset shared by every instance.</param>
     /// <param name="renderState">The effective render state shared by every instance.</param>
     /// <param name="topology">The mesh topology.</param>
-    /// <param name="wireframe">Whether the batch rasterizes with the polygon-mode-line state.</param>
+    /// <param name="wireframe">Whether the batch uses the polygon-mode-line pipeline.</param>
     /// <param name="instances">The ordered instances, already in submission order.</param>
     /// <param name="nearestDepth">The depth of the nearest instance in the batch.</param>
-    /// <exception cref="ArgumentNullException">An asset is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException">An asset or instance list is <c>null</c>.</exception>
     internal PlannedBatch(
         EngineAsset mesh,
         EngineAsset program,
@@ -48,7 +39,7 @@ internal sealed class PlannedBatch
         NearestDepth = nearestDepth;
     }
 
-    /// <summary>Gets the mesh asset. Read its GPU resource from the asset lifetime for the draw.</summary>
+    /// <summary>Gets the mesh asset; read its GPU resource from the asset lifetime for the draw.</summary>
     internal EngineAsset Mesh { get; }
 
     /// <summary>Gets the internal shader program asset shared by the batch.</summary>
@@ -60,10 +51,7 @@ internal sealed class PlannedBatch
     /// <summary>Gets the mesh topology.</summary>
     internal PrimitiveTopology Topology { get; }
 
-    /// <summary>
-    /// Gets whether the batch creates its geometry pipeline with the polygon-mode-line state instead
-    /// of the filled state.
-    /// </summary>
+    /// <summary>Gets whether the batch uses the polygon-mode-line pipeline instead of the filled one.</summary>
     internal bool Wireframe { get; }
 
     /// <summary>Gets the number of instances in this batch.</summary>

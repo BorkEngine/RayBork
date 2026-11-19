@@ -5,30 +5,12 @@ namespace RayBork.Internal;
 /// and sampler state.
 /// </summary>
 /// <remarks>
-/// Unlike <see cref="TextureGpuUpload"/>, the payload is not KTX2. A <see cref="TextureBuilder"/>
-/// produces the complete chain base level first in one contiguous buffer; <see cref="LevelByteLengths"/>
-/// gives each level's stored byte length so the worker records one copy per level without parsing a
-/// container format. The level data is retained with the upload for device recovery.
+/// The payload is not KTX2: one contiguous mip chain, base level first, with per-level lengths.
+/// Level data is retained for device recovery.
 /// </remarks>
 internal sealed class ProceduralTextureGpuUpload : AssetGpuUpload
 {
-    /// <summary>
-    /// Initializes a procedural texture upload.
-    /// </summary>
-    /// <param name="path">The canonical synthetic asset path without a leading slash.</param>
-    /// <param name="width">The base-level width in pixels.</param>
-    /// <param name="height">The base-level height in pixels.</param>
-    /// <param name="format">The uncompressed storage format.</param>
-    /// <param name="filter">The sampler filter.</param>
-    /// <param name="wrap">The sampler address mode.</param>
-    /// <param name="maxAnisotropy">The requested maximum anisotropy.</param>
-    /// <param name="pixelData">Every mip level, base level first, tightly packed and contiguous.</param>
-    /// <param name="levelByteLengths">The stored byte length of each level, base level first.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is not positive.</exception>
-    /// <exception cref="ArgumentException">
-    /// The format is not a procedural format, or the level lengths do not describe the pixel buffer.
-    /// </exception>
+    /// <summary>Initializes a procedural texture upload.</summary>
     internal ProceduralTextureGpuUpload(
         string path,
         int width,
@@ -101,49 +83,31 @@ internal sealed class ProceduralTextureGpuUpload : AssetGpuUpload
         LevelByteLengths = levelByteLengths.ToArray();
     }
 
-    /// <summary>
-    /// Gets the base-level width in pixels.
-    /// </summary>
+    /// <summary>Gets the base-level width in pixels.</summary>
     internal int Width { get; }
 
-    /// <summary>
-    /// Gets the base-level height in pixels.
-    /// </summary>
+    /// <summary>Gets the base-level height in pixels.</summary>
     internal int Height { get; }
 
-    /// <summary>
-    /// Gets the uncompressed storage format.
-    /// </summary>
+    /// <summary>Gets the uncompressed storage format.</summary>
     internal TextureFormat Format { get; }
 
-    /// <summary>
-    /// Gets the sampler filter.
-    /// </summary>
+    /// <summary>Gets the sampler filter.</summary>
     internal TextureFilter Filter { get; }
 
-    /// <summary>
-    /// Gets the sampler address mode.
-    /// </summary>
+    /// <summary>Gets the sampler address mode.</summary>
     internal TextureWrap Wrap { get; }
 
-    /// <summary>
-    /// Gets the requested maximum anisotropy.
-    /// </summary>
+    /// <summary>Gets the requested maximum anisotropy.</summary>
     internal float MaxAnisotropy { get; }
 
-    /// <summary>
-    /// Gets every mip level, base level first, tightly packed and contiguous.
-    /// </summary>
+    /// <summary>Gets every mip level, base level first and tightly packed.</summary>
     internal ReadOnlyMemory<byte> PixelData { get; }
 
-    /// <summary>
-    /// Gets the stored byte length of each level, base level first.
-    /// </summary>
+    /// <summary>Gets the stored byte length of each level, base level first.</summary>
     internal ReadOnlyMemory<int> LevelByteLengths { get; }
 
-    /// <summary>
-    /// Gets the number of mip levels.
-    /// </summary>
+    /// <summary>Gets the number of mip levels.</summary>
     internal int MipLevels => LevelByteLengths.Length;
 
     /// <inheritdoc/>

@@ -8,34 +8,13 @@ using RayBork.Tests.Rendering;
 namespace RayBork.Tests;
 
 /// <summary>
-/// Builds the engine's real primitive assets from the built-in pack through the production GPU asset
-/// bridge and worker, records camera passes through a real <see cref="CameraService"/>, and submits
-/// them to a real <see cref="Vulkan12Backend"/>.
+/// Loads the engine's real primitive assets from the built-in pack through a production GPU asset
+/// bridge and records camera passes through a real <see cref="CameraService"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The harness mirrors the app startup order: it creates the GPU asset bridge and worker, mounts the
-/// built-in pack in a started <see cref="AssetCatalog"/>, pumps the bridge on the test thread until
-/// <see cref="PrimitiveAssets.LoadAsync"/> completes, and attaches the loaded primitives to the camera
-/// service. It never sleeps: every upload and build is completed by the worker while the test pumps
-/// the bridge.
-/// </para>
-/// <para>
-/// The camera service records into a detached <see cref="RenderFramePacket"/>, so the camera helpers
-/// take the same tick-thread path as <c>IGame.Tick</c>. Every submitted frame is waited to idleness
-/// and its retention set is released before the harness returns, so the next frame and the teardown
-/// observe no in-flight asset holds.
-/// </para>
-/// <para>
-/// The harness also loads fonts from the mounted built-in pack and warms their glyph textures through
-/// the catalog's real generation service, pumping the GPU bridge while it waits. The fonts it loads are
-/// released before the catalog stops.
-/// </para>
-/// <para>
-/// Disposal runs in reverse creation order: idle wait, camera host, fonts, test textures, primitive
-/// assets, catalog, GPU bridge, backend. The harness owns the textures and fonts it creates and
-/// disposes them exactly once.
-/// </para>
+/// The harness owns the GPU bridge, catalog, assets, and every texture and font it creates, and
+/// disposes them exactly once. Every wait pumps the bridge on the test thread; the harness never
+/// sleeps.
 /// </remarks>
 internal sealed class PrimitiveDrawGpuHarness : IDisposable
 {
@@ -90,10 +69,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
     /// <summary>Gets the linear scene target height in pixels.</summary>
     internal uint Height => _host.SceneTarget.Extent.Height;
 
-    /// <summary>
-    /// Gets the loaded engine primitive assets, so a test can build a <see cref="Model"/> over an
-    /// engine mesh and a material over an engine program.
-    /// </summary>
+    /// <summary>Gets the loaded engine primitive assets.</summary>
     /// <exception cref="ObjectDisposedException">The harness is disposed.</exception>
     internal PrimitiveAssets Primitives
     {
@@ -105,8 +81,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
     }
 
     /// <summary>
-    /// Creates the backend and loads the real primitive assets, or skips the test when the GPU host is
-    /// environmentally unavailable.
+    /// Creates the backend and loads the real assets, or skips when the GPU host is unavailable.
     /// </summary>
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <returns>The initialized harness.</returns>
@@ -191,26 +166,20 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Builds a procedural texture through the catalog's procedural asset service and waits for its
-    /// GPU upload on the test thread.
-    /// </summary>
+    /// <summary>Creates a procedural texture and waits for its GPU upload.</summary>
     /// <param name="width">The base-level width in pixels.</param>
     /// <param name="height">The base-level height in pixels.</param>
-    /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
-    /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
+    /// <param name="pixels">The linear RGBA colors in row-major order.</param>
+    /// <returns>The uploaded texture, owned and disposed by the harness.</returns>
     internal Texture CreateTexture(int width, int height, params Color[] pixels) =>
         CreateTexture(width, height, _defaultSampler, pixels);
 
-    /// <summary>
-    /// Builds a procedural texture with an explicit sampler and waits for its GPU upload on the test
-    /// thread.
-    /// </summary>
+    /// <summary>Creates a procedural texture with an explicit sampler and waits for its upload.</summary>
     /// <param name="width">The base-level width in pixels.</param>
     /// <param name="height">The base-level height in pixels.</param>
     /// <param name="sampler">The sampler state; use a linear filter for a sampled gradient.</param>
-    /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
-    /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
+    /// <param name="pixels">The linear RGBA colors in row-major order.</param>
+    /// <returns>The uploaded texture, owned and disposed by the harness.</returns>
     internal Texture CreateTexture(
         int width,
         int height,
@@ -234,15 +203,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         return texture;
     }
 
-    /// <summary>
-    /// Loads a font from the harness's mounted catalog and waits for its CPU decode on the test thread.
-    /// </summary>
+    /// <summary>Loads a font from the mounted catalog and waits for its CPU decode.</summary>
     /// <param name="path">The canonical font path; the built-in Fira Sans face by default.</param>
-    /// <returns>The loaded font; the harness owns it.</returns>
-    /// <remarks>
-    /// A font load is CPU-only, but the wait still pumps the GPU bridge so a queued font-thread upload
-    /// from an earlier warm-up can complete. The load itself never blocks the loader thread on the GPU.
-    /// </remarks>
+    /// <returns>The loaded font, owned by the harness.</returns>
     internal Font LoadFont(string path = EngineDefaults.DEFAULT_FONT_PATH)
     {
         AssertNotDisposed();
@@ -262,17 +225,11 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         return font;
     }
 
-    /// <summary>
-    /// Requests every glyph of <paramref name="text"/> and waits until each one has a generated texture.
-    /// </summary>
+    /// <summary>Requests every glyph of the text and waits until each has a generated texture.</summary>
     /// <param name="font">The loaded font.</param>
-    /// <param name="text">The text whose glyphs the test needs ready before it records a draw.</param>
+    /// <param name="text">The text the test needs ready.</param>
     /// <param name="frameIndex">The frame index to begin the font's cache clock at.</param>
-    /// <remarks>
-    /// The font thread runs the real MSDF generator and the production procedural texture factory, so
-    /// the test thread pumps the bridge while it waits for the settlement task. Every wait is bounded by
-    /// the harness timeout and there is no sleep or poll of the generated cache.
-    /// </remarks>
+    /// <remarks>The waits pump the GPU bridge and are bounded by the harness timeout.</remarks>
     internal void WarmGlyphs(Font font, string text, long frameIndex = 1)
     {
         AssertNotDisposed();
@@ -316,19 +273,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records one perspective camera pass and submits it to the backend.
-    /// </summary>
-    /// <param name="record">The camera draw calls.</param>
-    /// <param name="transform">The camera transform, or <see langword="null"/> for the origin.</param>
-    /// <param name="clearColor">The linear clear color, or <see langword="null"/> for opaque black.</param>
-    /// <param name="fieldOfView">The vertical field of view in degrees.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The far clip distance; positive infinity is allowed.</param>
-    /// <param name="postProcess">The post-process stack to snapshot, or <see langword="null"/>.</param>
-    /// <param name="target">
-    /// The render texture the camera writes, or <see langword="null"/> for the app scene target.
-    /// </param>
+    /// <summary>Records one perspective camera pass and submits it to the backend.</summary>
     /// <returns>The sealed packet that was submitted.</returns>
     internal RenderFramePacket SubmitPerspective(
         Action<Camera> record,
@@ -361,14 +306,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         });
     }
 
-    /// <summary>
-    /// Records two sequential perspective camera passes and submits them as one frame.
-    /// </summary>
-    /// <param name="first">The first camera's draw calls.</param>
-    /// <param name="firstTransform">The first camera transform, or <see langword="null"/> for the origin.</param>
-    /// <param name="second">The second camera's draw calls.</param>
-    /// <param name="secondTransform">The second camera transform, or <see langword="null"/> for the origin.</param>
-    /// <param name="clearColor">The linear clear color both passes use.</param>
+    /// <summary>Records two sequential perspective passes and submits them as one frame.</summary>
     /// <returns>The sealed packet that was submitted.</returns>
     internal RenderFramePacket SubmitPerspectivePair(
         Action<Camera> first,
@@ -417,19 +355,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         });
     }
 
-    /// <summary>
-    /// Records one orthographic camera pass and submits it to the backend.
-    /// </summary>
-    /// <param name="record">The camera draw calls.</param>
-    /// <param name="transform">The camera transform, or <see langword="null"/> for the origin.</param>
-    /// <param name="clearColor">The linear clear color, or <see langword="null"/> for opaque black.</param>
-    /// <param name="height">The visible world-space height.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The finite far clip distance.</param>
-    /// <param name="postProcess">The post-process stack to snapshot, or <see langword="null"/>.</param>
-    /// <param name="target">
-    /// The render texture the camera writes, or <see langword="null"/> for the app scene target.
-    /// </param>
+    /// <summary>Records one orthographic camera pass and submits it to the backend.</summary>
     /// <returns>The sealed packet that was submitted.</returns>
     internal RenderFramePacket SubmitOrthographic(
         Action<Camera> record,
@@ -462,9 +388,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         });
     }
 
-    /// <summary>
-    /// Reads one resolved linear scene color pixel.
-    /// </summary>
+    /// <summary>Reads one resolved linear scene color pixel.</summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
     /// <returns>The linear RGB values.</returns>
@@ -483,9 +407,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable
         return (r, g, b);
     }
 
-    /// <summary>
-    /// Reads one resolved linear color pixel from a runtime render target.
-    /// </summary>
+    /// <summary>Reads one resolved linear color pixel from a runtime render target.</summary>
     /// <param name="target">The render texture to read.</param>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>

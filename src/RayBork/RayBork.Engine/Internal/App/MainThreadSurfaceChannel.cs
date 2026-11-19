@@ -3,23 +3,13 @@ using System.Diagnostics.CodeAnalysis;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The app's <see cref="IRendererSurfaceProvider"/>: it marshals native Vulkan surface creation and
-/// destruction from the render thread to the main thread that owns the platform window.
+/// Marshals native Vulkan surface creation and destruction from the render thread to the main
+/// thread that owns the window.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Ownership is split by thread: the render thread owns the Vulkan instance and device, the main
-/// thread owns the window and the native surface, and the platform surface operations are never
-/// called from the render thread. The render thread enqueues one request, signals the main thread,
-/// and blocks until the main thread serviced it, the channel closed, or the bounded wait expired.
-/// </para>
-/// <para>
-/// The main thread calls <see cref="TryService"/> from its pump loop during startup, the main loop,
-/// and shutdown. One request is serviced per call and the platform is called on the servicing
-/// thread. When a platform call fails, the failure is captured and rethrown on the render thread as
-/// a <see cref="GraphicsException"/>. <see cref="Close"/> wakes a waiting render thread with a
-/// failure result and prevents further requests.
-/// </para>
+/// The render thread enqueues one request and blocks until the main thread services it, the channel
+/// closes, or the wait times out. <see cref="TryService"/> captures platform failures into the
+/// request result instead of throwing.
 /// </remarks>
 internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
 {
@@ -33,8 +23,7 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// The channel is closed, the main thread did not service the request in time, or the platform
-    /// failed to create the surface. The diagnostic code is <c>RB3001</c>.
+    /// The channel is closed, the wait timed out, or the platform failed; <c>RB3001</c>.
     /// </exception>
     public IntPtr CreateSurface(IntPtr instance)
     {
@@ -53,8 +42,7 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// The channel is closed, the main thread did not service the request in time, or the platform
-    /// failed to destroy the surface. The diagnostic code is <c>RB3001</c>.
+    /// The channel is closed, the wait timed out, or the platform failed; <c>RB3001</c>.
     /// </exception>
     public void DestroySurface(IntPtr instance, IntPtr surface)
     {
@@ -71,15 +59,9 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
         Send(new SurfaceRequest(SurfaceOperation.Destroy, instance, surface));
     }
 
-    /// <summary>
-    /// Services at most one pending request by calling the platform on the calling main thread.
-    /// </summary>
-    /// <remarks>
-    /// Captures platform failures into the request result instead of throwing them. A closed channel
-    /// has no pending request to service and returns <see langword="false"/>.
-    /// </remarks>
+    /// <summary>Services at most one pending request on the calling main thread.</summary>
     /// <param name="platform">The initialized platform that owns the window.</param>
-    /// <returns><see langword="true"/> when a request was serviced; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> when a request was serviced.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="platform"/> is <c>null</c>.</exception>
     [SuppressMessage(
         "Design",
@@ -131,10 +113,7 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
         return true;
     }
 
-    /// <summary>
-    /// Closes the channel, wakes a waiting render thread with a failure result, and prevents further
-    /// requests. Idempotent and safe from any thread.
-    /// </summary>
+    /// <summary>Closes the channel, failing a pending request; idempotent.</summary>
     public void Close()
     {
         SurfaceRequest? pending;

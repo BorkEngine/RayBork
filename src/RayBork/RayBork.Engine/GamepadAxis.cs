@@ -1,27 +1,17 @@
 namespace RayBork;
 
-/// <summary>
-/// Identifies a gamepad analog stick axis. Values match the SDL3 axis indices.
-/// </summary>
+/// <summary>Identifies a gamepad analog stick axis.</summary>
 public enum GamepadAxis
 {
-    /// <summary>
-    /// The horizontal axis of the left stick.
-    /// </summary>
+    /// <summary>The left stick's horizontal axis.</summary>
     LeftX = 0,
 
-    /// <summary>
-    /// The vertical axis of the left stick.
-    /// </summary>
+    /// <summary>The left stick's vertical axis.</summary>
     LeftY = 1,
 
-    /// <summary>
-    /// The horizontal axis of the right stick.
-    /// </summary>
+    /// <summary>The right stick's horizontal axis.</summary>
     RightX = 2,
 
-    /// <summary>
-    /// The vertical axis of the right stick.
-    /// </summary>
+    /// <summary>The right stick's vertical axis.</summary>
     RightY = 3,
 }

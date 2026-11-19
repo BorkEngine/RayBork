@@ -3,24 +3,14 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// One target-sized single-sample <c>Rgba16Float</c> post-process color target and its color-only
-/// render pass framebuffer, bindless slot, and store-back descriptor set.
+/// One target-sized single-sample <c>Rgba16Float</c> post target with its framebuffer, bindless
+/// slot, and store-back descriptor set.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The post chain rotates through three of these per extent and frame slot, so an effect samples the
-/// previous pass' output, writes a target that is not the current chain source, and a prior effect's
-/// output remains intact. Every effect pass covers the whole extent, so the render pass
-/// uses <c>DontCare</c> load and stores the result; the tracked layout starts <c>Undefined</c>, moves to
-/// <c>ColorAttachmentOptimal</c> for a write, and returns to <c>ShaderReadOnlyOptimal</c> so the next
-/// effect or the store-back samples it.
-/// </para>
-/// <para>
-/// The bindless slot lets a custom effect sample the target through the shader ABI's reserved
-/// <c>sourceColor</c> binding. The dedicated descriptor set lets the engine store-back pass sample the
-/// final target through its own single-sampler layout. Render-thread only; the caller waits for the
-/// device to be idle when it destroys a target.
-/// </para>
+/// The post chain rotates three targets per extent and frame slot, so an effect samples the previous
+/// pass' output while writing a different target. The layout moves from <c>Undefined</c> to
+/// <c>ColorAttachmentOptimal</c> for a write and back to <c>ShaderReadOnlyOptimal</c> so the next
+/// effect or the store-back can sample it.
 /// </remarks>
 internal sealed unsafe class VulkanPostTarget : IDisposable
 {
@@ -53,7 +43,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable
     /// <summary>Gets the bindless slot that exposes the image to a custom effect shader.</summary>
     internal uint BindlessSlot => _bindlessSlot;
 
-    /// <summary>Gets the descriptor set the engine store-back pass binds when this target is final.</summary>
+    /// <summary>Gets the descriptor set the store-back pass binds for a final target.</summary>
     internal DescriptorSet StoreBackSet => _storeBackSet;
 
     /// <summary>Gets the target extent in pixels.</summary>
@@ -62,22 +52,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable
     /// <summary>Gets the tracked image layout.</summary>
     private ImageLayout Layout { get; set; } = ImageLayout.Undefined;
 
-    /// <summary>
-    /// Creates the image, memory, view, framebuffer, bindless slot, and store-back descriptor set for
-    /// one post target.
-    /// </summary>
-    /// <param name="device">The device that owns the resources.</param>
-    /// <param name="extent">The positive target extent.</param>
-    /// <param name="postRenderPass">The shared single-sample post render pass.</param>
-    /// <param name="bindless">The bindless table that exposes the image to custom effects.</param>
-    /// <param name="storeBack">The store-back pipeline set that owns the descriptor layout and sampler.</param>
-    /// <returns>The created post target.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="extent"/> has a zero dimension.</exception>
-    /// <exception cref="GraphicsException">
-    /// An image, memory, view, framebuffer, or descriptor could not be created. The diagnostic code is
-    /// <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates all resources for one post target.</summary>
     internal static VulkanPostTarget Create(
         VulkanDevice device,
         Extent2D extent,
@@ -111,11 +86,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable
         }
     }
 
-    /// <summary>
-    /// Transitions the image to <c>ColorAttachmentOptimal</c> for a writing pass.
-    /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
+    /// <summary>Transitions the image to <c>ColorAttachmentOptimal</c> for a writing pass.</summary>
     internal void TransitionToColorAttachment(Vk vulkan, CommandBuffer commandBuffer)
     {
         if (Layout == ImageLayout.ColorAttachmentOptimal)
@@ -146,12 +117,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable
         Layout = ImageLayout.ColorAttachmentOptimal;
     }
 
-    /// <summary>
-    /// Transitions the image to <c>ShaderReadOnlyOptimal</c> after a writing pass so the next effect or
-    /// the store-back can sample it.
-    /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
+    /// <summary>Transitions the image to <c>ShaderReadOnlyOptimal</c> for sampling.</summary>
     internal void TransitionToShaderRead(Vk vulkan, CommandBuffer commandBuffer)
     {
         if (Layout == ImageLayout.ShaderReadOnlyOptimal)
@@ -175,10 +141,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable
         Layout = ImageLayout.ShaderReadOnlyOptimal;
     }
 
-    /// <summary>
-    /// Destroys the store-back descriptor pool, framebuffer, view, image, memory, and bindless slot.
-    /// The call is idempotent.
-    /// </summary>
+    /// <summary>Destroys the resources and releases the bindless slot; idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)

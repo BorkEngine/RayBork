@@ -15,9 +15,7 @@ internal static class BakeManifestStore
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Gets the incremental state directory under a project root.</summary>
-    /// <param name="projectRoot">The absolute project root.</param>
-    /// <returns>The <c>obj/raybork/bake</c> directory.</returns>
+    /// <summary>Gets the <c>obj/raybork/bake</c> state directory under a project root.</summary>
     internal static string Directory(string projectRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
@@ -25,14 +23,10 @@ internal static class BakeManifestStore
     }
 
     /// <summary>Gets the manifest path under a project root.</summary>
-    /// <param name="projectRoot">The absolute project root.</param>
-    /// <returns>The manifest path.</returns>
     internal static string ManifestPath(string projectRoot) =>
         Path.Combine(Directory(projectRoot), "manifest.json");
 
-    /// <summary>Tries to read and validate a manifest.</summary>
-    /// <param name="path">The manifest path.</param>
-    /// <returns>The manifest, or <see langword="null"/> when it is missing or unusable.</returns>
+    /// <summary>Reads a manifest, or <see langword="null"/> when missing or unusable.</summary>
     internal static BakeManifest? TryRead(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -60,10 +54,7 @@ internal static class BakeManifestStore
         }
     }
 
-    /// <summary>Tries to write a manifest atomically.</summary>
-    /// <param name="path">The manifest path.</param>
-    /// <param name="manifest">The manifest.</param>
-    /// <returns><see langword="true"/> when the target now holds the manifest.</returns>
+    /// <summary>Writes a manifest atomically; <see langword="false"/> on failure.</summary>
     internal static bool TryWrite(string path, BakeManifest manifest)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

@@ -5,36 +5,21 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Runs one short-lived upload submission on the render thread: a transient command pool, one command
-/// buffer, and one fence, submitted to <see cref="VulkanDevice.GraphicsQueue"/> without waiting.
+/// Submits one upload to <see cref="VulkanDevice.GraphicsQueue"/>: a transient pool, one command
+/// buffer, one fence.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Asset uploads are infrequent, so a dedicated one-shot pool per upload is simpler and safer than
-/// sharing the renderer's frame command pool: the upload can never collide with a frame command
-/// buffer. The caller records the copies and barriers; this helper owns the submission objects.
-/// <see cref="RecordAndSubmit"/> returns as soon as the queue accepted the submission;
-/// <see cref="TryComplete"/> polls the fence without blocking, and <see cref="Wait"/> is reserved for
-/// the rare device-recovery and cancellation paths. <see cref="Destroy"/> frees the fence and pool
-/// after the copy finished or was abandoned. Render-thread only.
-/// </para>
+/// The pool is never the renderer's frame pool, so an upload cannot collide with frame commands.
+/// <see cref="RecordAndSubmit"/> queues without waiting, <see cref="TryComplete"/> polls the fence,
+/// and <see cref="Wait"/> serves device recovery and cancellation.
 /// </remarks>
 internal static unsafe class VulkanAssetUploadCommands
 {
     private const ulong WAIT_TIMEOUT = ulong.MaxValue;
 
-    /// <summary>
-    /// Records and submits one upload command buffer without waiting for it to finish.
-    /// </summary>
-    /// <param name="device">The device that owns the submission.</param>
-    /// <param name="logger">The logger for best-effort cleanup failures.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <param name="record">Records the copies and barriers into the command buffer.</param>
-    /// <returns>The submission objects that <see cref="TryComplete"/> or <see cref="Destroy"/> consume.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Records and submits one upload command buffer without waiting.</summary>
     /// <exception cref="AssetLoadException">
-    /// A Vulkan command failed. The diagnostic code is <c>RB1010</c>. The helper destroyed its partial
-    /// submission objects before throwing.
+    /// A Vulkan command failed (<c>RB1010</c>); partial submission objects are destroyed first.
     /// </exception>
     internal static UploadSubmission RecordAndSubmit(
         VulkanDevice device,
@@ -131,16 +116,9 @@ internal static unsafe class VulkanAssetUploadCommands
         }
     }
 
-    /// <summary>
-    /// Polls whether the upload submission finished, without blocking.
-    /// </summary>
-    /// <param name="device">The device that owns the submission.</param>
-    /// <param name="submission">The submission objects.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <returns><see langword="true"/> once the fence signaled; <see langword="false"/> while the copy is pending.</returns>
-    /// <exception cref="AssetLoadException">
-    /// The fence status could not be queried. The diagnostic code is <c>RB1010</c>.
-    /// </exception>
+    /// <summary>Polls whether the submission finished, without blocking.</summary>
+    /// <returns><see langword="true"/> once signaled; <see langword="false"/> if pending.</returns>
+    /// <exception cref="AssetLoadException">The fence query failed (<c>RB1010</c>).</exception>
     internal static bool TryComplete(
         VulkanDevice device,
         UploadSubmission submission,
@@ -159,15 +137,8 @@ internal static unsafe class VulkanAssetUploadCommands
         return true;
     }
 
-    /// <summary>
-    /// Waits for the upload submission to finish. Runs only during a device recovery or cancellation.
-    /// </summary>
-    /// <param name="device">The device that owns the submission.</param>
-    /// <param name="submission">The submission objects.</param>
-    /// <param name="canonicalPath">The canonical asset path, for diagnostics.</param>
-    /// <exception cref="AssetLoadException">
-    /// The fence wait failed. The diagnostic code is <c>RB1010</c>.
-    /// </exception>
+    /// <summary>Waits for the submission, for device recovery and cancellation only.</summary>
+    /// <exception cref="AssetLoadException">The fence wait failed (<c>RB1010</c>).</exception>
     internal static void Wait(
         VulkanDevice device,
         UploadSubmission submission,
@@ -184,13 +155,7 @@ internal static unsafe class VulkanAssetUploadCommands
         );
     }
 
-    /// <summary>
-    /// Destroys the fence and command pool of a finished or abandoned submission. Best effort.
-    /// </summary>
-    /// <param name="device">The device that owns the submission.</param>
-    /// <param name="logger">The logger for cleanup failures.</param>
-    /// <param name="submission">The submission objects; default handles are ignored.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Destroys the fence and command pool of a finished or abandoned submission.</summary>
     internal static void Destroy(VulkanDevice device, ILogger logger, UploadSubmission submission)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -255,10 +220,6 @@ internal static unsafe class VulkanAssetUploadCommands
         }
     }
 
-    /// <summary>
-    /// The command pool and fence of one submitted upload.
-    /// </summary>
-    /// <param name="CommandPool">The transient command pool.</param>
-    /// <param name="Fence">The fence signaled when the copy finished.</param>
+    /// <summary>The command pool and fence of one submitted upload.</summary>
     internal readonly record struct UploadSubmission(CommandPool CommandPool, Fence Fence);
 }

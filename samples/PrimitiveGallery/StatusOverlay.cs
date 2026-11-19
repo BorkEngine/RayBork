@@ -4,15 +4,11 @@ using RayBork;
 namespace PrimitiveGallery;
 
 /// <summary>
-/// Builds the gallery status line: the presented frames per second over a one-second window, the tick
-/// rate, the render CPU time, and the last completed frame's draw and instance counts.
+/// Builds the gallery status line: presented FPS, tick rate, render time, and draw totals.
 /// </summary>
 /// <remarks>
-/// The presented rate is a delta of <see cref="RenderStats.PresentedFrames"/>, which is cumulative
-/// and advances only when a frame reaches the presentation engine. It is not
-/// <see cref="EngineContext.Fps"/>, which is the tick rate. The helper keeps one sample window, so an
-/// instance is per sample. The sample draws the returned line in
-/// <see cref="EngineDefaults.DefaultMonoFont"/>, so the changing counters keep their positions.
+/// The presented rate is a <see cref="RenderStats.PresentedFrames"/> delta, not the tick rate in
+/// <see cref="EngineContext.Fps"/>.
 /// </remarks>
 internal sealed class StatusOverlay
 {
@@ -22,10 +18,7 @@ internal sealed class StatusOverlay
     private long _presentedAtSampleStart;
     private double _presentedFramesPerSecond;
 
-    /// <summary>
-    /// Returns the status line for the current tick and advances the one-second presentation sample.
-    /// </summary>
-    /// <param name="context">The tick context that supplies the tick rate and the render statistics.</param>
+    /// <summary>Returns the status line and advances the one-second presentation sample.</summary>
     internal string Build(EngineContext context)
     {
         RenderStats stats = context.Stats;

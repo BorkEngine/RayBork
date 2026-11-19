@@ -4,17 +4,13 @@ using RayBork.Internal;
 namespace RayBork.Tests.Assets.Gpu;
 
 /// <summary>
-/// An <see cref="IAssetGpuWorker"/> that records every call and lets a test inject failures, defer an
-/// upload, or provide a custom restore result.
+/// An <see cref="IAssetGpuWorker"/> that records every call and lets a test inject failures,
+/// defer uploads, or replace the restore result.
 /// </summary>
 /// <remarks>
-/// The worker is called from the render thread in integration tests and from the test thread in unit
-/// tests, so the record lists are guarded by a lock. Uploads complete immediately by default, which
-/// keeps the existing tests deterministic; <see cref="DeferUploads"/> returns a pending operation whose
-/// <see cref="FakeGpuAssetUploadOperation.Complete"/> or
-/// <see cref="FakeGpuAssetUploadOperation.Fail"/> the test controls. <see cref="Progress"/> is signaled
-/// whenever an upload starts or a deferred operation finishes, so a test harness that stands in for
-/// the render loop wakes without polling.
+/// Call records are lock-guarded because tests call the worker from both threads. Uploads finish
+/// immediately unless <see cref="DeferUploads"/> is set; <see cref="Progress"/> signals each
+/// start or completion so a harness never polls.
 /// </remarks>
 [SuppressMessage(
     "Design",
@@ -34,45 +30,28 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
 
     private long _nextHandle = 1;
 
-    /// <summary>
-    /// Gets or sets whether the fake worker reports that no frame can reference a resource. The
-    /// default lets destruction drain immediately, preserving the existing bridge test behavior.
-    /// </summary>
+    /// <summary>Gets or sets whether the worker reports frame resources idle.</summary>
     internal bool FrameResourcesIdle { get; set; } = true;
 
-    /// <summary>
-    /// Gets the number of <see cref="WaitForFrameResourcesIdle"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="WaitForFrameResourcesIdle"/> calls.</summary>
     internal int WaitForFrameResourcesIdleCount { get; private set; }
 
-    /// <summary>
-    /// Gets or sets an exception thrown by <see cref="BeginUpload"/>.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="BeginUpload"/> throws.</summary>
     internal Exception? UploadException { get; set; }
 
-    /// <summary>
-    /// Gets or sets an exception thrown by <see cref="Restore"/>.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="Restore"/> throws.</summary>
     internal Exception? RestoreException { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether a started upload stays pending until the test finishes its operation.
-    /// </summary>
+    /// <summary>Gets or sets whether uploads stay pending until the test completes them.</summary>
     internal bool DeferUploads { get; set; }
 
-    /// <summary>
-    /// Gets or sets an optional replacement for the default upload resource.
-    /// </summary>
+    /// <summary>Gets or sets an optional replacement for the default upload resource.</summary>
     internal Func<AssetGpuUpload, GpuAssetResource>? UploadHandler { get; set; }
 
-    /// <summary>
-    /// Gets or sets an optional replacement for the default restore behavior.
-    /// </summary>
+    /// <summary>Gets or sets an optional replacement for the default restore behavior.</summary>
     internal Func<AssetGpuUpload, GpuAssetResource, GpuAssetResource>? RestoreHandler { get; set; }
 
-    /// <summary>
-    /// Gets the number of <see cref="BeginUpload"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="BeginUpload"/> calls.</summary>
     internal int UploadCallCount
     {
         get
@@ -84,9 +63,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the uploads passed to <see cref="BeginUpload"/>, in call order.
-    /// </summary>
+    /// <summary>Gets the uploads passed to <see cref="BeginUpload"/>, in call order.</summary>
     internal IReadOnlyList<AssetGpuUpload> UploadCalls
     {
         get
@@ -98,9 +75,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the operations <see cref="BeginUpload"/> returned, in call order.
-    /// </summary>
+    /// <summary>Gets the operations <see cref="BeginUpload"/> returned, in call order.</summary>
     internal IReadOnlyList<FakeGpuAssetUploadOperation> Operations
     {
         get
@@ -112,9 +87,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the operations passed to <see cref="Cancel"/>, in call order.
-    /// </summary>
+    /// <summary>Gets the operations passed to <see cref="Cancel"/>, in call order.</summary>
     internal IReadOnlyList<GpuAssetUploadOperation> CancelCalls
     {
         get
@@ -126,9 +99,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the number of <see cref="Restore"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="Restore"/> calls.</summary>
     internal int RestoreCallCount
     {
         get
@@ -140,9 +111,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the uploads passed to <see cref="Restore"/>, in call order.
-    /// </summary>
+    /// <summary>Gets the uploads passed to <see cref="Restore"/>, in call order.</summary>
     internal IReadOnlyList<AssetGpuUpload> RestoreCalls
     {
         get
@@ -154,9 +123,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the resources passed to <see cref="Destroy"/>, in call order.
-    /// </summary>
+    /// <summary>Gets the resources passed to <see cref="Destroy"/>, in call order.</summary>
     internal IReadOnlyList<GpuAssetResource> DestroyCalls
     {
         get
@@ -168,28 +135,16 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Gets the signal set after the first <see cref="Restore"/> call replaced the resource handles.
-    /// </summary>
+    /// <summary>Gets the signal set after the first <see cref="Restore"/> call.</summary>
     internal ManualResetEventSlim Restored => _restored;
 
-    /// <summary>
-    /// Gets the auto-reset signal set when an upload starts or a deferred operation finishes.
-    /// </summary>
+    /// <summary>Gets the auto-reset signal set when an upload starts or finishes.</summary>
     internal WaitHandle Progress => _progress;
 
-    /// <summary>
-    /// Gets the next handle the default upload and restore behavior uses.
-    /// </summary>
-    /// <returns>A fresh non-zero handle.</returns>
+    /// <summary>Gets the next handle for the default upload and restore behavior.</summary>
     internal long NextHandle() => Interlocked.Increment(ref _nextHandle);
 
-    /// <summary>
-    /// Waits until at least <paramref name="index"/> uploads started and returns that operation.
-    /// </summary>
-    /// <param name="index">The zero-based upload index.</param>
-    /// <param name="timeout">The maximum wait.</param>
-    /// <returns>The started operation.</returns>
+    /// <summary>Waits for one upload index to start and returns it.</summary>
     /// <exception cref="TimeoutException">The upload did not start in time.</exception>
     internal FakeGpuAssetUploadOperation WaitForUpload(int index, TimeSpan timeout)
     {
@@ -219,11 +174,7 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
         return operation!;
     }
 
-    /// <summary>
-    /// Waits until the first upload started and returns it.
-    /// </summary>
-    /// <param name="timeout">The maximum wait.</param>
-    /// <returns>The started operation.</returns>
+    /// <summary>Waits for the first upload to start and returns it.</summary>
     internal FakeGpuAssetUploadOperation WaitForUpload(TimeSpan timeout) =>
         WaitForUpload(0, timeout);
 

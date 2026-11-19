@@ -2,42 +2,13 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The GPOS pair-positioning lookups that apply to the face's <c>kern</c> feature.
-/// </summary>
+/// <summary>The GPOS pair-positioning lookups of a face's <c>kern</c> feature.</summary>
 /// <remarks>
-/// <para>
-/// Only the lookups referenced by a feature tagged <c>kern</c> contribute, and only the default
-/// language system of the preferred script is considered. The <c>latn</c> script is preferred, then
-/// <c>DFLT</c>, then the first script record in directory order. Pair positioning may be wrapped in
-/// extension lookups (lookup type 9) and may be either format 1 (glyph pairs) or format 2
-/// (class-based pairs); coverage formats 1 and 2 and class definition formats 1 and 2 are accepted.
-/// </para>
-/// <para>
-/// Only the first glyph's <c>XAdvance</c> contributes. The other value record fields are skipped by
-/// their value-format bits and the second glyph's value record is ignored. The first positioning
-/// subtable, in kern-feature order (language-system feature order, then each feature's lookup order,
-/// then each lookup's subtable order), that positions the pair supplies the value; a subtable that
-/// does not position the pair is skipped. Lookup flags are not interpreted because the engine applies
-/// kerning to a glyph pair without shaping, and the language system's required feature is not
-/// consulted. Values are in font units.
-/// </para>
-/// <para>
-/// Parsing is bounded for hostile tables: the kern feature may reference at most 64 distinct
-/// lookups and list at most 65,536 lookup references, the pair lookups may declare at most 32,768
-/// subtable records, at most 256 distinct pair-positioning subtables are stored, and at most 65,536
-/// pair sets, 1,000,000 pair records, and 262,144 coverage or class definition entries are
-/// validated. The subtable-record cap is a defensive budget slightly above the forward-offset,
-/// non-overlapping bound implied by 16-bit subtable offsets; real fonts are three orders of
-/// magnitude below it. Lookup references, lookups, positioning subtables, and pair
-/// sets are deduplicated by absolute table offset, so aliased offsets are parsed and stored once;
-/// exceeding a cap raises <see cref="FontUnsupportedException"/> because the face is valid but
-/// outside the parser's supported size.
-/// </para>
-/// <para>
-/// The instance is immutable after construction and safe to read from any thread. Lookups allocate
-/// nothing and take O(log coverage) time plus O(log pairs) or O(log classes) per candidate lookup.
-/// </para>
+/// Only lookups referenced by the <c>kern</c> feature of the preferred script's default language
+/// system contribute, and only the first glyph's <c>XAdvance</c> is applied; values are in font
+/// units. Parsing caps referenced lookups at 64, lookup references at 65,536, lookup subtables at
+/// 32,768, pair subtables at 256, pair sets at 65,536, pair records at 1,000,000, and coverage or
+/// class entries at 262,144; the instance is immutable and thread-safe.
 /// </remarks>
 internal sealed class GposKerning
 {
@@ -76,18 +47,6 @@ internal sealed class GposKerning
     }
 
     /// <summary>Parses the pair-positioning lookups of the face's <c>kern</c> feature.</summary>
-    /// <param name="gpos">The complete <c>GPOS</c> table bytes.</param>
-    /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
-    /// <returns>
-    /// The pair-positioning lookup, or <see langword="null"/> when the table has no supported
-    /// <c>kern</c> pair positioning or an unsupported major/minor version.
-    /// </returns>
-    /// <exception cref="FontFormatException">The <c>GPOS</c> structure or a pair lookup is malformed.</exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The table exceeds one of the documented defensive limits for referenced lookups, lookup
-    /// references, lookup subtables, pair-positioning subtables, pair sets, pair records, or coverage
-    /// and class definition entries.
-    /// </exception>
     internal static GposKerning? TryParse(ReadOnlyMemory<byte> gpos, int glyphCount)
     {
         SfntReader reader = new(gpos.Span, CONTEXT);
@@ -230,11 +189,7 @@ internal sealed class GposKerning
         return positionings.Count == 0 ? null : new GposKerning(gpos, positionings.ToArray());
     }
 
-    /// <summary>Looks up one kerned pair.</summary>
-    /// <param name="leftGlyphId">The left glyph identifier.</param>
-    /// <param name="rightGlyphId">The right glyph identifier.</param>
-    /// <param name="value">The advance adjustment in font units, or zero.</param>
-    /// <returns><see langword="true"/> when a pair-positioning lookup positions the pair.</returns>
+    /// <summary>Looks up one kerned pair as an advance adjustment in font units.</summary>
     internal bool TryGet(int leftGlyphId, int rightGlyphId, out int value)
     {
         value = 0;
@@ -909,10 +864,7 @@ internal sealed class GposKerning
         internal int Class2Count { get; }
     }
 
-    /// <summary>
-    /// The work counters of one <see cref="TryParse"/> call. The caps keep a hostile table from
-    /// turning a small byte array into unbounded parse work or into a large positioning array.
-    /// </summary>
+    /// <summary>The work counters of one parse call that keep hostile tables bounded.</summary>
     private sealed class ParseBudget
     {
         internal int FeatureLookupSteps;

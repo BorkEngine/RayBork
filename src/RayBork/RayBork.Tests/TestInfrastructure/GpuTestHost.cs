@@ -4,15 +4,11 @@ using Silk.NET.Core.Loader;
 
 namespace RayBork.Tests;
 
-/// <summary>
-/// Owns one SDL host, Vulkan instance, native surface, and Vulkan device for one GPU test.
-/// </summary>
+/// <summary>Owns one SDL host, Vulkan instance, native surface, and Vulkan device for a GPU test.</summary>
 /// <remarks>
-/// <see cref="TryCreate"/> reports only environmental unavailability as a skip reason: SDL cannot
-/// initialize a Vulkan window, the Vulkan loader is missing, or the loader reports no physical
-/// device. A programming or capability failure throws so the test fails instead of disappearing.
-/// GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and
-/// Vulkan loader setup while each test owns its window, instance, and device.
+/// Only environmental unavailability is reported as a skip reason; a programming or capability failure
+/// throws. GPU test classes run in parallel while <see cref="SdlPlatform"/> serializes the
+/// process-global SDL and Vulkan loader setup.
 /// </remarks>
 internal sealed class GpuTestHost : IDisposable
 {
@@ -37,35 +33,22 @@ internal sealed class GpuTestHost : IDisposable
         _device = device;
     }
 
-    /// <summary>
-    /// Gets the SDL host that owns the Vulkan-capable window.
-    /// </summary>
+    /// <summary>Gets the SDL host that owns the Vulkan-capable window.</summary>
     internal SdlTestHost SdlHost => _sdlHost;
 
-    /// <summary>
-    /// Gets the SDL platform that created the surface.
-    /// </summary>
+    /// <summary>Gets the SDL platform that created the surface.</summary>
     internal SdlPlatform Platform => _sdlHost.Platform;
 
-    /// <summary>
-    /// Gets the Vulkan instance.
-    /// </summary>
+    /// <summary>Gets the Vulkan instance.</summary>
     internal VulkanInstance Instance => _instance;
 
-    /// <summary>
-    /// Gets the native surface handle.
-    /// </summary>
+    /// <summary>Gets the native surface handle.</summary>
     internal IntPtr Surface => _surface;
 
-    /// <summary>
-    /// Gets the Vulkan device created for the surface.
-    /// </summary>
+    /// <summary>Gets the Vulkan device created for the surface.</summary>
     internal VulkanDevice Device => _device;
 
-    /// <summary>
-    /// Creates the host for a GPU test, skipping the test when the host is environmentally
-    /// unavailable.
-    /// </summary>
+    /// <summary>Creates the host, or skips when the GPU host is unavailable.</summary>
     /// <param name="requestValidation">Whether the instance requests the validation layer.</param>
     /// <returns>The created host.</returns>
     internal static GpuTestHost CreateOrSkip(bool requestValidation = true)
@@ -78,12 +61,7 @@ internal sealed class GpuTestHost : IDisposable
         return host!;
     }
 
-    /// <summary>
-    /// Tries to create the host.
-    /// </summary>
-    /// <param name="host">The created host, or <see langword="null"/> when unavailable.</param>
-    /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
-    /// <param name="requestValidation">Whether the instance requests the validation layer.</param>
+    /// <summary>Tries to create the host.</summary>
     /// <returns><see langword="true"/> when the host was created.</returns>
     internal static bool TryCreate(
         out GpuTestHost? host,
@@ -183,9 +161,7 @@ internal sealed class GpuTestHost : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets whether the Vulkan loader can be loaded, without requiring a GPU or a window.
-    /// </summary>
+    /// <summary>Gets whether the Vulkan loader can be loaded, without requiring a GPU or a window.</summary>
     /// <returns><see langword="true"/> when the loader loads.</returns>
     internal static bool IsVulkanLoaderAvailable()
     {

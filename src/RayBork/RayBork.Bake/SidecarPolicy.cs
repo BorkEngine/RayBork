@@ -1,19 +1,14 @@
 namespace RayBork.Bake;
 
-/// <summary>
-/// Selects whether a processor source has an authoring sidecar.
-/// </summary>
+/// <summary>Selects whether a processor source has an authoring sidecar.</summary>
 public enum SidecarPolicy
 {
     /// <summary>The processor has no sidecar.</summary>
     None,
 
-    /// <summary>
-    /// The processor may have a sidecar. A missing sidecar is replaced in memory by the processor's
-    /// default sidecar; no source file is created.
-    /// </summary>
+    /// <summary>A missing sidecar uses the in-memory default; no file is created.</summary>
     Optional,
 
-    /// <summary>The processor requires a sidecar; a missing file is a binding error.</summary>
+    /// <summary>A sidecar is required; a missing file is a binding error.</summary>
     Required,
 }

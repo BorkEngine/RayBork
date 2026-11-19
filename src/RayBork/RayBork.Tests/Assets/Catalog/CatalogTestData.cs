@@ -7,8 +7,8 @@ using RayBork.Tests.Fonts;
 namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
-/// A custom data type shaped for the catalog tests. It is registered through
-/// <see cref="LoaderAssetTypeRegistration{T}"/>, exactly like the builder registers a game type.
+/// A custom data type registered through <see cref="LoaderAssetTypeRegistration{T}"/>, like the
+/// builder registers a game type.
 /// </summary>
 [GenerateShape]
 internal sealed partial class CatalogTestSettings
@@ -19,9 +19,8 @@ internal sealed partial class CatalogTestSettings
 }
 
 /// <summary>
-/// The pre-M6 font descriptor shape: the runtime descriptor plus the removed <c>Ranges</c> member. A
-/// legacy pack serialized this shape, and the runtime must still load it because unknown descriptor
-/// members are ignored.
+/// The pre-M6 font descriptor shape, including the removed <c>Ranges</c> member; a legacy pack
+/// must still load because unknown members are ignored.
 /// </summary>
 [GenerateShape]
 internal sealed partial class LegacyFontAssetDescriptor
@@ -42,8 +41,7 @@ internal sealed partial class LegacyFontAssetDescriptor
 }
 
 /// <summary>
-/// The pre-M8 shader descriptor shape: the runtime descriptor without the <c>AbiVersion</c> member. A
-/// pack baked before the shader ABI version existed serialized this shape.
+/// The pre-M8 shader descriptor shape, without the <c>AbiVersion</c> member.
 /// </summary>
 [GenerateShape]
 internal sealed partial class LegacyShaderAssetDescriptor
@@ -65,9 +63,7 @@ internal sealed partial class LegacyShaderAssetDescriptor
     public required string[] Textures { get; init; }
 }
 
-/// <summary>
-/// Deterministic descriptors and pack inputs shared by the catalog tests.
-/// </summary>
+/// <summary>Deterministic descriptors and pack inputs shared by the catalog tests.</summary>
 internal static class CatalogTestData
 {
     internal const string CUSTOM_DATA_FAILURE_DESCRIPTION = "custom data could not be deserialized";
@@ -82,18 +78,15 @@ internal static class CatalogTestData
     internal const string DATA_PATH = "data/settings";
     internal const string MODEL_PATH = "models/castle";
 
-    /// <summary>
-    /// The catalog font tests serve the synthetic face at the engine's default font path, so the same
-    /// pack also satisfies <see cref="EngineDefaults.LoadAsync"/>.
-    /// </summary>
+    /// <summary>The engine's default font path, also served by the font pack.</summary>
     internal const string FONT_PATH = "fonts/fira-sans";
     internal const string FONT_PAYLOAD_PATH = "fonts/fira-sans-face";
 
-    /// <summary>The catalog font tests serve a second synthetic face at the engine's mono font path.</summary>
+    /// <summary>The engine's mono font path, served by a second synthetic face.</summary>
     internal const string MONO_FONT_PATH = "fonts/jetbrains-mono";
     internal const string MONO_FONT_PAYLOAD_PATH = "fonts/jetbrains-mono-face";
 
-    /// <summary>The glyph id of the square <c>A</c> glyph the font test face maps.</summary>
+    /// <summary>The glyph id of the square <c>A</c> glyph the test face maps.</summary>
     internal const int FONT_GLYPH_ID = 1;
 
     internal const uint MESH_VERTEX_COUNT = 3;
@@ -116,9 +109,8 @@ internal static class CatalogTestData
         ];
 
     /// <summary>
-    /// Writes an independent little-endian mesh payload for the given vertices and indices. The
-    /// writer mirrors the bake layout instead of reusing the runtime codec, so the round-trip test
-    /// exercises the decoder against a second encoder.
+    /// Writes an independent little-endian mesh payload so the round trip exercises the decoder
+    /// against a second encoder.
     /// </summary>
     internal static byte[] CreateMeshPayload(
         IReadOnlyList<Vertex> vertices,
@@ -202,9 +194,8 @@ internal static class CatalogTestData
     internal static byte[] CreateDataPayload() => AssetSerialization.Serialize(CreateSettings());
 
     /// <summary>
-    /// Builds the synthetic face the font tests load: a 1000-unit em with an 800/-200 ascender and
-    /// descender, a <c>.notdef</c> triangle at glyph zero, and a mapped square <c>A</c> at glyph one
-    /// with a 600-unit advance and one -100-unit kern pair for A followed by A.
+    /// Builds the test face: a 1000-unit em with 800/-200 ascender and descender, a <c>.notdef</c>
+    /// triangle, and a mapped square <c>A</c> with a 600-unit advance and one -100 kern pair.
     /// </summary>
     internal static byte[] CreateFontFace()
     {
@@ -238,10 +229,7 @@ internal static class CatalogTestData
             MsdfPadding = msdfPadding,
         };
 
-    /// <summary>
-    /// Builds the font descriptor entry and its sibling face payload entry. A test that needs a broken
-    /// pair passes its own descriptor or face bytes.
-    /// </summary>
+    /// <summary>Builds the font descriptor entry and its sibling face payload entry.</summary>
     internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateFontEntries(
         byte[]? face = null,
         FontAssetDescriptor? descriptor = null,
@@ -259,7 +247,7 @@ internal static class CatalogTestData
         ];
     }
 
-    /// <summary>Builds the synthetic mono font descriptor entry and its sibling face payload entry.</summary>
+    /// <summary>Builds the mono font descriptor entry and its sibling face payload entry.</summary>
     internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateMonoFontEntries(
         byte[]? face = null
     )
@@ -273,10 +261,7 @@ internal static class CatalogTestData
         );
     }
 
-    /// <summary>
-    /// Serializes the pre-M6 font descriptor shape, including its removed <c>Ranges</c> member, for the
-    /// legacy-pack regression test.
-    /// </summary>
+    /// <summary>Serializes the pre-M6 font descriptor with its removed <c>Ranges</c> member.</summary>
     internal static byte[] CreateLegacyFontDescriptorPayload(byte[] face)
     {
         ArgumentNullException.ThrowIfNull(face);
@@ -405,14 +390,10 @@ internal static class CatalogTestData
     }
 }
 
-/// <summary>
-/// One started catalog with a GPU upload pump standing in for the render loop.
-/// </summary>
+/// <summary>A started catalog with a GPU upload pump standing in for the render loop.</summary>
 /// <remarks>
-/// The catalog is deterministic: the pump thread waits on the bridge signal and the fake worker's
-/// progress signal instead of polling, and <see cref="Dispose"/> stops the catalog before stopping the
-/// pump so every queued destruction is serviced. Tests synchronize through the fake worker's call
-/// records and explicit events.
+/// The pump waits on the bridge and worker signals instead of polling; <see cref="Dispose"/> stops
+/// the catalog before the pump so every queued destruction is serviced.
 /// </remarks>
 internal sealed class CatalogTestHarness : IDisposable
 {

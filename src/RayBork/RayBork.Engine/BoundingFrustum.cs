@@ -3,45 +3,20 @@ using System.Numerics;
 namespace RayBork;
 
 /// <summary>
-/// Six inward-facing planes extracted from a view-projection matrix, in reverse-Z Vulkan clip space.
+/// Six inward-facing clip planes from a view-projection matrix in reverse-Z Vulkan clip space.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The plane names follow the engine's Y-flipped NDC convention. Vulkan NDC has <c>+Y</c> pointing
-/// down and the projection negates row 1 so world <c>+Y</c> maps to the top of the screen. As a
-/// result <see cref="Top"/> and <see cref="Bottom"/> are the inverted clip planes: a point is inside
-/// when it lies on or below <see cref="Top"/> and on or above <see cref="Bottom"/>.
-/// </para>
-/// <para>
-/// The depth range is Vulkan's <c>[0, 1]</c> reverse-Z: the near plane maps to <c>1</c> and the far
-/// plane maps to <c>0</c>, so <see cref="Near"/> is the <c>z &gt;= 0</c> plane and <see cref="Far"/>
-/// is the <c>z &lt;= w</c> plane. Every plane is normalized, so
-/// <see cref="Plane.DotCoordinate(Plane, Vector3)"/> returns a world-space signed distance.
-/// <see cref="Contains"/> and <see cref="Intersects"/> use that distance and are conservative:
-/// geometry on the boundary counts as inside.
-/// </para>
-/// <para>
-/// A default <see cref="BoundingFrustum"/> has six zero planes and accepts every point; construct it
-/// from a real projection before using it for culling.
-/// </para>
+/// Planes are normalized, so <see cref="Plane.DotCoordinate(Plane, Vector3)"/> returns a
+/// world-space signed distance and boundary geometry counts as inside. Vulkan NDC points +Y down,
+/// so <see cref="Top"/> and <see cref="Bottom"/> are inverted clip planes, and a default instance
+/// has six zero planes that accept every point.
 /// </remarks>
 public readonly struct BoundingFrustum
 {
-    /// <summary>
-    /// The signed-distance slack <see cref="Intersects"/> allows for the positive box corner. Without
-    /// it, a box exactly on a frustum plane, or a full-screen quad recorded at the view boundary, can
-    /// be culled by floating-point drift in the extracted plane. <see cref="Contains"/> keeps its exact
-    /// non-negative test.
-    /// </summary>
+    /// <summary>The plane slack <see cref="Intersects"/> allows for floating-point drift.</summary>
     private const float PLANE_TOLERANCE = 1e-4f;
 
-    /// <summary>
-    /// Extracts the six normalized planes from a view-projection matrix.
-    /// </summary>
-    /// <param name="viewProjection">
-    /// The view-projection matrix in the engine's row-vector convention: a position transforms as
-    /// <c>Vector4.Transform(new Vector4(position, 1), viewProjection)</c>.
-    /// </param>
+    /// <summary>Extracts six normalized planes from a row-vector view-projection matrix.</summary>
     public BoundingFrustum(Matrix4x4 viewProjection)
     {
         Vector4 column0 = new(
@@ -96,10 +71,8 @@ public readonly struct BoundingFrustum
     public Plane Far { get; }
 
     /// <summary>
-    /// Determines whether a world-space point is inside every plane.
+    /// Determines whether a world-space point is inside or on every plane.
     /// </summary>
-    /// <param name="point">The world-space point.</param>
-    /// <returns><see langword="true"/> when every signed plane distance is non-negative.</returns>
     public bool Contains(Vector3 point) =>
         Plane.DotCoordinate(Left, point) >= 0f
         && Plane.DotCoordinate(Right, point) >= 0f
@@ -109,17 +82,11 @@ public readonly struct BoundingFrustum
         && Plane.DotCoordinate(Far, point) >= 0f;
 
     /// <summary>
-    /// Determines whether an axis-aligned world-space box intersects or lies inside the frustum.
+    /// Determines whether a world-space box intersects the frustum.
     /// </summary>
-    /// <param name="bounds">The world-space box.</param>
-    /// <returns>
-    /// <see langword="true"/> when the box is not fully outside any plane. The test is conservative:
-    /// a box that only touches the boundary counts as intersecting.
-    /// </returns>
     /// <remarks>
-    /// A box whose positive corner is within a small tolerance behind a plane is still accepted, so
-    /// boundary-aligned geometry is not culled by floating-point drift in the extracted planes.
-    /// <see cref="Contains"/> keeps its exact non-negative test.
+    /// The test is conservative: a box touching the boundary counts as intersecting, and a small
+    /// tolerance keeps boundary-aligned geometry from being culled by plane-extraction rounding.
     /// </remarks>
     public bool Intersects(BoundingBox bounds) =>
         IntersectsPlane(Left, bounds)

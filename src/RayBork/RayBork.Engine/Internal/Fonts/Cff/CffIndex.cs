@@ -1,20 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// One CFF INDEX: a count, a shared offset size, count + 1 offsets, and contiguous object data.
-/// </summary>
+/// <summary>One CFF INDEX: a count, an offset size, offsets, and object data.</summary>
 /// <remarks>
-/// <para>
-/// A CFF INDEX is a big-endian structure: a 16-bit object count, a 1-byte offset size (absent when
-/// the count is zero), count + 1 one-based offsets, and the object data. Every offset, every object
-/// boundary, and the object data itself are validated against the retained table bytes by
-/// <see cref="Parse"/>; the object bytes are slice views and are never copied.
-/// </para>
-/// <para>
-/// An empty INDEX is a valid structure of exactly two zero bytes. The instance is immutable. Object
-/// bytes are exposed as <see cref="ReadOnlyMemory{T}"/> over the table, so the caller must keep the
-/// table alive; the face parser retains it for the face's lifetime.
-/// </para>
+/// Offsets and object boundaries are validated against the retained table by <see cref="Parse"/>;
+/// object bytes are slice views and are never copied, so the caller must keep the table alive. An
+/// empty INDEX is a valid two-byte structure, and the instance is immutable.
 /// </remarks>
 internal sealed class CffIndex
 {
@@ -40,15 +30,6 @@ internal sealed class CffIndex
     internal int Count => _offsets.IsEmpty ? 0 : _offsets.Length - 1;
 
     /// <summary>Parses one CFF INDEX at an offset inside a table.</summary>
-    /// <param name="table">The table that contains the INDEX.</param>
-    /// <param name="offset">The INDEX offset inside <paramref name="table"/>.</param>
-    /// <param name="context">A description used in failure reasons, such as <c>the CFF CharStrings INDEX</c>.</param>
-    /// <param name="end">The offset immediately after the INDEX inside <paramref name="table"/>.</param>
-    /// <returns>The parsed INDEX.</returns>
-    /// <exception cref="FontFormatException">
-    /// The INDEX is truncated, uses an offset size outside 1..4, has decreasing or out-of-range
-    /// offsets, or its object data extends past the table.
-    /// </exception>
     internal static CffIndex Parse(
         ReadOnlyMemory<byte> table,
         int offset,
@@ -135,9 +116,6 @@ internal sealed class CffIndex
     }
 
     /// <summary>Gets one object's bytes.</summary>
-    /// <param name="index">The zero-based object index.</param>
-    /// <returns>The object bytes, possibly empty.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the INDEX.</exception>
     internal ReadOnlyMemory<byte> Get(int index)
     {
         if ((uint)index >= (uint)Count)

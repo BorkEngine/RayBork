@@ -2,13 +2,10 @@ using System.Numerics;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Computes six-float axis-aligned bounds as minimum X/Y/Z followed by maximum X/Y/Z.
-/// </summary>
+/// <summary>Computes six-float axis-aligned bounds: minimum XYZ then maximum XYZ.</summary>
 internal static class MeshBounds
 {
     /// <summary>Computes bounds from mesh-space vertex positions.</summary>
-    /// <param name="vertices">The vertices; it must not be empty.</param>
     /// <returns>The six-float bounds.</returns>
     internal static float[] FromVertices(IReadOnlyList<MeshVertex> vertices)
     {
@@ -30,9 +27,7 @@ internal static class MeshBounds
         return [minimum.X, minimum.Y, minimum.Z, maximum.X, maximum.Y, maximum.Z];
     }
 
-    /// <summary>Computes bounds from vertex positions transformed by one matrix.</summary>
-    /// <param name="vertices">The vertices; it must not be empty.</param>
-    /// <param name="transform">The transform applied to every position.</param>
+    /// <summary>Computes bounds from positions transformed by one matrix.</summary>
     /// <returns>The six-float bounds.</returns>
     internal static float[] FromTransformedVertices(
         IReadOnlyList<MeshVertex> vertices,
@@ -58,7 +53,6 @@ internal static class MeshBounds
     }
 
     /// <summary>Combines part bounds into one model-space bound.</summary>
-    /// <param name="parts">The part bounds; it must not be empty.</param>
     /// <returns>The six-float union.</returns>
     internal static float[] Union(IReadOnlyList<float[]> parts)
     {

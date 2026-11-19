@@ -5,23 +5,13 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Baking;
 
-/// <summary>
-/// Stages every pack in a unique temporary file next to its target, then replaces the targets.
-/// </summary>
+/// <summary>Stages each pack in a temporary file, then replaces its target.</summary>
 /// <remarks>
-/// Staging all packs before any target is touched means a discovery, binding, validation, processor,
-/// or pack-layout failure leaves every previous target untouched. During publication an existing
-/// target is moved to a backup before the staged file takes its place; a failure restores every prior
-/// target. A process crash inside the publication window cannot be rolled back.
+/// Failures before publication preserve targets; a crash mid-publication is not rolled back.
 /// </remarks>
 internal static class BakePackWriter
 {
     /// <summary>Composes and publishes every pack.</summary>
-    /// <param name="outputs">The configured outputs in order.</param>
-    /// <param name="entries">The entry list per pack.</param>
-    /// <param name="mode">The compression mode.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <returns><see langword="true"/> when every pack was replaced.</returns>
     internal static bool TryWriteAll(
         IReadOnlyList<BakePackOutput> outputs,
         IReadOnlyList<IReadOnlyList<BakedEntry>> entries,

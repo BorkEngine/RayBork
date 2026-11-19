@@ -3,52 +3,23 @@ using Silk.NET.Shaderc;
 
 namespace RayBork.Bake.Shaders;
 
-/// <summary>
-/// The reusable GLSL-to-SPIR-V compiler for the bake tooling, built directly on Silk.NET.Shaderc.
-/// </summary>
+/// <summary>The reusable GLSL-to-SPIR-V compiler built on Silk.NET.Shaderc.</summary>
 /// <remarks>
-/// <para>
-/// The helper owns the shaderc setup for every bake shader source: GLSL source language, Vulkan 1.2
-/// target environment, performance optimization, warnings as errors, and the caller's entry point.
-/// The built-in shader processor compiles both stages through this helper, so shaderc setup exists in
-/// exactly one place.
-/// </para>
-/// <para>
-/// shaderc ignores the entry point name for GLSL input and always compiles the function named
-/// <c>main</c>. When the caller requests a different entry point, the helper defines a preprocessor
-/// macro that renames the authoring entry point to <c>main</c>, requires the source to mention the
-/// requested name, and rewrites the compiled module's <c>OpEntryPoint</c> name back to the requested
-/// value with <see cref="SpirvEntryPointRewriter"/>. The resulting module declares the requested
-/// entry point, so the runtime pipeline sees the documented M3 name.
-/// </para>
-/// <para>
-/// The helper is internal to the bake, the bake is JIT tooling, and no runtime project references
-/// Silk.NET.Shaderc. A failed compilation returns the shaderc diagnostic text verbatim so the caller
-/// can report it with source locations; only an environment failure such as a missing native library
-/// is folded into the same message instead of throwing.
-/// </para>
+/// Compiles use GLSL input, a Vulkan 1.2 target, performance optimization, and warnings as errors.
+/// A requested entry point is renamed to <c>main</c> by macro and restored in <c>OpEntryPoint</c>.
 /// </remarks>
 internal static unsafe class GlslCompiler
 {
     private const string GLSL_ENTRY_POINT = "main";
 
-    /// <summary>
-    /// The process-wide shaderc API. The native library stays loaded until the bake process exits;
-    /// disposing the Silk.NET API object unloads it and can crash on Linux when a later compile loads
-    /// it again. The bake and the shader tests are short-lived, so a process-lifetime handle is the
-    /// simplest safe ownership model.
-    /// </summary>
+    /// <summary>The process-wide shaderc API, kept loaded for the process lifetime.</summary>
     private static readonly Lazy<Shaderc> _shadercApi = new(static () => Shaderc.GetApi());
 
     /// <summary>Compiles one GLSL source into a SPIR-V module.</summary>
-    /// <param name="source">The complete GLSL source text.</param>
-    /// <param name="fileName">The file name shaderc uses in diagnostics.</param>
-    /// <param name="kind">The shader stage kind.</param>
-    /// <param name="entryPoint">The entry point name.</param>
-    /// <param name="spirV">The compiled module when compilation succeeds.</param>
-    /// <param name="message">
-    /// The shaderc diagnostic text for a rejected source, or the environment failure description.
-    /// </param>
+    /// <remarks>
+    /// A rejected source returns the shaderc diagnostics in <paramref name="message"/>; an environment
+    /// failure is reported the same way.
+    /// </remarks>
     /// <returns><see langword="true"/> when the source compiled.</returns>
     internal static bool TryCompile(
         string source,

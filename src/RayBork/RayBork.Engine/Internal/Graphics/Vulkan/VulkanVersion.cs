@@ -2,13 +2,10 @@ using System.Globalization;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Converts between packed Vulkan API versions and readable text.
-/// </summary>
+/// <summary>Converts between packed Vulkan API versions and readable text.</summary>
 /// <remarks>
-/// A Vulkan version packs a major, minor, and patch number into one <see cref="uint"/>:
-/// <c>(major &lt;&lt; 22) | (minor &lt;&lt; 12) | patch</c>. The engine uses the packed value in
-/// <see cref="EngineInfo.VulkanApiVersion"/> and formats it only for logs and diagnostics.
+/// A version packs 7 major, 10 minor, and 12 patch bits into one <see cref="uint"/>; it is
+/// formatted only for logs and diagnostics.
 /// </remarks>
 internal static class VulkanVersion
 {
@@ -18,21 +15,11 @@ internal static class VulkanVersion
     private const uint MINOR_MASK = 0x3FFu;
     private const uint PATCH_MASK = 0xFFFu;
 
-    /// <summary>
-    /// Packs a major, minor, and patch version into the Vulkan <c>uint</c> encoding.
-    /// </summary>
-    /// <param name="major">The major version; the encoded field has 7 bits.</param>
-    /// <param name="minor">The minor version; the encoded field has 10 bits.</param>
-    /// <param name="patch">The patch version; the encoded field has 12 bits.</param>
-    /// <returns>The packed Vulkan version.</returns>
+    /// <summary>Packs major, minor, and patch into a Vulkan version.</summary>
     internal static uint Pack(int major, int minor, int patch) =>
         ((uint)major << MAJOR_SHIFT) | ((uint)minor << MINOR_SHIFT) | (uint)patch;
 
-    /// <summary>
-    /// Unpacks a Vulkan version into its major, minor, and patch fields.
-    /// </summary>
-    /// <param name="version">The packed Vulkan version.</param>
-    /// <returns>The unpacked version components.</returns>
+    /// <summary>Unpacks a Vulkan version into major, minor, and patch.</summary>
     internal static (int Major, int Minor, int Patch) Unpack(uint version) =>
         (
             (int)((version >> MAJOR_SHIFT) & MAJOR_MASK),
@@ -40,22 +27,14 @@ internal static class VulkanVersion
             (int)(version & PATCH_MASK)
         );
 
-    /// <summary>
-    /// Formats a packed Vulkan version as <c>major.minor.patch</c>.
-    /// </summary>
-    /// <param name="version">The packed Vulkan version.</param>
-    /// <returns>The formatted version, for example <c>1.2.0</c>.</returns>
+    /// <summary>Formats a version as <c>major.minor.patch</c>, such as <c>1.2.0</c>.</summary>
     internal static string Format(uint version)
     {
         (int major, int minor, int patch) = Unpack(version);
         return string.Create(CultureInfo.InvariantCulture, $"{major}.{minor}.{patch}");
     }
 
-    /// <summary>
-    /// Formats a packed Vulkan version as a backend renderer name with only major and minor.
-    /// </summary>
-    /// <param name="version">The packed Vulkan version.</param>
-    /// <returns>The formatted name, for example <c>Vulkan 1.2</c>.</returns>
+    /// <summary>Formats a version as <c>Vulkan major.minor</c>, such as <c>Vulkan 1.2</c>.</summary>
     internal static string FormatRendererName(uint version)
     {
         (int major, int minor, _) = Unpack(version);

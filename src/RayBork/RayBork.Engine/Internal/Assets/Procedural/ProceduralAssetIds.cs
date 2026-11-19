@@ -2,21 +2,11 @@ using System.Globalization;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Reserves the synthetic canonical paths of procedural assets and allocates their ids.
-/// </summary>
+/// <summary>Reserves procedural asset paths and allocates their ids.</summary>
 /// <remarks>
-/// <para>
-/// A procedural asset has no pack entry, so its public path is a reserved synthetic path of the form
-/// <c>/_procedural/mesh/{id}</c> or <c>/_procedural/texture/{id}</c>. Each kind has one process-wide
-/// counter, so two procedural assets never share a path even after the earlier one is disposed.
-/// </para>
-/// <para>
-/// The <c>_procedural</c> prefix is reserved. The pack catalog reports a path under it as missing
-/// instead of resolving a pack entry that happens to use it, and the bake must not write such a path.
-/// The public path carries the leading slash; the canonical form used by the catalog and the GPU
-/// upload does not.
-/// </para>
+/// A procedural path is <c>_procedural/mesh/{id}</c> or <c>_procedural/texture/{id}</c>, allocated
+/// from one process-wide counter per kind. The <c>_procedural</c> prefix is reserved: the catalog
+/// reports such paths as missing and the bake must not write them.
 /// </remarks>
 internal static class ProceduralAssetIds
 {
@@ -26,29 +16,21 @@ internal static class ProceduralAssetIds
     private static int _nextMeshId;
     private static int _nextTextureId;
 
-    /// <summary>Allocates the next procedural mesh id.</summary>
-    /// <returns>A positive id that was never allocated before in this process.</returns>
+    /// <summary>Allocates a process-unique procedural mesh id.</summary>
     internal static int NextMeshId() => Interlocked.Increment(ref _nextMeshId);
 
-    /// <summary>Allocates the next procedural texture id.</summary>
-    /// <returns>A positive id that was never allocated before in this process.</returns>
+    /// <summary>Allocates a process-unique procedural texture id.</summary>
     internal static int NextTextureId() => Interlocked.Increment(ref _nextTextureId);
 
     /// <summary>Builds the canonical path of a procedural mesh.</summary>
-    /// <param name="id">The id from <see cref="NextMeshId"/>.</param>
-    /// <returns>The canonical path <c>_procedural/mesh/{id}</c> without a leading slash.</returns>
     internal static string MeshPath(int id) =>
         RESERVED_PREFIX + "/mesh/" + id.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Builds the canonical path of a procedural texture.</summary>
-    /// <param name="id">The id from <see cref="NextTextureId"/>.</param>
-    /// <returns>The canonical path <c>_procedural/texture/{id}</c> without a leading slash.</returns>
     internal static string TexturePath(int id) =>
         RESERVED_PREFIX + "/texture/" + id.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Tests whether a canonical path is inside the reserved procedural prefix.</summary>
-    /// <param name="canonicalPath">A canonical path without a leading slash.</param>
-    /// <returns><see langword="true"/> when the catalog must never resolve the path.</returns>
     internal static bool IsReserved(string canonicalPath)
     {
         if (!canonicalPath.StartsWith(RESERVED_PREFIX, StringComparison.Ordinal))

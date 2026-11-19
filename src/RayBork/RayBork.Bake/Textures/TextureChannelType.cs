@@ -1,20 +1,10 @@
 namespace RayBork.Bake;
 
-/// <summary>
-/// The channel content of a texture produced by <see cref="TextureBaker"/>.
-/// </summary>
+/// <summary>The channel content of a texture produced by <see cref="TextureBaker"/>.</summary>
 /// <remarks>
-/// <para>
 /// The channel type selects which straight-alpha RGBA8 source channels the payload stores.
-/// <see cref="Rgba"/> keeps all four channels and is stored in the sRGB transfer function by
-/// <see cref="TextureBaker.Bake"/>; <see cref="Rgb"/>, <see cref="Rg"/>, and <see cref="R"/> are
-/// linear data layouts. <see cref="Rgb"/> forces alpha to opaque and <see cref="Rg"/> and
-/// <see cref="R"/> keep only the channels they name.
-/// </para>
-/// <para>
-/// The channel type is authoring metadata, not a payload format: the bake maps it together with
-/// <see cref="TextureCompression"/> to a concrete <see cref="TextureFormat"/>.
-/// </para>
+/// <see cref="Rgba"/> is stored as sRGB; <see cref="Rgb"/>, <see cref="Rg"/>, and
+/// <see cref="R"/> are linear.
 /// </remarks>
 public enum TextureChannelType
 {

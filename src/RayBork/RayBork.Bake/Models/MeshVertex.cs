@@ -2,12 +2,10 @@ using System.Numerics;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// One vertex in the fixed 88-byte engine mesh layout.
-/// </summary>
+/// <summary>One vertex in the fixed 88-byte engine mesh layout.</summary>
 /// <remarks>
 /// The field order is the payload order: position, normal, uv, uv1, uv2, uv3, color, and tangent.
-/// <see cref="MeshVertex.Create"/> supplies the documented defaults for absent source attributes.
+/// <see cref="MeshVertex.Create"/> supplies the defaults for absent source attributes.
 /// </remarks>
 internal struct MeshVertex
 {
@@ -36,8 +34,6 @@ internal struct MeshVertex
     internal Vector4 Tangent;
 
     /// <summary>Creates a vertex with the documented attribute defaults.</summary>
-    /// <param name="position">The mesh-space position.</param>
-    /// <returns>The defaulted vertex.</returns>
     internal static MeshVertex Create(Vector3 position) =>
         new()
         {

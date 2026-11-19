@@ -2,33 +2,10 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The app-lifetime owner of the engine's built-in primitive meshes and the engine materials the
-/// primitive, billboard, and text draw helpers use.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The app creates this instance after the asset catalog starts and before <see cref="IGame.Setup"/>
-/// runs, attaches it to <see cref="CameraService"/>, and releases it during shutdown after
-/// <see cref="IGame.Shutdown"/> returns and before the catalog force-disposes its cached assets.
-/// </para>
-/// <para>
-/// A <see cref="PrimitiveAssets"/> owns one <see cref="Shader"/> material over the built-in
-/// <c>/shaders/primitive</c> program for vertex-color geometry, one over the built-in
-/// <c>/shaders/mesh</c> program for billboards and textured quads, and one over the built-in
-/// <c>/shaders/msdf</c> program for MSDF text. It also holds one owner reference for each of the nine
-/// primitive meshes. Creation runs on the main thread before the tick thread starts, and the meshes and
-/// materials are read on the tick thread while the app records frames.
-/// <see cref="Dispose"/> runs on the main thread after the tick thread joined.
-/// </para>
-/// <para>
-/// <see cref="Dispose"/> is idempotent: it disposes each material once, releases each mesh owner
-/// reference once, and then releases the three program owner references. A creation failure releases
-/// everything already created and throws <see cref="AssetLoadException"/> with
-/// <see cref="DiagnosticCodes.ASSET_LOAD_FAILED"/>, so a failed startup leaves no partial state.
-/// Every accessor throws <see cref="ObjectDisposedException"/> after disposal.
-/// </para>
-/// </remarks>
+/// <summary>The app-lifetime owner of the built-in primitive meshes and engine materials.</summary>
+/// <remarks>Creation and disposal run on the main thread; meshes and materials are read on the tick
+/// thread. Disposal is idempotent and releases each reference once; asset accessors throw
+/// <see cref="ObjectDisposedException"/> after it while <see cref="IsDisposed"/> stays readable.</remarks>
 internal sealed class PrimitiveAssets : IDisposable
 {
     /// <summary>The canonical path of the built-in vertex-color primitive shader program.</summary>
@@ -46,10 +23,7 @@ internal sealed class PrimitiveAssets : IDisposable
     private readonly Meshes _meshes;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes the owner from the already built meshes, materials, and programs. The owner takes
-    /// over the three program references, the three material references, and one reference per mesh.
-    /// </summary>
+    /// <summary>Initializes the owner and takes over its asset references.</summary>
     /// <param name="primitiveProgram">The preloaded <c>/shaders/primitive</c> program.</param>
     /// <param name="meshProgram">The preloaded <c>/shaders/mesh</c> program.</param>
     /// <param name="msdfProgram">The preloaded <c>/shaders/msdf</c> program.</param>
@@ -84,14 +58,10 @@ internal sealed class PrimitiveAssets : IDisposable
         _meshes = meshes;
     }
 
-    /// <summary>Gets whether the app released the primitive assets. It stays readable after disposal.</summary>
+    /// <summary>Gets whether the app released the primitive assets; readable after disposal.</summary>
     internal bool IsDisposed => _disposed;
 
-    /// <summary>
-    /// Gets the engine-owned material over the <c>/shaders/primitive</c> program. The primitive draw
-    /// helpers share it and vary the tint through the per-instance color.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the engine-owned <c>/shaders/primitive</c> material; tint varies per instance.</summary>
     internal Shader PrimitiveMaterial
     {
         get
@@ -101,11 +71,8 @@ internal sealed class PrimitiveAssets : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the engine-owned material over the <c>/shaders/mesh</c> program for the billboard and
-    /// textured-quad helpers. Its texture binding is set immediately before each recorded draw.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the engine-owned <c>/shaders/mesh</c> material for billboards and textured
+    /// quads.</summary>
     internal Shader MeshMaterial
     {
         get
@@ -115,11 +82,7 @@ internal sealed class PrimitiveAssets : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the engine-owned material over the <c>/shaders/msdf</c> program for MSDF text. The text draw
-    /// path records one instance per glyph with its own per-instance texture binding on this material.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the engine-owned <c>/shaders/msdf</c> material used for MSDF text.</summary>
     internal Shader MsdfMaterial
     {
         get
@@ -129,57 +92,41 @@ internal sealed class PrimitiveAssets : IDisposable
         }
     }
 
-    /// <summary>Gets the unit cube mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit cube mesh; the engine owns it.</summary>
     internal Mesh Cube => GetMesh(_meshes.Cube);
 
-    /// <summary>Gets the unit-radius UV sphere mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit-radius UV sphere mesh; the engine owns it.</summary>
     internal Mesh Sphere => GetMesh(_meshes.Sphere);
 
-    /// <summary>Gets the unit XZ plane mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit XZ plane mesh; the engine owns it.</summary>
     internal Mesh Plane => GetMesh(_meshes.Plane);
 
-    /// <summary>Gets the unit XY quad mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit XY quad mesh; the engine owns it.</summary>
     internal Mesh Quad => GetMesh(_meshes.Quad);
 
-    /// <summary>Gets the unit XY disc mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit XY disc mesh; the engine owns it.</summary>
     internal Mesh Disc => GetMesh(_meshes.Disc);
 
-    /// <summary>Gets the unit right-triangle mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit right-triangle mesh; the engine owns it.</summary>
     internal Mesh Triangle => GetMesh(_meshes.Triangle);
 
-    /// <summary>Gets the unit line-segment mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit line-segment mesh; the engine owns it.</summary>
     internal Mesh Line => GetMesh(_meshes.Line);
 
-    /// <summary>Gets the unit wire-cube mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit wire-cube mesh; the engine owns it.</summary>
     internal Mesh WireCube => GetMesh(_meshes.WireCube);
 
-    /// <summary>Gets the unit wire-sphere mesh. The engine owns it; do not dispose it.</summary>
-    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    /// <summary>Gets the unit wire-sphere mesh; the engine owns it.</summary>
     internal Mesh WireSphere => GetMesh(_meshes.WireSphere);
 
-    /// <summary>
-    /// Loads the three built-in shader programs, creates their engine-owned materials, and builds the
-    /// nine primitive meshes through the catalog's procedural asset service.
-    /// </summary>
+    /// <summary>Loads the built-in programs, materials, and nine primitive meshes.</summary>
     /// <param name="assets">The started asset catalog.</param>
-    /// <returns>The primitive assets, which own one reference per program, material, and mesh.</returns>
+    /// <returns>The primitive assets owning one reference per asset.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The catalog does not provide the procedural asset service; the engine wired the wrong catalog.
-    /// </exception>
-    /// <exception cref="AssetLoadException">
-    /// A built-in program is missing, was baked as the wrong type, cannot be uploaded, or a primitive
-    /// mesh cannot be built. The message names the built-in assets; every asset created before the
-    /// failure is released.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The catalog lacks the procedural asset
+    /// service.</exception>
+    /// <exception cref="AssetLoadException">A built-in asset is missing, invalid, or cannot be
+    /// uploaded.</exception>
     [SuppressMessage(
         "Reliability",
         "CA2000",
@@ -305,10 +252,7 @@ internal sealed class PrimitiveAssets : IDisposable
         }
     }
 
-    /// <summary>
-    /// Disposes all three materials, releases every mesh owner reference, and releases the program owner
-    /// references. Idempotent; called by the app during shutdown after the game callbacks returned.
-    /// </summary>
+    /// <summary>Disposes materials and releases all mesh and program owner references.</summary>
     public void Dispose()
     {
         if (_disposed)

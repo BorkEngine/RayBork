@@ -58,15 +58,10 @@ internal struct PresentPushConstants
 /// the display-referred value into the swapchain image.
 /// </summary>
 /// <remarks>
-/// <para>
 /// The pipeline bakes the swapchain format into its render pass, so a format change requires a new
-/// instance. The viewport and scissor are dynamic, so an extent-only change reuses the pipeline and
-/// only rebuilds the framebuffers through <see cref="RecreateFramebuffers"/>.
-/// </para>
-/// <para>
-/// Every member is render-thread only. The caller waits for the device to idle before recreating or
-/// disposing. Dispose is idempotent.
-/// </para>
+/// instance; the dynamic viewport and scissor mean an extent-only change rebuilds framebuffers through
+/// <see cref="RecreateFramebuffers"/>. Every member is render-thread only, the caller waits for device
+/// idle before recreating or disposing, and disposal is idempotent.
 /// </remarks>
 internal sealed unsafe class VulkanPresentPipeline : IDisposable
 {

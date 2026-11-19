@@ -2,14 +2,10 @@ using System.Buffers.Binary;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// A fully computed RAYBORKP v1 layout: sorted entries with absolute payload offsets, the serialized
-/// index, and the stored payload bytes.
-/// </summary>
+/// <summary>A computed RAYBORKP v1 pack layout.</summary>
 /// <remarks>
-/// The writer compresses and lays out payloads once per <see cref="PackBuilder"/> build. Offsets are
-/// absolute and alignment-correct; zero padding fills the gaps. The layout is immutable after
-/// creation, so one layout can be written to several streams.
+/// Entries are sorted with absolute, alignment-correct offsets and the gaps are zero-filled. The
+/// layout is immutable, so one instance can be written to several streams.
 /// </remarks>
 internal sealed class PackLayout
 {
@@ -40,19 +36,9 @@ internal sealed class PackLayout
     /// <summary>Gets the sorted entries, including their absolute payload offsets.</summary>
     internal IReadOnlyList<PackEntry> Entries => _entries;
 
-    /// <summary>
-    /// Computes a pack layout from the queued entries.
-    /// </summary>
-    /// <param name="source">The entries to write, in any order.</param>
-    /// <param name="policy">The payload compression policy.</param>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <returns>The computed layout.</returns>
+    /// <summary>Computes a pack layout from the queued entries.</summary>
     /// <exception cref="ArgumentException">
-    /// A path is not canonical, a path is duplicated, an entry is invalid, or the pack exceeds a v1
-    /// field width.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A type, alignment, or compression policy is outside its v1 set.
+    /// A path is not canonical or duplicated, or the pack exceeds a v1 field width.
     /// </exception>
     internal static PackLayout Create(
         IReadOnlyList<PackSourceEntry> source,
@@ -212,12 +198,7 @@ internal sealed class PackLayout
         }
     }
 
-    /// <summary>
-    /// Writes the complete pack to a stream and leaves the stream open.
-    /// </summary>
-    /// <param name="destination">The writable destination stream.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="destination"/> is null.</exception>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> is not writable.</exception>
+    /// <summary>Writes the complete pack to a stream and leaves the stream open.</summary>
     internal void WriteTo(Stream destination)
     {
         ArgumentNullException.ThrowIfNull(destination);
@@ -274,10 +255,7 @@ internal sealed class PackLayout
         }
     }
 
-    /// <summary>
-    /// Materializes the complete pack in one array.
-    /// </summary>
-    /// <returns>The pack bytes.</returns>
+    /// <summary>Materializes the complete pack in one array.</summary>
     /// <exception cref="InvalidOperationException">The pack is too large for one array.</exception>
     internal byte[] ToArray()
     {

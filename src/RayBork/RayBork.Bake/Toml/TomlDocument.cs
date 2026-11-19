@@ -25,12 +25,7 @@ internal sealed class TomlDocument
     /// <summary>Gets the syntax index.</summary>
     internal TomlSyntaxIndex Syntax { get; }
 
-    /// <summary>Parses and validates one TOML document.</summary>
-    /// <param name="text">The source text.</param>
-    /// <param name="filePath">The diagnostic source path.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="document">The document when parsing succeeds.</param>
-    /// <returns><see langword="true"/> when the document parsed without errors.</returns>
+    /// <summary>Parses one TOML document, reporting syntax and duplicate-key errors.</summary>
     internal static bool TryParse(
         string text,
         string filePath,

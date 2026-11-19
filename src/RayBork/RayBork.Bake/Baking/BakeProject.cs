@@ -2,20 +2,10 @@ using RayBork.Bake.Processors;
 
 namespace RayBork.Bake.Baking;
 
-/// <summary>
-/// The validated, immutable configuration of one bake.
-/// </summary>
+/// <summary>The validated, immutable configuration of one bake.</summary>
 internal sealed class BakeProject
 {
     /// <summary>Initializes a validated project.</summary>
-    /// <param name="projectRoot">The absolute project root.</param>
-    /// <param name="packs">The ordered packs; the first is the main pack.</param>
-    /// <param name="textureFilter">The default texture filter.</param>
-    /// <param name="textureWrap">The default texture wrap mode.</param>
-    /// <param name="assetTypes">The registered data types keyed by full name.</param>
-    /// <param name="processors">The registered processor registrations in order.</param>
-    /// <param name="processorRegistry">The immutable extension registry.</param>
-    /// <param name="toolVersion">The tool version recorded in the incremental manifest.</param>
     internal BakeProject(
         string projectRoot,
         IReadOnlyList<BakePack> packs,

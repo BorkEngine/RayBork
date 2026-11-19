@@ -1,28 +1,16 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when SDL3 window creation or another platform window operation fails.
-/// </summary>
+/// <summary>Thrown when window creation or another window operation fails.</summary>
 public sealed class WindowException : RayBorkException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WindowException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="WindowException"/>.</summary>
     public WindowException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WindowException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="WindowException"/>.</summary>
     public WindowException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WindowException"/> class with a message and an
-    /// inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="WindowException"/>.</summary>
     public WindowException(string message, Exception? innerException)
         : base(message, innerException) { }
 

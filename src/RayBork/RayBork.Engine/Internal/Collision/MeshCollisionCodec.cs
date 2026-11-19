@@ -3,37 +3,12 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Encodes and decodes the baked ray-mesh collision payload: a fixed header, the BVH nodes, and the
-/// canonical triangle ids.
-/// </summary>
+/// <summary>Encodes and decodes the baked ray-mesh collision payload.</summary>
 /// <remarks>
-/// <para>
-/// The payload is self-contained and little-endian. The 24-byte header is the ASCII magic
-/// <c>RBVC</c>, a 32-bit format version, the <see cref="PrimitiveTopology"/> as a 32-bit value, and
-/// three 32-bit counts: the node count, the triangle-id count, and the canonical triangle count. The
-/// header is followed by <see cref="NODE_LENGTH"/>-byte node entries and then the 32-bit triangle
-/// ids; there is no alignment padding between fields.
-/// </para>
-/// <para>
-/// A node entry is six little-endian floats (minimum XYZ, then maximum XYZ) followed by the 32-bit
-/// integers <see cref="MeshCollisionNode.LeftOrFirst"/> and <see cref="MeshCollisionNode.Count"/>.
-/// The canonical triangle count includes the degenerate triangles the builder omitted, and every
-/// stored triangle id is below it.
-/// </para>
-/// <para>
-/// The decoder validates the header, the exact payload length, the topology, and the canonical
-/// triangle count with checked arithmetic before it allocates, then constructs a
-/// <see cref="MeshCollisionData"/> whose constructor validates the tree shape, node ranges, bounds,
-/// depth, and triangle ids. Every format or structure failure is an
-/// <see cref="AssetLoadException"/> that names the mesh path, so a corrupt payload fails the mesh
-/// load instead of reaching a query.
-/// </para>
-/// <para>
-/// The format is internal to the engine and the bake, but the magic, version, and offsets are stable
-/// for the pack-v1 compatibility contract and the codec fuzz tests. A format change increments
-/// <see cref="CURRENT_VERSION"/>.
-/// </para>
+/// The little-endian payload is a 24-byte header (magic <c>RBVC</c>, version, topology, node count,
+/// triangle-id count, canonical triangle count), then <see cref="NODE_LENGTH"/>-byte nodes (six
+/// floats, then two 32-bit integers), then the 32-bit triangle ids, with no alignment padding. A
+/// malformed payload fails the load with an <see cref="AssetLoadException"/> naming the mesh path.
 /// </remarks>
 internal static class MeshCollisionCodec
 {
@@ -43,13 +18,15 @@ internal static class MeshCollisionCodec
     /// <summary>The fixed header length in bytes.</summary>
     internal const int HEADER_LENGTH = 24;
 
-    /// <summary>The fixed node entry length in bytes; it matches <see cref="MeshCollisionNode"/>.</summary>
+    /// <summary>
+    /// The fixed node entry length in bytes; it matches <see cref="MeshCollisionNode"/>.
+    /// </summary>
     internal const int NODE_LENGTH = 32;
 
     /// <summary>The triangle-id field length in bytes.</summary>
     internal const int TRIANGLE_ID_LENGTH = sizeof(int);
 
-    /// <summary>The only supported payload format version.</summary>
+    /// <summary>The only supported payload format version; changes increment it.</summary>
     internal const uint CURRENT_VERSION = 1;
 
     /// <summary>The header offset of the magic bytes.</summary>
@@ -73,13 +50,9 @@ internal static class MeshCollisionCodec
     /// <summary>The ASCII payload magic, <c>RBVC</c>.</summary>
     internal static ReadOnlySpan<byte> MagicBytes => "RBVC"u8;
 
-    /// <summary>
-    /// Encodes one collision structure as a self-contained payload.
-    /// </summary>
-    /// <param name="data">The frozen collision structure to encode.</param>
-    /// <returns>The header, the node entries, and the triangle ids.</returns>
+    /// <summary>Encodes one collision structure as a self-contained payload.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-    /// <exception cref="OverflowException">The structure is too large to address as one payload.</exception>
+    /// <exception cref="OverflowException">The payload size overflows.</exception>
     internal static byte[] Encode(MeshCollisionData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -130,21 +103,11 @@ internal static class MeshCollisionCodec
         return payload;
     }
 
-    /// <summary>
-    /// Decodes one collision payload and validates it against the mesh that references it.
-    /// </summary>
-    /// <param name="payload">The complete collision payload bytes.</param>
-    /// <param name="expectedTopology">The topology of the mesh that references the payload.</param>
-    /// <param name="expectedIndexCount">The 32-bit index count of that mesh.</param>
-    /// <param name="meshPath">
-    /// The canonical mesh descriptor path, without a leading slash, used in the failure message.
-    /// </param>
-    /// <returns>The validated collision structure.</returns>
+    /// <summary>Decodes and validates one collision payload against the referencing mesh.</summary>
     /// <exception cref="ArgumentException"><paramref name="meshPath"/> is empty.</exception>
     /// <exception cref="AssetLoadException">
-    /// The payload is truncated or corrupt, its topology does not match the mesh, its canonical
-    /// triangle count does not match the mesh's index count, or the structure it describes is
-    /// invalid.
+    /// The payload is truncated or corrupt, its topology or triangle count disagrees with the mesh,
+    /// or the structure it describes is invalid.
     /// </exception>
     internal static MeshCollisionData Decode(
         ReadOnlySpan<byte> payload,

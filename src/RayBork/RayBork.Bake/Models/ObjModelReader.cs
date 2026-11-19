@@ -3,33 +3,17 @@ using System.Numerics;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Reads a static Wavefront OBJ mesh into parts.
-/// </summary>
+/// <summary>Reads a static Wavefront OBJ mesh into parts.</summary>
 /// <remarks>
-/// <para>
-/// Supported statements are <c>v</c>, <c>vn</c>, <c>vt</c>, <c>f</c>, <c>o</c>, and <c>g</c>.
-/// Polygons are fan-triangulated. Positive and negative face indices are resolved against the
-/// vertices declared so far. A face without normals gets a flat geometric normal per triangle; a
-/// face corner without a <c>vt</c> index keeps the zero UV default. Wavefront authors V from the
-/// bottom of the texture, while the engine samples from a top-left origin, so every parsed
-/// <c>vt</c> has its V flipped (<c>v = 1 - v</c>) and keeps U unchanged; this matches raylib's OBJ
-/// loader. <c>mtllib</c> is ignored with a warning because M3 does not import materials. Other
-/// statements, including <c>usemtl</c>, <c>s</c>, and comments, are ignored.
-/// </para>
-/// <para>
-/// Each <c>o</c> or <c>g</c> statement starts a new part. Faces before the first one belong to a
-/// part named after the source file. A file with no faces is an error.
-/// </para>
+/// Supported statements are <c>v</c>, <c>vn</c>, <c>vt</c>, <c>f</c>, <c>o</c>, and <c>g</c>;
+/// polygons are fan-triangulated and each <c>o</c> or <c>g</c> starts a new part. <c>vt</c> V is
+/// flipped to the engine's top-left origin (<c>v = 1 - v</c>), and <c>mtllib</c> is ignored with a
+/// warning.
 /// </remarks>
 internal static class ObjModelReader
 {
     /// <summary>Reads one OBJ source.</summary>
-    /// <param name="sourcePath">The absolute OBJ path.</param>
-    /// <param name="defaultPartName">The part name for faces before any group statement.</param>
-    /// <param name="warning">The warning sink.</param>
     /// <returns>The non-empty part list.</returns>
-    /// <exception cref="ModelReadException">The file cannot be read or contains invalid geometry.</exception>
     internal static IReadOnlyList<ModelPartSource> Read(
         string sourcePath,
         string defaultPartName,
@@ -387,13 +371,8 @@ internal static class ObjModelReader
         return Vector3.Normalize(normal);
     }
 
-    /// <summary>Parses one <c>vt</c> statement into the engine's top-left UV space.</summary>
-    /// <remarks>
-    /// Wavefront OBJ places the V origin at the bottom of the texture and the engine samples from a
-    /// top-left origin, so V is flipped here: an authored V of 0 maps to the bottom of the texture
-    /// (engine V of 1) and an authored V of 1 maps to the top (engine V of 0). U is unchanged. A
-    /// <c>vt</c> with only U means an authored V of 0, so it flips to 1 like any other.
-    /// </remarks>
+    /// <summary>Parses one <c>vt</c> statement, flipping V to the top-left origin.</summary>
+    /// <remarks>Wavefront's bottom-left V becomes <c>v = 1 - v</c>; U is unchanged.</remarks>
     private static Vector2 ParseTextureCoordinate(string rest, string fileName, int lineNumber)
     {
         float[] values = ParseFloats(rest, 1, "texture coordinate", fileName, lineNumber);

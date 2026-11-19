@@ -1,45 +1,11 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// A three-slot frame handoff ring for one tick producer and one render consumer.
-/// </summary>
+/// <summary>A three-slot frame handoff ring for one tick producer and one render consumer.</summary>
 /// <remarks>
-/// <para>
-/// The producer records into a writable slot with <see cref="TryAcquireWritable"/> or
-/// <see cref="AcquireWritable"/>, then publishes it as the newest ready frame. The consumer takes
-/// the newest ready frame with <see cref="TryAcquireNewest"/> or <see cref="AcquireNewest"/> and
-/// releases it after rendering. Publishing supersedes an older ready frame instead of queueing it,
-/// so the consumer never renders a backlog, and never touches a slot that is being rendered. The
-/// producer blocks when no slot is free, which bounds run-ahead, and a FIFO-paced producer also waits
-/// after publishing until the render loop finishes with that frame.
-/// </para>
-/// <para>
-/// A slot owns at most one <see cref="FrameAssetRetention"/> set. The producer attaches it to the
-/// recording lease, the set follows the frame through Ready and Rendering, and the ring releases it
-/// exactly once when the frame is released, superseded, or abandoned. The retention release runs
-/// after the ring lock is released because a target's release may queue GPU destruction.
-/// </para>
-/// <para>
-/// A slot also owns one reusable <see cref="RenderFramePacket"/>. A writable acquisition resets the
-/// packet and returns it through the lease; publishing seals it; the consumer reads it through the
-/// rendering lease. The packet's pooled pass and draw buffers are therefore reused per slot and never
-/// shared by two frames, and the tick thread cannot mutate a packet that is ready or rendering.
-/// </para>
-/// <para>
-/// State is guarded by a <see cref="Lock"/>; blocking waits use <see cref="AutoResetEvent"/> and
-/// never hold the lock. <see cref="ReadySignal"/> lets the render loop wait on frame readiness and
-/// GPU upload work at the same time. Blocking acquisitions return <c>null</c> when the ring is
-/// complete and drained; invalid or stale leases throw <see cref="InvalidOperationException"/>.
-/// </para>
-/// <para>
-/// The ring also tracks the highest frame index the render thread finished with using
-/// <see cref="MarkPresented"/>, so a FIFO-paced producer can wait for the frame it published with
-/// <see cref="WaitForPresentation"/>. "Finished with" includes a successful presentation, a frame
-/// dropped by minimization or device recovery, and a failed submit or present; only
-/// <see cref="RenderStats.PresentedFrames"/> counts successful presentations. A newer mark
-/// satisfies an older wait because a superseded frame is no longer needed. Completion and
-/// cancellation both release the wait.
-/// </para>
+/// Publishing supersedes an older ready frame instead of queueing it, and the producer blocks when no
+/// slot is free, which bounds run-ahead. A slot owns one reusable <see cref="RenderFramePacket"/> and at
+/// most one <see cref="FrameAssetRetention"/> set, released exactly once after the ring lock; state is
+/// guarded by a <see cref="Lock"/>.
 /// </remarks>
 internal sealed class FrameRing
 {
@@ -57,9 +23,7 @@ internal sealed class FrameRing
     private int _presentationWaiterCount;
     private bool _completed;
 
-    /// <summary>
-    /// Initializes the ring and its three reusable frame packets.
-    /// </summary>
+    /// <summary>Initializes the ring and its three reusable frame packets.</summary>
     internal FrameRing()
     {
         for (int index = 0; index < _packets.Length; index++)
@@ -68,22 +32,15 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Gets the signal that is set when a ready frame becomes available or the ring completes. The
-    /// render loop waits on it together with the GPU asset bridge signal.
-    /// </summary>
+    /// <summary>Gets the signal set when a ready frame is available or the ring completes.</summary>
     internal WaitHandle ReadySignal => _readyAvailable;
 
     /// <summary>
-    /// Gets the number of threads currently blocked in <see cref="WaitForPresentation"/>. Test-only
-    /// observation; it is not part of the ring protocol.
+    /// Gets the number of threads blocked in <see cref="WaitForPresentation"/>; test-only.
     /// </summary>
     internal int PresentationWaiterCount => Volatile.Read(ref _presentationWaiterCount);
 
-    /// <summary>
-    /// Gets whether the producer completed the ring. A completed ring still has to be drained by the
-    /// consumer.
-    /// </summary>
+    /// <summary>Gets whether the producer completed the ring; ready frames still need draining.</summary>
     internal bool IsCompleted
     {
         get
@@ -95,10 +52,7 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Tries to reserve a free slot for recording. Returns <c>false</c> when every slot is occupied
-    /// or the ring is complete.
-    /// </summary>
+    /// <summary>Tries to reserve a free slot for recording; fails when none is free.</summary>
     internal bool TryAcquireWritable(out FrameLease lease)
     {
         lock (_gate)
@@ -107,16 +61,8 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Attaches the frame's engine-asset retention set to a recording lease. A slot stores at most one
-    /// set; attach once per frame, before publishing.
-    /// </summary>
-    /// <param name="lease">A recording lease for this ring.</param>
-    /// <param name="retention">The set owned by the frame, or the frame's own new set.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="retention"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// <paramref name="lease"/> is not a recording lease, or the slot already owns a retention set.
-    /// </exception>
+    /// <summary>Attaches the frame's retention set to a recording lease before publishing.</summary>
+    /// <remarks>A slot stores at most one set, so attach once per frame.</remarks>
     internal void AttachRetention(FrameLease lease, FrameAssetRetention retention)
     {
         ArgumentNullException.ThrowIfNull(retention);
@@ -141,12 +87,9 @@ internal sealed class FrameRing
     }
 
     /// <summary>
-    /// Seals a recording lease as the newest ready frame, superseding any older ready frame. Both
-    /// superseded and completed frames are released for reuse; a rendering slot is never touched.
+    /// Seals a recording lease as the newest ready frame, superseding any older ready frame.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// <paramref name="lease"/> is not a recording lease for this ring.
-    /// </exception>
+    /// <remarks>Superseded retention is released before the freed slot is advertised.</remarks>
     internal void Publish(FrameLease lease)
     {
         bool freedSlot = false;
@@ -186,10 +129,7 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Tries to take the newest ready frame for rendering. Returns <c>false</c> when no ready frame
-    /// is available, including after the ring is complete and drained.
-    /// </summary>
+    /// <summary>Tries to take the newest ready frame for rendering.</summary>
     internal bool TryAcquireNewest(out FrameLease lease)
     {
         lock (_gate)
@@ -198,13 +138,7 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Releases a rendering lease so the slot can be recorded again, and releases the frame's
-    /// retention set outside the ring lock.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// <paramref name="lease"/> is not a rendering lease for this ring.
-    /// </exception>
+    /// <summary>Releases a rendering lease and its retention set, freeing the slot for recording.</summary>
     internal void Release(FrameLease lease)
     {
         FrameAssetRetention? retention;
@@ -220,13 +154,7 @@ internal sealed class FrameRing
         _writableAvailable.Set();
     }
 
-    /// <summary>
-    /// Returns a recording lease to the free pool without publishing it, and releases its retention
-    /// set outside the ring lock. Used when a tick fails before it can produce a frame.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// <paramref name="lease"/> is not a recording lease for this ring.
-    /// </exception>
+    /// <summary>Returns a recording lease without publishing it and releases its retention set.</summary>
     internal void Abandon(FrameLease lease)
     {
         FrameAssetRetention? retention;
@@ -241,12 +169,8 @@ internal sealed class FrameRing
         _writableAvailable.Set();
     }
 
-    /// <summary>
-    /// Stops the producer: later writable acquisitions fail, waiting producers are woken, and the
-    /// consumer may still drain the frames that are already ready. Complete is idempotent. Ready
-    /// frames keep their retention set until the consumer drains them, because the final frame may
-    /// still be presented during teardown.
-    /// </summary>
+    /// <summary>Stops the producer; ready frames stay drainable with their retention sets.</summary>
+    /// <remarks>Idempotent; the final frame may still be presented during teardown.</remarks>
     internal void Complete()
     {
         bool completedNow;
@@ -265,12 +189,8 @@ internal sealed class FrameRing
     }
 
     /// <summary>
-    /// Blocks until a free slot is available or the ring is complete, then reserves the slot for
-    /// recording. Completion and cancellation are distinguished: cancellation is reported as
-    /// <see cref="OperationCanceledException"/> even when the ring is already complete.
+    /// Blocks for a free slot, returning <see langword="null"/> when the ring is complete.
     /// </summary>
-    /// <returns>A recording lease, or <c>null</c> when the ring is complete.</returns>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     internal FrameLease? AcquireWritable(CancellationToken cancellationToken)
     {
         while (true)
@@ -294,14 +214,9 @@ internal sealed class FrameRing
     }
 
     /// <summary>
-    /// Blocks until a ready frame is available. A complete ring drains its last ready frame before
-    /// reporting completion, and cancellation is reported as <see cref="OperationCanceledException"/>
-    /// even when the ring is already complete and drained.
+    /// Blocks for a ready frame; a complete ring drains its last frame before returning
+    /// <see langword="null"/>.
     /// </summary>
-    /// <returns>
-    /// A rendering lease, or <c>null</c> when the ring is complete and no ready frame remains.
-    /// </returns>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     internal FrameLease? AcquireNewest(CancellationToken cancellationToken)
     {
         while (true)
@@ -324,20 +239,11 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Records that the render thread finished the presentation attempt for <paramref name="frameIndex"/>.
-    /// The mark is monotonic: a frame at or below the highest marked index counts as finished, so a
-    /// superseded frame is satisfied by the newer frame that replaced it. Safe and idempotent from any
-    /// thread; advances the completion waiters only when the highest index moves.
-    /// </summary>
+    /// <summary>Records that a frame's presentation attempt finished; the mark is monotonic.</summary>
     /// <remarks>
-    /// The render loop calls this after every present attempt, including a dropped frame and a
-    /// recovered or thrown failure, and before it releases the lease. The mark is a pacing-completion
-    /// signal, not a successful-presentation counter: a frame that was dropped or failed still marks
-    /// so a FIFO-paced tick cannot wait forever, while <see cref="RenderStats.PresentedFrames"/> counts
-    /// only frames that reached the presentation engine.
+    /// Dropped and failed frames mark too, so FIFO pacing cannot wait forever;
+    /// <see cref="RenderStats.PresentedFrames"/> counts only successful presentations.
     /// </remarks>
-    /// <param name="frameIndex">The frame index that finished its presentation attempt.</param>
     internal void MarkPresented(long frameIndex)
     {
         bool advanced = false;
@@ -356,25 +262,13 @@ internal sealed class FrameRing
         }
     }
 
-    /// <summary>
-    /// Blocks until the render loop finished with <paramref name="frameIndex"/> (presented, dropped,
-    /// or failed), or a newer frame, or until the ring completes. No lock is held while waiting.
-    /// </summary>
+    /// <summary>Blocks until the frame, or a newer one, is finished with, or the ring completes.</summary>
     /// <remarks>
-    /// The wait is used by the FIFO pacing policy: one tick waits for the render loop to finish with
-    /// the frame it published, so a normal presentation paces the tick rate to the display refresh.
-    /// A frame dropped by minimization or recovery and a failed submit or present also finish the
-    /// wait; <see cref="RenderStats.PresentedFrames"/> is the successful-presentation counter. The
-    /// tick runner does not call this in MAILBOX or IMMEDIATE mode. A ring that is already complete,
-    /// or that completes while waiting, releases the wait so shutdown cannot deadlock even when the
-    /// render thread never presents the frame.
+    /// A newer mark satisfies an older wait, and completion or cancellation releases it, so shutdown
+    /// cannot deadlock. No lock is held while waiting.
     /// </remarks>
-    /// <param name="frameIndex">The frame index whose completion the caller waits for.</param>
-    /// <param name="cancellationToken">The stop token that releases the wait during shutdown.</param>
     /// <returns>
-    /// <see langword="true"/> when the render loop finished with the frame or a newer one, or when the
-    /// ring is complete; <see langword="false"/> when <paramref name="cancellationToken"/> was
-    /// canceled first.
+    /// <see langword="true"/> when finished or complete; otherwise <see langword="false"/>.
     /// </returns>
     internal bool WaitForPresentation(long frameIndex, CancellationToken cancellationToken)
     {

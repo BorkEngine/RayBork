@@ -7,20 +7,9 @@ namespace RayBork.Internal;
 /// collision queries.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The builder enumerates the canonical triangles of a triangle list or strip exactly like
-/// <see cref="Collision.GetRayMesh"/>: a list advances in groups of three, and a strip uses the
-/// sliding window with the first two indices swapped on odd ids. Zero-area triangles are skipped. The
-/// tree splits the largest centroid extent into 12 bins and chooses the binned surface-area heuristic
-/// split with the lowest cost; a range that no bin split separates falls back to a median split on the
-/// largest centroid axis, and the recursion forces a leaf at
-/// <see cref="MeshCollisionData.MAX_DEPTH"/>. Leaves hold at most four triangles.
-/// </para>
-/// <para>
-/// The build is pure CPU and deterministic: no randomness, clock, or environment state is read, and
-/// two builds of the same geometry produce identical arrays. The work is done on caller-provided
-/// spans and temporary arrays; the result is frozen into arrays before it is returned.
-/// </para>
+/// Canonical triangles are enumerated like <see cref="Collision.GetRayMesh"/>; zero-area triangles
+/// are skipped. Splits use a 12-bin surface-area heuristic with a median fallback, leaves hold at
+/// most four triangles, and the recursion stops at <see cref="MeshCollisionData.MAX_DEPTH"/>.
 /// </remarks>
 internal static class MeshCollisionBuilder
 {
@@ -36,17 +25,10 @@ internal static class MeshCollisionBuilder
     private static readonly CentroidComparer _centroidYComparer = new(1);
     private static readonly CentroidComparer _centroidZComparer = new(2);
 
-    /// <summary>
-    /// Builds one collision structure from a geometry snapshot.
-    /// </summary>
-    /// <param name="positions">The mesh-space vertex positions, in vertex order.</param>
-    /// <param name="indices">The 32-bit indices of the same snapshot.</param>
-    /// <param name="topology">The triangle topology of the index list.</param>
-    /// <returns>
-    /// The frozen structure, or <c>null</c> when the snapshot has no non-degenerate triangle.
-    /// </returns>
+    /// <summary>Builds one collision structure from a geometry snapshot.</summary>
+    /// <returns>The structure, or <c>null</c> when no non-degenerate triangle exists.</returns>
     /// <exception cref="ArgumentException">
-    /// The topology is not a triangle topology, or an index is outside <paramref name="positions"/>.
+    /// The topology is not triangular, or an index is outside <paramref name="positions"/>.
     /// </exception>
     internal static MeshCollisionData? Build(
         ReadOnlySpan<Vector3> positions,

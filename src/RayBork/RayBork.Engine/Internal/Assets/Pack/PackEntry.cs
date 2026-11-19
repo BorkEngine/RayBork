@@ -1,26 +1,13 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// One validated RAYBORKP v1 index entry exposed by <see cref="PackArchive"/>.
-/// </summary>
+/// <summary>One validated RAYBORKP v1 index entry from an archive.</summary>
 /// <remarks>
-/// Instances are immutable and compare by reference. <see cref="PackArchive.ReadPayload"/> accepts
-/// only the instance that belongs to its own archive, so two archives can hold different entries at
-/// the same path.
+/// Instances are immutable and compare by reference. <see cref="PackArchive.ReadPayload"/> accepts only
+/// an entry that belongs to its own archive.
 /// </remarks>
 internal sealed class PackEntry
 {
-    /// <summary>
-    /// Initializes an index entry from validated header and index fields.
-    /// </summary>
-    /// <param name="path">The canonical asset path.</param>
-    /// <param name="type">The entry asset type.</param>
-    /// <param name="flags">The entry flag bits.</param>
-    /// <param name="offset">The absolute file offset of the stored payload.</param>
-    /// <param name="storedLength">The stored payload byte length.</param>
-    /// <param name="uncompressedSize">The decompressed payload byte length.</param>
-    /// <param name="alignment">The payload alignment.</param>
-    /// <param name="storedHash">The XXH3-64 hash of the stored payload bytes.</param>
+    /// <summary>Initializes an index entry from validated header and index fields.</summary>
     internal PackEntry(
         string path,
         AssetEntryType type,

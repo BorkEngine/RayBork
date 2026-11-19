@@ -2,51 +2,13 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// A parsed CFF 1.0 (Compact Font Format, Type 2 charstring) face.
-/// </summary>
+/// <summary>A parsed CFF 1.0 face with Type 2 charstrings.</summary>
 /// <remarks>
-/// <para>
-/// <see cref="Parse"/> validates the CFF header, Name INDEX, Top DICT INDEX, String INDEX, Global
-/// Subr INDEX, Top DICT, charset, CharStrings INDEX, the top-level Private DICT, and — for a
-/// CID-keyed face — the FDArray Font DICTs and the FDSelect. Every offset and length is bounded by
-/// the <c>CFF </c> table. A charstring is interpreted only by <see cref="ReadGlyph"/>, so a face with
-/// a corrupt unused glyph still parses and the failure occurs when that glyph is read.
-/// </para>
-/// <para>
-/// A CFF2 table is reported as <see cref="FontUnsupportedException"/>; CFF2 is not supported. Valid
-/// CFF features outside the subset are also unsupported: a predefined Expert or ExpertSubset charset,
-/// an FDSelect format 4 table, a <c>seac</c> in a CID-keyed face, a <c>seac</c> whose base or accent
-/// cannot be resolved, a nested <c>seac</c>, more than <see cref="MAX_FONT_DICTS"/> Font DICTs, more
-/// than <see cref="MAX_LOCAL_SUBR_ENTRIES"/> total local-subroutine entries, more than
-/// <see cref="MAX_PRIVATE_DICT_BYTES"/> total private-DICT bytes, a <c>CharstringType</c> other than
-/// 2, a <c>PaintType</c> other than 0, a non-zero <c>StrokeWidth</c>, <c>SyntheticBase</c>, and the
-/// interpreter limits documented on <see cref="CffType2Interpreter"/>. All other structural failures
-/// are <see cref="FontFormatException"/>. Shared Private DICTs and Local Subr INDEXes are parsed once
-/// per (offset, size) or offset even when many Font DICTs reference them; the private-DICT byte cap
-/// counts each distinct (offset, size) once and includes the Top DICT Private DICT.
-/// </para>
-/// <para>
-/// Charstring coordinates are mapped to font units by the Top DICT FontMatrix and the face's
-/// <c>unitsPerEm</c>: the default <c>[0.001 0 0 0.001 0 0]</c> with 1,000 units per em is the
-/// identity, and a non-default matrix is applied as
-/// <c>(a*x + c*y + e, b*x + d*y + f) * unitsPerEm</c> to every point after interpretation, including
-/// the composed <c>seac</c> components. A Font DICT FontMatrix is not applied; CID faces use the Top
-/// DICT matrix.
-/// </para>
-/// <para>
-/// <see cref="ReadGlyph"/> reports bounds computed from the returned outline, not a stored glyph box:
-/// the box is the outward-rounded integer hull of every on-curve point and every cubic control
-/// point, so it contains the whole outline because a Bézier lies inside its control hull. A
-/// coordinate outside the 32-bit integer range saturates the corresponding bound. A glyph without a
-/// contour has an all-zero box and <see cref="OutlinePath.Empty"/>.
-/// </para>
-/// <para>
-/// The instance retains the face bytes and is immutable after <see cref="Parse"/>, so reads are safe
-/// from any thread without locks. Each <see cref="ReadGlyph"/> call allocates its own outline arrays;
-/// the interpreter's operand-stack and transient scratch arrays are pooled, and an identity FontMatrix
-/// reuses the raw contours instead of copying them. Concurrent reads share no mutable state.
-/// </para>
+/// <see cref="Parse"/> validates the header, INDEXes, DICTs, charset, and CID FDArray/FDSelect;
+/// charstrings are interpreted by <see cref="ReadGlyph"/> and mapped to font units by the Top DICT
+/// FontMatrix. Bounds are the outward-rounded hull of the outline, and CFF2 or another out-of-subset
+/// feature raises <see cref="FontUnsupportedException"/>. The instance retains the table bytes and is
+/// immutable and safe to read from any thread.
 /// </remarks>
 internal sealed class CffFont
 {
@@ -77,13 +39,13 @@ internal sealed class CffFont
     private const int TYPE_2_CHARSTRING_TYPE = 2;
     private const int FILLED_PAINT_TYPE = 0;
 
-    /// <summary>The maximum number of CID-keyed FDArray Font DICTs the parser accepts.</summary>
+    /// <summary>The maximum CID-keyed FDArray Font DICT count.</summary>
     internal const int MAX_FONT_DICTS = 256;
 
-    /// <summary>The maximum total number of local-subroutine entries the parser accepts in one face.</summary>
+    /// <summary>The maximum local-subroutine entry count per face.</summary>
     internal const int MAX_LOCAL_SUBR_ENTRIES = 1048576;
 
-    /// <summary>The maximum total number of private-DICT bytes the parser accepts in one face.</summary>
+    /// <summary>The maximum private-DICT byte count per face.</summary>
     internal const int MAX_PRIVATE_DICT_BYTES = 8 * 1024 * 1024;
 
     private readonly int _glyphCount;
@@ -129,21 +91,6 @@ internal sealed class CffFont
     internal bool IsCidKeyed => _isCidKeyed;
 
     /// <summary>Parses a CFF 1.0 table.</summary>
-    /// <param name="table">The complete <c>CFF </c> table bytes; they are retained for the face's lifetime.</param>
-    /// <param name="glyphCount">The face's <c>maxp</c> <c>numGlyphs</c>.</param>
-    /// <param name="unitsPerEm">The face's <c>head</c> units per em.</param>
-    /// <returns>The parsed CFF face.</returns>
-    /// <exception cref="FontFormatException">
-    /// The header, an INDEX, a DICT, the charset, the charstrings count, or a CID-keyed FDArray or
-    /// FDSelect is malformed, truncated, or inconsistent with the face.
-    /// </exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The table is CFF2; a charset is a predefined Expert or ExpertSubset charset; an FDSelect uses
-    /// format 4; the Top DICT declares a supported-subset violation (<c>CharstringType</c> other than
-    /// 2, <c>PaintType</c> other than 0, a non-zero <c>StrokeWidth</c>, or <c>SyntheticBase</c>); or
-    /// the face exceeds a parse limit (256 Font DICTs, 1,048,576 local-subroutine entries, or
-    /// 8,388,608 private-DICT bytes).
-    /// </exception>
     internal static CffFont Parse(ReadOnlyMemory<byte> table, int glyphCount, int unitsPerEm)
     {
         SfntReader reader = new(table.Span, "the 'CFF ' table");
@@ -466,13 +413,6 @@ internal sealed class CffFont
     }
 
     /// <summary>Resolves one glyph's bounds and font-unit outline.</summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, glyph count)</c>.</param>
-    /// <returns>The resolved glyph in font units; an empty result has zero bounds and no contours.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    /// <exception cref="FontFormatException">The charstring, its subroutines, or its components are malformed.</exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The glyph uses an unsupported CFF feature or exceeds an interpreter limit.
-    /// </exception>
     internal FontGlyph ReadGlyph(int glyphId)
     {
         ThrowIfGlyphOutOfRange(glyphId);
@@ -500,18 +440,7 @@ internal sealed class CffFont
         return new FontGlyph(glyphId, ComputeBounds(contours), new OutlinePath(contours));
     }
 
-    /// <summary>Interprets one glyph's charstring in raw charstring coordinates.</summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, glyph count)</c>.</param>
-    /// <param name="budget">The per-resolution counters shared with any <c>seac</c> component.</param>
-    /// <param name="allowSeac">
-    /// <see langword="true"/> for the requested glyph; <see langword="false"/> for a <c>seac</c>
-    /// component, which forbids nesting.
-    /// </param>
-    /// <returns>The resolved contours before the FontMatrix is applied.</returns>
-    /// <remarks>
-    /// This is the component-resolution seam for <see cref="CffType2Interpreter"/>; the returned
-    /// contours are not transformed. The caller validates <paramref name="glyphId"/>.
-    /// </remarks>
+    /// <summary>Interprets one glyph's charstring in untransformed charstring coordinates.</summary>
     internal OutlineContour[] ReadRawContours(int glyphId, CffGlyphBudget budget, bool allowSeac)
     {
         CffPrivateDict privateDict = GetPrivateDict(glyphId);
@@ -519,11 +448,7 @@ internal sealed class CffFont
         return interpreter.Run(_charStrings.Get(glyphId));
     }
 
-    /// <summary>Resolves a Standard Encoding character code to a glyph identifier.</summary>
-    /// <param name="code">The character code, in <c>[0, 256)</c>.</param>
-    /// <param name="glyphId">The resolved glyph identifier, or zero when the code does not resolve.</param>
-    /// <returns><see langword="true"/> when the code resolves through the charset.</returns>
-    /// <remarks>This is the <c>seac</c> resolution seam for <see cref="CffType2Interpreter"/>.</remarks>
+    /// <summary>Resolves an 8-bit Standard Encoding code to a glyph identifier.</summary>
     internal bool TryGetStandardEncodingGlyphId(int code, out int glyphId)
     {
         glyphId = 0;
@@ -880,13 +805,7 @@ internal sealed class CffFont
         );
     }
 
-    /// <summary>
-    /// The mutable parse-time dedupe and budget state of one face.
-    /// </summary>
-    /// <remarks>
-    /// Shared by the Top DICT Private DICT and every Font DICT, so a Private DICT or Local Subr
-    /// INDEX referenced by many Font DICTs is parsed and counted once.
-    /// </remarks>
+    /// <summary>The parse-time dedupe and budget state of one face.</summary>
     private sealed class CffParseState
     {
         internal Dictionary<(int Offset, int Size), CffPrivateDict> PrivateDicts { get; } = [];

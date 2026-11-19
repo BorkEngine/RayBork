@@ -9,50 +9,19 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The Vulkan 1.2 renderer backend: the swapchain, the linear HDR scene target, the M4 geometry pass
-/// with bindless textures and automatic instancing, the runtime render target color and depth paths, and
-/// the AgX/scRGB present path behind <see cref="IRendererBackend"/>.
+/// The Vulkan 1.2 renderer backend: swapchain, HDR scene target, geometry and post-process passes,
+/// and the AgX/scRGB present path behind <see cref="IRendererBackend"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The render thread owns every member. <see cref="Submit"/> waits for a frame slot, plans the
-/// packet's batches, acquires a swapchain image, records one render pass per camera pass, records the
-/// present pass, and submits without waiting for the frame fence. Each camera render pass uses its
-/// clamped viewport as the render area, binds one shared descriptor set per slot, clears that viewport
-/// with <c>vkCmdClearAttachments</c> when the camera asks, writes that pass's frame block into a
-/// host-visible frame storage buffer with a pass-index push constant, and draws instanced scene
-/// batches whose per-instance records live in a second host-visible storage buffer.
-/// Recoverable presentation, surface, and device failures are handled inside the backend;
-/// <see cref="Recover"/> idles the device, drops the affected frame, recreates the affected resources,
-/// and resumes. A bounded recovery loop or a failed recovery throws
-/// <see cref="GraphicsDeviceLostException"/>, and validation errors are fatal.
-/// </para>
-/// <para>
-/// The backend does not call user code. It reads the surface snapshot from
-/// <see cref="RendererBackendOptions.WindowStateProvider"/> on the render thread, creates and
-/// destroys the native surface through <see cref="RendererBackendOptions.SurfaceProvider"/>, and
-/// publishes immutable snapshots through <see cref="Info"/> and <see cref="Stats"/>.
-/// </para>
-/// <para>
-/// The render thread creates the instance and device and destroys every GPU object, the surface, and
-/// the device. The instance and its loader outlive the render thread: <see cref="Dispose"/> enqueues
-/// their teardown on <see cref="RendererBackendOptions.TeardownQueue"/>, and the main thread destroys
-/// them after the render thread has stopped. The split keeps Vulkan driver thread-local state valid
-/// until the thread that used it has exited.
-/// </para>
-/// <para>
-/// M4 also implements <see cref="IAssetGpuWorkerProvider"/>. The render loop creates one asset GPU
-/// worker after initialization and keeps it for the backend's lifetime. The worker reads the current
-/// device, device generation, bindless table, and frame-idleness state through accessors, so a device
-/// recreation is handled by <see cref="IAssetGpuWorker.Restore"/> without replacing the worker.
-/// </para>
+/// The render thread owns every member; <see cref="Dispose"/> enqueues instance teardown on
+/// <see cref="RendererBackendOptions.TeardownQueue"/> because the instance and its loader outlive
+/// that thread. Recoverable presentation, surface, and device failures are recovered in place by
+/// <see cref="Recover"/>; a failed recovery throws <see cref="GraphicsDeviceLostException"/> and
+/// validation errors are fatal.
 /// </remarks>
 internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorkerProvider
 {
-    /// <summary>
-    /// The number of consecutive recovery attempts without a completed frame after which recovery is
-    /// fatal. The bound stops a recovery loop that can never make progress.
-    /// </summary>
+    /// <summary>Recovery attempts without a completed frame that make recovery fatal.</summary>
     internal const int MAX_CONSECUTIVE_RECOVERIES = 3;
 
     private const int FRAMES_IN_FLIGHT = VulkanFrameResources.FRAMES_IN_FLIGHT;
@@ -121,34 +90,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <inheritdoc />
     public int DeviceGeneration => _deviceGeneration;
 
-    /// <summary>
-    /// Gets the logical device, for GPU-test readback probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the logical device for GPU-test probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanDevice Device =>
         _device
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Gets the current scene target, for GPU-test readback probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the scene target for GPU-test probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanRenderTarget SceneTarget =>
         _sceneTarget
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Gets the current runtime render target, for GPU-test readback probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets a live render target by id for GPU-test probes; render-thread only.</summary>
     /// <param name="targetId">The render texture target id.</param>
     /// <param name="target">The live target, or <see langword="null"/> when the id is not live.</param>
     /// <returns><see langword="true"/> when the target is live.</returns>
@@ -164,105 +118,59 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return false;
     }
 
-    /// <summary>
-    /// Gets whether a live render target has had color content written by a completed frame, for GPU
-    /// tests. Test-only; it is not part of the renderer seam. Render-thread only.
-    /// </summary>
+    /// <summary>Gets whether a frame wrote color to a live render target; GPU-test only.</summary>
     /// <param name="targetId">The render texture target id.</param>
     /// <returns><see langword="true"/> when the target's written flag is set.</returns>
     internal bool HasRenderTargetColorContentForTests(long targetId) =>
         _renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry)
         && entry.HasResolvedColorContent;
 
-    /// <summary>
-    /// Gets the current swapchain, for GPU-test presented-pixel probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the swapchain for GPU-test pixel probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanSwapchain Swapchain =>
         _swapchain
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
-    /// Gets the swapchain image index of the most recent successful present, for GPU-test
-    /// presented-pixel probes.
+    /// Gets the most recent presented image index for GPU-test probes; <see cref="uint.MaxValue"/>
+    /// until the first present and stale after the presentation path is recreated.
     /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only. The value is
-    /// <see cref="uint.MaxValue"/> until the first successful present, and it may be stale after the
-    /// presentation path is recreated because a new swapchain can reuse the same indices.
-    /// </remarks>
     internal uint LastPresentedImageIndex => _lastPresentedImageIndex;
 
     /// <summary>
-    /// Gets the swapchain image index of the submitted frame that is waiting for presentation, for
-    /// GPU-test presented-pixel probes.
+    /// Gets the pending present image index for GPU-test probes, or <see cref="uint.MaxValue"/>
+    /// when none is pending; a probe reads it before <c>vkQueuePresentKHR</c> and presents afterwards.
     /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only. The value is
-    /// <see cref="uint.MaxValue"/> when no frame is waiting for presentation. A probe must read the
-    /// image before <c>vkQueuePresentKHR</c> hands it to the presentation engine, so it uses this
-    /// index and then presents; <see cref="LastPresentedImageIndex"/> confirms the index afterwards.
-    /// </remarks>
     internal uint PendingPresentImageIndex => _pendingPresent ? _pendingImageIndex : uint.MaxValue;
 
-    /// <summary>
-    /// Gets the Vulkan instance, for GPU-test validation checks.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the Vulkan instance for GPU-test checks; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanInstance Instance =>
         _instance
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Gets the bindless texture table, for GPU-test slot and white-texture probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the bindless table for GPU-test probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanBindlessTextureTable BindlessTextures =>
         _bindlessTextures
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Gets the geometry pipeline cache, for GPU-test pipeline-count probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the geometry pipeline cache for GPU-test probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanGeometryPipelineCache GeometryPipelines =>
         _geometryPipelines
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Gets the per-frame-in-flight geometry resources, for GPU-test buffer probes.
-    /// </summary>
-    /// <remarks>
-    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
-    /// </remarks>
+    /// <summary>Gets the frame resources for GPU-test probes; render-thread only.</summary>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanFrameResources FrameResources =>
         _frameResources
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
-    /// <summary>
-    /// Creates the GPU asset worker for the backend's current device.
-    /// </summary>
+    /// <summary>Creates the GPU asset worker; render-thread only, after initialization.</summary>
     /// <remarks>
-    /// Render-thread only. The render loop calls this once after <see cref="Initialize"/> and attaches
-    /// the worker to the GPU asset bridge. The worker resolves the current device, generation,
-    /// bindless table, and frame idleness on every upload, restore, and destroy, so it stays valid
-    /// across a device recreation and the render loop never replaces it. The worker must not be used
-    /// after the backend is disposed.
+    /// The worker resolves live state per operation, so it survives a device recreation unreplaced.
     /// </remarks>
-    /// <returns>The worker for the current device.</returns>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     public IAssetGpuWorker CreateAssetGpuWorker()
     {
@@ -281,8 +189,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// A render target image, view, sampler, or bindless slot could not be created. The diagnostic code
-    /// is <c>RB3001</c>.
+    /// A render target image, view, sampler, or bindless slot could not be created (<c>RB3001</c>).
     /// </exception>
     [SuppressMessage(
         "Design",
@@ -553,39 +460,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Recreates one live render target's images, render pass, framebuffer, bindless views, and pipeline
-    /// cache at the request's size, then updates the target description and both view dimensions.
+    /// Recreates one live render target's GPU objects at the requested size; render-thread only.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Render-thread only. The request is processed before the next frame is acquired, so the tick thread
-    /// that called <see cref="RenderTexture.Resize"/> is blocked and cannot record another frame while the
-    /// target is recreated. A frame hold is never waited on: a target that a published but not yet
-    /// rendered frame still holds fails the request with <see cref="InvalidOperationException"/> instead of
-    /// deadlocking the render loop. The last-use fence is waited on because a frame that was already
-    /// released can still be in flight on the GPU; the new images are not referenced by it.
-    /// </para>
-    /// <para>
-    /// The target keeps its samplers, color format, depth attachment, effective sample count, and bindless
-    /// slots. The new images are fully created before any live entry is changed, so a failure before that
-    /// point leaves the old target usable. The descriptors are rewritten to the new views and the view
-    /// dimensions update with the target description before the request completes, so a later frame
-    /// samples the recreated views and a tick thread that observes completion sees one size. The old
-    /// pipeline cache is destroyed before the old render pass, and the old target after the new resources
-    /// are live.
-    /// </para>
+    /// A target held by a recorded frame fails instead of waiting, so the render loop cannot deadlock;
+    /// the last-use fence is still waited on because a released frame can remain in flight. New images
+    /// are created before the live entry changes, so a failure leaves the old target usable.
     /// </remarks>
-    /// <param name="request">The queued resize request.</param>
-    /// <param name="width">The requested width in pixels, matching the public parameter name.</param>
-    /// <param name="height">The requested height in pixels, matching the public parameter name.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The new size exceeds the current device's maximum 2D image dimension.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// A recorded or in-flight frame holds the target, or the target is no longer live.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The render texture was disposed before the request ran.</exception>
-    /// <exception cref="GraphicsException">The renderer could not recreate the target's GPU objects.</exception>
     private void ResizeRenderTextureTarget(
         RenderTextureService.ResizeRequest request,
         int width,
@@ -703,23 +584,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Services one queued readback: waits for the target's last-use fence, then copies and converts its
-    /// resolved color image when a completed frame wrote content, or completes with the defined
-    /// opaque-black default without copying otherwise.
+    /// Services one queued readback: waits for the last-use fence, copies and converts the resolved
+    /// color image when a completed frame wrote content, and otherwise returns the opaque-black default
+    /// without copying or transitioning the image; render-thread only.
     /// </summary>
     /// <remarks>
-    /// Render-thread only. The request is serviced between frames, so a target recorded by the next
-    /// pending frame is read at its last submitted content rather than racing that frame's recording.
-    /// A copied color image is restored to its layout before this method returns, and the target's
-    /// bindless slots, views, sampler, and lifetime are untouched. The default path neither copies nor
-    /// transitions the image. A target disposed after the request was queued
-    /// fails with <see cref="ObjectDisposedException"/>; an id that is no longer live fails with
-    /// <see cref="InvalidOperationException"/>.
+    /// A copied image is restored to its layout before returning, and the target's views, slots, and
+    /// lifetime are untouched. A disposed target or a dead id fails the request.
     /// </remarks>
-    /// <param name="request">The queued readback request.</param>
-    /// <exception cref="ObjectDisposedException">The target was disposed before the request ran.</exception>
-    /// <exception cref="InvalidOperationException">The target id is no longer live.</exception>
-    /// <exception cref="GraphicsException">The color image could not be copied.</exception>
     private void ProcessReadback(RenderTextureService.ReadbackRequest request)
     {
         RenderTextureTargetLifetime lifetime = request.Lifetime;
@@ -798,23 +670,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Creates the color and, when the target has depth, depth sampler and bindless slot and writes their
-    /// descriptors into every frame descriptor set.
+    /// Creates the color, and when present the depth, sampler and bindless slot and writes their
+    /// descriptors into every frame descriptor set; the color slot is reserved first.
     /// </summary>
     /// <remarks>
-    /// A failure releases the slots and samplers created so far before it rethrows, so the caller only has
-    /// to dispose the target. The color slot is reserved first and the depth slot second, matching the
-    /// entry's view order.
+    /// The depth outputs are a default sampler and slot <c>0</c> when the target has no depth. A
+    /// failure releases the slots and samplers created so far before it rethrows.
     /// </remarks>
-    /// <param name="device">The current logical device.</param>
-    /// <param name="target">The created target whose resolved views are sampled.</param>
-    /// <param name="sampler">The color view's sampler.</param>
-    /// <param name="slot">The color view's bindless slot.</param>
-    /// <param name="depthSampler">The depth view's sampler, or a default handle for a depthless target.</param>
-    /// <param name="depthSlot">The depth view's bindless slot, or <c>0</c> for a depthless target.</param>
-    /// <exception cref="GraphicsException">
-    /// The bindless texture table is full. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     private void CreateRenderTargetViewBindings(
         VulkanDevice device,
         VulkanRenderTarget target,
@@ -867,13 +729,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Releases a color and depth bindless slot and destroys their samplers. Safe with default handles.
+    /// Releases the color and depth bindless slots and destroys their samplers; safe with default
+    /// handles and slot <c>0</c>.
     /// </summary>
-    /// <param name="device">The device that owns the samplers.</param>
-    /// <param name="sampler">The color sampler, or a default handle.</param>
-    /// <param name="slot">The color bindless slot, or <c>0</c>.</param>
-    /// <param name="depthSampler">The depth sampler, or a default handle.</param>
-    /// <param name="depthSlot">The depth bindless slot, or <c>0</c>.</param>
     private void DestroyRenderTargetViewBindings(
         VulkanDevice device,
         Sampler sampler,
@@ -897,10 +755,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Destroys one render-target sampler when it has a handle. Safe with a default handle.
+    /// Destroys one render-target sampler when it has a handle; safe with a default handle.
     /// </summary>
-    /// <param name="device">The device that owns the sampler.</param>
-    /// <param name="sampler">The sampler to destroy.</param>
     private static void DestroyRenderTargetSampler(VulkanDevice device, Sampler sampler)
     {
         if (sampler.Handle != 0)
@@ -969,11 +825,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Gets the current device's maximum 2D image dimension, or the test-only override when one is set.
-    /// </summary>
-    /// <param name="device">The current logical device.</param>
-    /// <returns>The maximum accepted render target width or height.</returns>
+    /// <summary>Gets the device's maximum 2D image dimension or the test override.</summary>
     private uint GetMaxImageDimension2D(VulkanDevice device)
     {
         if (MaxImageDimension2DOverrideForTests is { } maxDimension)
@@ -986,12 +838,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             .Limits.MaxImageDimension2D;
     }
 
-    /// <summary>
-    /// Gets whether the frame slot that last used the target signaled its fence, so a destroy or resize
-    /// can safely release or replace the target images. Render-thread only.
-    /// </summary>
-    /// <param name="lifetime">The target lifetime to check.</param>
-    /// <returns><see langword="true"/> when the last-use fence signaled or the target was never used.</returns>
+    /// <summary>Gets whether the last-use fence signaled; a never-used target is idle.</summary>
     private bool IsRenderTargetIdle(RenderTextureTargetLifetime lifetime)
     {
         if (_device is null || _fences.Length == 0)
@@ -1008,15 +855,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return _device.Vulkan.GetFenceStatus(_device.Device, _fences[frameSlot]) == Result.Success;
     }
 
-    /// <summary>
-    /// Waits for the frame slot that last used the target to signal its fence. Render-thread only.
-    /// </summary>
+    /// <summary>Waits for the last-use fence; render-thread only.</summary>
     /// <remarks>
-    /// A replacement target must not be created while the GPU still reads or writes the old images. The
-    /// wait is bounded by the frame's GPU completion; the frame hold check has already rejected a target a
-    /// recorded but not yet rendered frame still references, which is the only case that could deadlock.
+    /// A recorded frame that still holds the target is rejected earlier, so the wait cannot deadlock.
     /// </remarks>
-    /// <param name="lifetime">The target lifetime to wait for.</param>
     private void WaitForRenderTargetIdle(RenderTextureTargetLifetime lifetime)
     {
         if (_device is null || _fences.Length == 0)
@@ -1097,9 +939,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Destroys every live render texture's GPU images, bindless slot, sampler, and pipeline cache while
-    /// keeping its public view and lifetime so a device recreation can recreate the resources from the
-    /// retained description.
+    /// Destroys live render textures' GPU resources, keeping views and lifetimes for recreation.
     /// </summary>
     private void DestroyRenderTargetGpuResources()
     {
@@ -1113,10 +953,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <inheritdoc />
-    /// <exception cref="GraphicsException">
-    /// The instance, device, surface, swapchain, or fixed render state could not be created. The
-    /// diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <exception cref="GraphicsException">Initialization failed (<c>RB3001</c>).</exception>
     public void Initialize(RendererBackendOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -1148,11 +985,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// A fatal Vulkan failure or a validation error throws with the diagnostic code <c>RB3001</c>.
+    /// A fatal Vulkan failure or validation error was recorded (<c>RB3001</c>).
     /// </exception>
     /// <exception cref="GraphicsDeviceLostException">
-    /// A recoverable presentation failure could not be recovered. The diagnostic code is
-    /// <c>RB3002</c>.
+    /// A recoverable presentation failure could not be recovered (<c>RB3002</c>).
     /// </exception>
     public void Submit(RenderFramePacket frame)
     {
@@ -1342,11 +1178,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// A validation error was recorded while presenting. The diagnostic code is <c>RB3001</c>.
+    /// A validation error was recorded while presenting (<c>RB3001</c>).
     /// </exception>
     /// <exception cref="GraphicsDeviceLostException">
-    /// A recoverable presentation failure could not be recovered. The diagnostic code is
-    /// <c>RB3002</c>.
+    /// A recoverable presentation failure could not be recovered (<c>RB3002</c>).
     /// </exception>
     public void Present()
     {
@@ -1357,27 +1192,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// The call waits for the device to idle and drops the pending present before it destroys any
-    /// resource, so no in-flight frame is partially presented. It recreates the affected presentation
-    /// path, surface, or device and publishes the new <see cref="Info"/> and
-    /// <see cref="RenderStats.RecoveryCount"/> before it returns. A presentation-only recovery keeps
-    /// the bindless texture table, the frame resources, and the descriptor sets because the logical
-    /// device did not change; a device recreation rebuilds all of them.
-    /// </para>
-    /// <para>
-    /// The call is bounded: more than <see cref="MAX_CONSECUTIVE_RECOVERIES"/> attempts without a
-    /// completed frame, an injected unrecoverable fault, a platform failure while recreating the
-    /// surface, or an unexpected exception returns <see langword="false"/>. Every field is cleared
-    /// before its resource is destroyed, so a later <see cref="Dispose"/> is safe even after a failed
-    /// recovery. Recovery never throws for a recoverable failure; it throws only when validation
-    /// reported an error.
-    /// </para>
+    /// Idles the device, drops the pending present, and recreates the affected presentation path,
+    /// surface, or device. More than <see cref="MAX_CONSECUTIVE_RECOVERIES"/> attempts without a
+    /// completed frame, an injected fault, or a platform failure returns <see langword="false"/>; every
+    /// cleared field is safe for a later <see cref="Dispose"/>.
     /// </remarks>
-    /// <exception cref="GraphicsException">
-    /// The Vulkan validation layer reported an error while recovering. The diagnostic code is
-    /// <c>RB3001</c>.
-    /// </exception>
+    /// <exception cref="GraphicsException">A validation error occurred (<c>RB3001</c>).</exception>
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -1459,122 +1279,59 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return true;
     }
 
-    /// <summary>
-    /// Marks the device as lost so the next <see cref="Submit"/> or <see cref="Present"/> runs the
-    /// device-loss recovery path. Test-only; it is not part of the renderer seam.
-    /// </summary>
-    /// <remarks>
-    /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
-    /// test exercises the same logic a driver-detected device loss uses.
-    /// </remarks>
+    /// <summary>Marks the device as lost for the next frame call; test-only.</summary>
     internal void SimulateDeviceLossForTests() =>
         _simulatedFailure = RenderRecoveryReason.DeviceLost;
 
-    /// <summary>
-    /// Marks the surface as lost so the next <see cref="Submit"/> or <see cref="Present"/> runs the
-    /// surface-loss recovery path. Test-only; it is not part of the renderer seam.
-    /// </summary>
-    /// <remarks>
-    /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
-    /// test exercises the same logic a driver-detected surface loss uses.
-    /// </remarks>
+    /// <summary>Marks the surface as lost for the next frame call; test-only.</summary>
     internal void SimulateSurfaceLossForTests() =>
         _simulatedFailure = RenderRecoveryReason.SurfaceLost;
 
-    /// <summary>
-    /// Makes the next recovery return <see langword="false"/> without touching GPU state. Test-only;
-    /// it is not part of the renderer seam.
-    /// </summary>
-    /// <remarks>
-    /// When no loss is pending, the next <see cref="Submit"/> or <see cref="Present"/> requests a
-    /// device-loss recovery, so a test reaches the fatal path with one call.
-    /// </remarks>
+    /// <summary>Makes the next recovery fail without touching GPU state; test-only.</summary>
     internal void SimulateUnrecoverableFailureForTests()
     {
         _unrecoverableFailureForTests = true;
         _simulatedFailure ??= RenderRecoveryReason.DeviceLost;
     }
 
-    /// <summary>
-    /// Sets the out-of-date flag so the next <see cref="Submit"/> recreates the presentation path
-    /// through <see cref="Recover"/>. Test-only; it is not part of the renderer seam.
-    /// </summary>
+    /// <summary>Sets the out-of-date flag for the next <see cref="Submit"/>; test-only.</summary>
     internal void SimulateSwapchainOutOfDateForTests() => _swapchainOutOfDate = true;
 
-    /// <summary>
-    /// Gets or sets a hook invoked immediately before the swapchain acquire. Test-only; it is not
-    /// part of the renderer seam. The CPU-time test uses it to hold the acquire long enough to prove
-    /// that <see cref="RenderStats.CpuFrameMilliseconds"/> excludes the wait.
-    /// </summary>
+    /// <summary>Gets or sets a hook invoked before the swapchain acquire; test-only.</summary>
     internal Action? BeforeAcquireForTests { get; set; }
 
-    /// <summary>
-    /// Gets or sets a hook invoked immediately before the readback copy. Test-only; it is not part of
-    /// the renderer seam. The cancellation test uses it to cancel a request after it was dequeued and
-    /// while its copy is about to run.
-    /// </summary>
+    /// <summary>Gets or sets a hook invoked before the readback copy; test-only.</summary>
     internal Action? BeforeReadbackCopyForTests { get; set; }
 
     /// <summary>
-    /// Gets or sets a test-only override for the device's maximum 2D image dimension. The default
-    /// <see langword="null"/> uses the real device limit.
+    /// Gets or sets a test override for the maximum 2D image dimension; <see langword="null"/> is real.
     /// </summary>
-    /// <remarks>
-    /// A render target size above the real limit is unreachable on a device whose limit is at least the
-    /// public <c>16384</c> cap, so a GPU test lowers the limit to exercise the device-limit rejection
-    /// without creating an oversized image.
-    /// </remarks>
     internal uint? MaxImageDimension2DOverrideForTests { get; set; }
 
-    /// <summary>
-    /// Gets the number of render-target last-use fence waits, for GPU tests. Test-only; it is not part of
-    /// the renderer seam.
-    /// </summary>
+    /// <summary>Gets the render-target fence wait count; test-only.</summary>
     internal int RenderTargetFenceWaitCountForTests { get; private set; }
 
-    /// <summary>
-    /// Gets the number of full render-target color copies performed by readbacks, for GPU tests.
-    /// Test-only; it is not part of the renderer seam. The never-written default path does not increment
-    /// it.
-    /// </summary>
+    /// <summary>Gets the readback full-color-copy count; test-only.</summary>
     internal int ReadbackCopyCountForTests { get; private set; }
 
-    /// <summary>
-    /// Computes one frame's required instance-record bytes, for unit tests. Test-only; it is not part of
-    /// the renderer seam.
-    /// </summary>
-    /// <param name="frame">The sealed frame to simulate.</param>
-    /// <returns>The instance-record bytes the frame needs, including per-record alignment.</returns>
+    /// <summary>Computes a frame's instance-record bytes; test-only.</summary>
     internal static ulong ComputeInstanceBytesForTests(RenderFramePacket frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
         return ComputeInstanceBytes(new BatchPlanner().Plan(frame));
     }
 
-    /// <summary>
-    /// Gets the number of times the post-processor created a target-sized post-target set for a frame
-    /// slot, for GPU tests. Test-only; it is not part of the renderer seam. A target extent change or a
-    /// device recovery increments it when the next effect frame runs.
-    /// </summary>
+    /// <summary>Gets the post-target set count per frame slot; test-only.</summary>
     internal int PostTargetRecreationCountForTests => _postProcessor?.TargetRecreationCount ?? 0;
 
-    /// <summary>
-    /// Gets the number of times the scene target's internal bindless source slots were allocated, for GPU
-    /// tests. Test-only; it is not part of the renderer seam. The initial scene target allocates once and
-    /// every presentation-path recreation allocates again.
-    /// </summary>
+    /// <summary>Gets the scene-target source-slot allocation count; test-only.</summary>
     internal int SceneTargetSourceSlotAllocationCountForTests => _sceneSourceSlotAllocationCount;
 
-    /// <summary>
-    /// Gets whether no submitted frame can still reference a GPU asset resource.
-    /// </summary>
+    /// <summary>Gets whether no frame can reference a GPU asset; render-thread only.</summary>
     /// <remarks>
-    /// Render-thread only. The asset GPU worker polls this before the bridge destroys a resource, so
-    /// a texture or mesh destroyed after the tick that drew it stays alive until every frame fence
-    /// signals. A device with no fences, or a disposed or lost device, is reported as idle so teardown
-    /// can proceed.
+    /// The asset worker polls this before destroying a resource; a device with no fences, or a disposed
+    /// or lost device, reports idle so teardown can proceed.
     /// </remarks>
-    /// <returns><see langword="true"/> when every frame slot fence is signaled.</returns>
     internal bool AreFrameResourcesIdle()
     {
         if (_device is null || _fences.Length == 0)
@@ -1602,13 +1359,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return true;
     }
 
-    /// <summary>
-    /// Waits until every frame slot fence signals. Diagnostic and teardown helper; render-thread only.
-    /// </summary>
-    /// <remarks>
-    /// The render loop calls the worker's wait before the bridge destroys live resources. A failure is
-    /// logged and returns instead of throwing, because shutdown must still release what it can.
-    /// </remarks>
+    /// <summary>Waits until every frame slot fence signals; render-thread only.</summary>
+    /// <remarks>A failure is logged and returns so shutdown can still release what it can.</remarks>
     internal void WaitForFrameResourcesIdle()
     {
         if (_device is null || _fences.Length == 0)
@@ -1680,9 +1432,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Waits for the device to idle and destroys the GPU objects, the swapchain, the device, and the
-    /// surface on the render thread, then queues the instance and loader for main-thread teardown.
-    /// The call is idempotent.
+    /// Waits for the device to idle and destroys the GPU objects, surface, and device on the render
+    /// thread, then queues the instance for main-thread teardown; idempotent.
     /// </summary>
     public void Dispose()
     {
@@ -1797,16 +1548,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _instance.ThrowIfValidationError("initializing the renderer");
     }
 
-    /// <summary>
-    /// Creates the swapchain, scene target, and present pipeline from scratch for the current device
-    /// and surface.
-    /// </summary>
+    /// <summary>Creates the swapchain, scene target, and present pipeline.</summary>
     /// <remarks>
-    /// Used at startup and after a device or surface loss, when no previous swapchain can be reused.
-    /// The caller has selected the sample count from the current device capabilities and must create
-    /// the geometry and frame resources after this call. Render-thread only; the device must be idle.
+    /// Used at startup and after a device or surface loss; the device must be idle. The caller creates
+    /// the geometry and frame resources afterwards.
     /// </remarks>
-    /// <param name="state">The current window surface snapshot.</param>
     private void CreatePresentationPath(WindowSurfaceState state)
     {
         VulkanDevice device = _device!;
@@ -1855,11 +1601,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Creates the per-device geometry resources: the shared descriptor state, the frame-in-flight
-    /// buffers and sets, the bindless texture table with its white slot, and the geometry pipeline
-    /// cache.
+    /// Creates the per-device descriptor state, frame resources, bindless table, geometry pipelines,
+    /// post processor, and scene source slots; render-thread only, with the scene target live.
     /// </summary>
-    /// <remarks>Render-thread only; the device must exist and the scene target must be created.</remarks>
     private void CreateGeometryResources()
     {
         VulkanDevice device = _device!;
@@ -1888,13 +1632,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Creates the geometry pipeline cache for the current scene render pass and sample count.
-    /// </summary>
+    /// <summary>Creates the geometry pipeline cache for the scene pass and sample count.</summary>
     /// <remarks>
-    /// Render-thread only. The caller disposes the previous cache before the scene render pass is
-    /// destroyed. The cache snapshots the device's <c>fillModeNonSolid</c> support for the wireframe
-    /// model pipelines.
+    /// The caller disposes the previous cache before the render pass. The cache snapshots the device's
+    /// <c>fillModeNonSolid</c> support for wireframe pipelines.
     /// </remarks>
     private void CreateGeometryPipelines()
     {
@@ -1917,15 +1658,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         pipelines?.Dispose();
     }
 
-    /// <summary>
-    /// Creates the camera post-process executor for the current device, bindless table, frame
-    /// resources, and geometry pipeline layout.
-    /// </summary>
-    /// <remarks>
-    /// Render-thread only, after <see cref="CreateGeometryResources"/> created the bindless table and
-    /// frame resources. The processor owns the target-sized post targets, the custom-effect pipeline
-    /// cache, the store-back pipelines, and the backend-owned fullscreen quad.
-    /// </remarks>
+    /// <summary>Creates the camera post-process executor for the current device.</summary>
     private void CreatePostProcessor()
     {
         _postProcessor = VulkanPostProcessor.Create(
@@ -1937,25 +1670,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Allocates the scene target's internal bindless source slots for the resolved color and depth
-    /// images and writes their descriptors.
-    /// </summary>
+    /// <summary>Allocates the scene target's internal bindless color and depth slots.</summary>
     /// <remarks>
-    /// <para>
-    /// The scene target has no public color or depth view, so the post-process chain needs internal
-    /// slots to sample its resolved images. The color slot uses a linear clamp sampler and the depth
-    /// slot a nearest clamp sampler, matching a runtime target's public views. The slots are released
-    /// when the scene target is recreated and reallocated for its new views.
-    /// </para>
-    /// <para>
-    /// Render-thread only, with the bindless table initialized and the scene target live. A failure
-    /// releases the partial slots and samplers before it rethrows.
-    /// </para>
+    /// The post-process chain samples these slots: the color slot uses a linear clamp sampler and the
+    /// depth slot a nearest clamp sampler. A failure releases the partial slots and samplers.
     /// </remarks>
-    /// <exception cref="GraphicsException">
-    /// The bindless table is full. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <exception cref="GraphicsException">The bindless table is full (<c>RB3001</c>).</exception>
     private void CreateSceneTargetSourceSlots()
     {
         ReleaseSceneTargetSourceSlots();
@@ -2017,9 +1737,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Releases the scene target's internal bindless source slots and destroys their samplers. Safe when
-    /// they were never allocated. Render-thread only; the caller has made the device idle or is in
-    /// teardown.
+    /// Releases the scene target's source slots and samplers; safe when they were never allocated.
     /// </summary>
     private void ReleaseSceneTargetSourceSlots()
     {
@@ -2161,18 +1879,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Recreates the native surface and the presentation path that depends on it.
-    /// </summary>
+    /// <summary>Recreates the native surface and its presentation path.</summary>
     /// <remarks>
-    /// The destination surface is destroyed through the platform before the replacement is created;
-    /// the Vulkan swapchain is destroyed first because a surface must outlive its swapchains. A
-    /// platform failure is fatal: the method returns <see langword="false"/> with every field that
-    /// was destroyed already cleared. Render-thread only; the caller must have waited for the device
-    /// to idle.
+    /// The swapchain is destroyed before the platform surface because a surface must outlive its
+    /// swapchains. A platform failure returns <see langword="false"/> with destroyed fields cleared;
+    /// render-thread only, with the device idle.
     /// </remarks>
-    /// <param name="state">The current window surface snapshot.</param>
-    /// <returns><see langword="true"/> when the surface and presentation path were recreated.</returns>
     private bool RecreateSurface(WindowSurfaceState state)
     {
         VulkanInstance instance = _instance!;
@@ -2233,13 +1945,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <summary>
     /// Recreates the logical device and every device-level resource while keeping the instance and
-    /// the surface.
+    /// surface; render-thread only.
     /// </summary>
     /// <remarks>
-    /// The destroyed fields are cleared before their resources are released so that a later
-    /// <see cref="Dispose"/> is safe even when creation of the new device fails. Render-thread only.
+    /// Fields are cleared before their resources are released so a later <see cref="Dispose"/> is safe.
     /// </remarks>
-    /// <param name="state">The current window surface snapshot.</param>
     private void RecreateDevice(WindowSurfaceState state)
     {
         VulkanInstance instance = _instance!;
@@ -2288,15 +1998,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Recreates every live render texture's GPU images, sampler, and bindless slot after the logical
-    /// device was recreated. The public <see cref="RenderTexture"/> objects keep their identity; only the
-    /// render-thread target and view resources are replaced.
+    /// Recreates every live render texture's GPU images, sampler, and bindless slot on the new device
+    /// while keeping the public <see cref="RenderTexture"/> identity; render-thread only.
     /// </summary>
     /// <remarks>
-    /// Render-thread only, with the new device, descriptor state, frame resources, and bindless table
-    /// already created. A target whose images belonged to the destroyed device has already been dropped
-    /// by <see cref="DestroyRenderTargets"/>, so this method allocates fresh images from the retained
-    /// description. A failure is fatal for the render loop.
+    /// The new device, descriptor state, frame resources, and bindless table must already exist. A
+    /// target that cannot be recreated is fatal for the render loop.
     /// </remarks>
     [SuppressMessage(
         "Reliability",
@@ -2410,13 +2117,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Destroys the swapchain, scene target, and present pipeline in dependency order, clearing each
-    /// field before its resource is released.
+    /// Destroys the swapchain, scene target, and present pipeline in order.
     /// </summary>
-    /// <remarks>
-    /// Render-thread only; the caller has waited for the device to idle and already destroyed the
-    /// geometry pipelines that reference the scene render pass.
-    /// </remarks>
     private void DestroyPresentationResources()
     {
         VulkanPresentPipeline? presentPipeline = _presentPipeline;
@@ -2436,13 +2138,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         swapchain?.Dispose();
     }
 
-    /// <summary>
-    /// Drops the submitted frame that was waiting for presentation.
-    /// </summary>
-    /// <remarks>
-    /// The device has been idled, so the frame's fence is signaled and the swapchain image can be
-    /// released without presenting a partial image.
-    /// </remarks>
+    /// <summary>Drops the pending present; the device is already idle.</summary>
     private void DropPendingPresent()
     {
         _pendingPresent = false;
@@ -2454,9 +2150,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// Runs a recovery request from a frame call and converts a fatal result into
     /// <see cref="GraphicsDeviceLostException"/>.
     /// </summary>
-    /// <param name="reason">The failure to recover from.</param>
     /// <exception cref="GraphicsDeviceLostException">
-    /// The recovery returned <see langword="false"/>. The diagnostic code is <c>RB3002</c>.
+    /// The recovery returned <see langword="false"/> (<c>RB3002</c>).
     /// </exception>
     private void RecoverOrThrow(RenderRecoveryReason reason)
     {
@@ -2472,10 +2167,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Consumes a fault-injection request and routes it through the normal recovery path.
-    /// </summary>
-    /// <remarks>Test-only; the caller is the render thread.</remarks>
+    /// <summary>Routes a fault injection through the normal recovery path; test-only.</summary>
     private void HandleSimulatedFailure()
     {
         if (_simulatedFailure is not { } reason)
@@ -2488,15 +2180,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Destroys the live GPU asset resources before their logical device is destroyed.
+    /// Destroys the live GPU asset resources before their device; render-thread only, device idle.
     /// </summary>
     /// <remarks>
     /// Vulkan requires every child object to be destroyed before its device, and the validation layer
-    /// reports a live asset object as a leak. The asset GPU worker tracks its live resources, releases
-    /// their bindless slots, and destroys the cached samplers here. The GPU asset bridge retains every
-    /// upload description, so the render loop recreates the resources after a device recovery and the
-    /// public asset stays valid. Render-thread only, with the device idle. Destruction is best effort:
-    /// a failure is logged and the device teardown continues.
+    /// reports a live asset object as a leak. Destruction is best effort: a failure is logged and
+    /// teardown continues.
     /// </remarks>
     [SuppressMessage(
         "Design",
@@ -2682,28 +2371,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Records one render pass per camera pass into the camera's target: the frame-start scene-target
-    /// reset, the per-target barriers, viewport-scoped clears, the per-pass frame block write, the
-    /// pass-index push constant, the instanced geometry draws, and the final resolved-color transitions.
+    /// Records one render pass per camera pass into the camera's target; render-thread only.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Render-thread only. The frame slot's fence has already signaled, so the slot's buffers and
-    /// descriptor set can be updated. Every camera pass begins its own render pass instance with its
-    /// clamped viewport as the render area, re-binds the shared frame descriptor set (a post-process
-    /// store-back binds its own set and pipeline layout), writes its own 256-byte block into the slot's
-    /// frame storage buffer, and pushes its index, so each pass's draws read their own <c>rbFrame</c>
-    /// values and only that pass' render area is resolved.
-    /// </para>
-    /// <para>
-    /// The app scene target discards its content before the first pass and its resolved color and depth
-    /// are transitioned to <c>ShaderReadOnlyOptimal</c> after every pass so a later camera, a post effect,
-    /// the present pass, or a readback observes the stored content. A runtime render target keeps its
-    /// content: the frame waits for the last frame that used each target, the writing pass transitions the
-    /// target's color and depth images to their attachment layouts, and the resolved images transition
-    /// back to a shader read after the pass. A pass with an enabled post-process stack runs the target-sized
-    /// chain after its resolve and stores the result back into the camera viewport.
-    /// </para>
+    /// Each pass uses its clamped viewport as the render area, re-binds the shared frame descriptor set,
+    /// writes its 256-byte frame block, and pushes its index so every pass reads its own <c>rbFrame</c>
+    /// values. The scene target discards content before the first pass and resolves to
+    /// <c>ShaderReadOnlyOptimal</c> after every pass; a runtime target waits for the previous frame,
+    /// transitions for writing, and resolves back to a shader read.
     /// </remarks>
     private void RecordScenePass(
         Vk vulkan,
@@ -2896,14 +2571,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Waits for the previous frame that used each runtime render target and prepares the sampled targets
-    /// for their read.
+    /// Waits for the previous frame of each runtime target and prepares sampled targets.
     /// </summary>
     /// <remarks>
-    /// A render target is reused only after the previous frame that wrote or sampled it completed, so a
-    /// frame can never overwrite content an in-flight frame still reads. Sampled targets are transitioned
-    /// to <c>ShaderReadOnlyOptimal</c> here, before any render pass begins, because an image barrier is
-    /// not legal inside a render pass.
+    /// A target is reused only after the previous frame that wrote or sampled it completed. Sampled
+    /// targets are transitioned before any render pass, because an image barrier is illegal inside one.
     /// </remarks>
     private void PrepareFrameRenderTargets(
         Vk vulkan,
@@ -3001,13 +2673,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _deviceGeneration
         );
 
-    /// <summary>
-    /// Records the 4-byte push constant that selects one camera pass's frame block.
-    /// </summary>
+    /// <summary>Records the pass-index push constant that selects a frame block.</summary>
     /// <remarks>
-    /// The push constant is command-buffer state, so it must be set after the previous pass's draws
-    /// and before the next pass's first draw. The descriptor set stays bound across passes because the
-    /// frame storage buffer holds every pass's block.
+    /// It must be set after the previous pass's draws and before the next pass's first draw; the
+    /// descriptor set stays bound because the buffer holds every pass's block.
     /// </remarks>
     private void PushPassIndex(Vk vulkan, CommandBuffer commandBuffer, int passIndex)
     {
@@ -3106,15 +2775,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         vulkan.CmdClearAttachments(commandBuffer, 1, &attachment, 1, &clearRect);
     }
 
-    /// <summary>
-    /// Writes one camera pass's 256-byte frame block at its pass index.
-    /// </summary>
+    /// <summary>Writes one pass's 256-byte frame block at its pass index.</summary>
     /// <remarks>
-    /// The engine stores matrices in System.Numerics' row-vector convention, while GLSL reads the
-    /// uniform bytes as a column-major <c>mat4</c> and multiplies <c>matrix * vector</c>. Those two
-    /// conventions are transposes of each other, so writing the CPU matrix's raw row-major words is
-    /// exactly the column-major matrix the shader needs; transposing here would invert the transform
-    /// (the GPU draw tests cover the round trip). <see cref="WriteMatrix"/> documents the byte order.
+    /// System.Numerics matrices are row-vector and GLSL reads column-major; the raw row-major words are
+    /// exactly the matrix the shader needs, so transposing here would invert the transform.
     /// </remarks>
     private void WriteFrameBlock(
         int frameSlot,
@@ -3158,16 +2822,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Writes every instance record of one batch at its final byte offset.
-    /// </summary>
+    /// <summary>Writes every instance record of one batch at its final byte offset.</summary>
     /// <remarks>
-    /// The record header is the transposed world matrix, the tint, and the UV rectangle, followed by
-    /// the draw's uniform template and the resolved bindless texture indices. The batch's first
-    /// instance index is <c>byteOffset / stride</c>, which the shader receives through
-    /// <c>gl_InstanceIndex</c>. A draw with its own per-instance texture set resolves each instance's
-    /// indices from that instance's run; every other draw repeats its shared set. Neither path allocates,
-    /// and the stride stays <c>INSTANCE_HEADER_SIZE + template length</c> either way.
+    /// A record is the transposed world matrix, the tint, the UV rectangle, then the draw's uniform
+    /// template and resolved bindless texture indices. The first instance index is
+    /// <c>byteOffset / stride</c>, reaching the shader as <c>gl_InstanceIndex</c>; a per-instance texture
+    /// set resolves that instance's run and every other draw repeats its shared set.
     /// </remarks>
     private void WriteInstanceRecords(
         int frameSlot,
@@ -3213,16 +2873,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Gets the texture-binding run one instance writes: its own contiguous slice for a draw with a
-    /// per-instance set, or the shared set every instance repeats.
+    /// Gets the texture-binding run one instance writes: its contiguous slice or the shared set.
     /// </summary>
-    /// <param name="draw">The draw record that supplies the bindings.</param>
-    /// <param name="instanceIndex">The zero-based instance index inside the draw record.</param>
-    /// <returns>The texture objects in sidecar declaration order for this instance.</returns>
     /// <remarks>
-    /// The per-instance set is stored instance-major, so one instance's bindings are a contiguous run
-    /// and the slice is a view over the record's pooled buffer; the read allocates nothing. The recorder
-    /// retained each texture in the frame's retention set, so the resolved bindless slots are still live.
+    /// Per-instance bindings are instance-major, so the run is a pooled view and allocates nothing.
     /// </remarks>
     private static ReadOnlySpan<Texture?> GetInstanceTextureRun(
         RenderDrawRecord draw,
@@ -3239,21 +2893,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Resolves one texture binding to its bindless slot. A render target color or depth view resolves
-    /// exactly like a packed or procedural texture; the frame's retention set already kept its target
-    /// alive.
+    /// Resolves one texture binding to its bindless slot; render target views resolve the same way.
     /// </summary>
     private static uint ResolveTextureSlot(Texture? texture) =>
         VulkanTextureBinding.ResolveSlot(texture);
 
-    /// <summary>
-    /// Requires a live Vulkan shader GPU resource behind one engine shader program asset.
-    /// </summary>
-    /// <param name="shader">The internal shader program asset.</param>
-    /// <returns>The Vulkan shader resource.</returns>
-    /// <exception cref="GraphicsException">
-    /// The asset is not a Vulkan GPU shader. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Gets the Vulkan shader resource behind a shader program asset.</summary>
+    /// <exception cref="GraphicsException">The asset is not a GPU shader (<c>RB3001</c>).</exception>
     internal static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader)
     {
         if (shader.Resource is VulkanShaderAssetResource resource)
@@ -3282,15 +2928,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         );
     }
 
-    /// <summary>
-    /// Computes the instance-record bytes a frame needs, including per-batch and per-effect stride
-    /// alignment in recording order.
-    /// </summary>
+    /// <summary>Computes the instance-record bytes a frame needs, with per-stride alignment.</summary>
     /// <remarks>
-    /// The post-process effect records follow each camera pass' scene batches, so the simulation must
-    /// include them: a later scene batch aligns after the effect records and can need more bytes than a
-    /// scene-only sum. An effect reports its ordered record layout, so a built-in multi-pass effect whose
-    /// passes use different shaders and uniform sizes reserves each pass' stride in turn.
+    /// Post-process effect records follow each camera pass' scene batches, so they are included: a later
+    /// scene batch can align after an effect record and need more bytes than a scene-only sum.
     /// </remarks>
     private static ulong ComputeInstanceBytes(FramePlan plan)
     {
@@ -3330,13 +2971,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return bytes;
     }
 
-    /// <summary>
-    /// Writes one System.Numerics matrix in its storage order.
-    /// </summary>
+    /// <summary>Writes one System.Numerics matrix in its storage order.</summary>
     /// <remarks>
-    /// The words are written M11..M44 (row-major). GLSL reads a <c>mat4</c> from std140/std430 storage
-    /// as column-major, so it sees the transpose of what this method writes, which is the engine's
-    /// row-vector matrix expressed in the shader's column-vector convention.
+    /// The words are M11..M44 row-major; GLSL reads a <c>mat4</c> as column-major and sees the
+    /// transpose, the engine's row-vector matrix in the shader's convention.
     /// </remarks>
     private static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value) =>
         VulkanInstanceRecordWriter.WriteMatrix(destination, offset, value);
@@ -3348,11 +2986,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         VulkanInstanceRecordWriter.WriteUInt32(destination, offset, value);
 
     /// <summary>
-    /// Gets whether a presentation result means the image reached the presentation engine. A
-    /// suboptimal result still presented; an out-of-date or lost surface did not.
+    /// Gets whether a presentation result reached the presentation engine; a suboptimal result presented,
+    /// an out-of-date or lost surface did not.
     /// </summary>
-    /// <param name="result">The result of <c>vkQueuePresentKHR</c>.</param>
-    /// <returns><see langword="true"/> when the presentation succeeded.</returns>
     internal static bool CountsAsPresented(SwapchainResult result) =>
         result is SwapchainResult.Success or SwapchainResult.Suboptimal;
 
@@ -3587,8 +3223,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// The render-thread resources of one runtime render target: the images and render pass, the bindless
-    /// color and depth views, the target's samplers, and the lazily created geometry pipeline cache.
+    /// The render-thread resources of a runtime render target: images, views, samplers, pipelines.
     /// </summary>
     private sealed class RenderTargetEntry
     {
@@ -3642,25 +3277,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         internal VulkanGeometryPipelineCache? Pipelines { get; set; }
 
         /// <summary>
-        /// Gets or sets whether a completed frame has written the target since its images were created.
-        /// A sampled-only frame does not set it, and a resize or device recovery clears it. The readback
-        /// returns its opaque-black default while it is <see langword="false"/>, because the resolved
-        /// image has no content even if a sample transition moved it out of <c>UNDEFINED</c>.
+        /// Gets or sets whether a completed frame wrote color; sampled-only frames leave it unset.
+        /// A resize or recovery clears it, and readbacks return opaque black while unset.
         /// </summary>
         internal bool HasResolvedColorContent { get; set; }
 
         /// <summary>
-        /// Gets or sets the tone-mapping snapshot of the last completed frame that wrote the target. It
-        /// starts at <see cref="TonemappingSnapshot.Default"/> and is replaced when one of the target's
-        /// passes writes color (a color clear or at least one surviving draw batch). A sampled-only or
-        /// no-write pass does not replace it.
+        /// Gets or sets the tone snapshot of the last frame that wrote color; other passes keep it.
         /// </summary>
         internal TonemappingSnapshot Tone { get; set; } = TonemappingSnapshot.Default;
 
-        /// <summary>
-        /// Gets the app's startup tone-mapping mode. The runtime mode cannot change, so the readback
-        /// uses this value instead of reading the live settings object on the render thread.
-        /// </summary>
+        /// <summary>Gets the startup tone-mapping mode used by readbacks.</summary>
         internal TonemappingMode StartupTonemappingMode { get; }
     }
 }

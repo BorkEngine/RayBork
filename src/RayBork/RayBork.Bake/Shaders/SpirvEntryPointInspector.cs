@@ -13,22 +13,10 @@ internal enum SpirvExecutionModel : uint
     Fragment = 4,
 }
 
-/// <summary>
-/// Validates a compiled SPIR-V module and finds a stage entry point in its <c>OpEntryPoint</c>
-/// instructions.
-/// </summary>
+/// <summary>Validates a compiled SPIR-V module and finds a stage entry point.</summary>
 /// <remarks>
-/// <para>
-/// The bake never passes an unchecked shaderc result to the pack. The inspector verifies the SPIR-V
-/// magic number, the 1.x version word, the word-count/length invariant, and every instruction's word
-/// count before it reads an <c>OpEntryPoint</c> (<c>15</c>) instruction, so a truncated or hand-built
-/// module becomes a shader diagnostic instead of an out-of-range read.
-/// </para>
-/// <para>
-/// M3 fixes the entry points to <c>main_vertex</c> and <c>main_fragment</c>; the inspector enforces
-/// both the name and the execution model (Vertex for the vertex stage, Fragment for the fragment
-/// stage).
-/// </para>
+/// The inspector verifies the magic, the 1.x version, and every instruction's word count before it
+/// reads <c>OpEntryPoint</c>. The entry point name and execution model must match the stage.
 /// </remarks>
 internal static class SpirvEntryPointInspector
 {
@@ -40,11 +28,7 @@ internal static class SpirvEntryPointInspector
     private const uint MAX_SUPPORTED_MINOR_VERSION = 6;
 
     /// <summary>Validates a module and finds the requested stage entry point.</summary>
-    /// <param name="module">The complete SPIR-V module bytes.</param>
-    /// <param name="entryPoint">The required entry point name.</param>
-    /// <param name="executionModel">The required execution model.</param>
-    /// <param name="message">The failure reason when validation failed, otherwise empty.</param>
-    /// <returns><see langword="true"/> when the module declares the entry point for the stage.</returns>
+    /// <returns><see langword="true"/> when the module declares the stage entry point.</returns>
     internal static bool TryValidate(
         ReadOnlySpan<byte> module,
         string entryPoint,

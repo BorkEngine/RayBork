@@ -14,8 +14,6 @@ internal enum BakeMode
 internal static class BakeModeExtensions
 {
     /// <summary>Maps a mode to the pack writer's compression policy.</summary>
-    /// <param name="mode">The mode.</param>
-    /// <returns>The matching pack policy.</returns>
     internal static RayBork.Internal.PackCompressionPolicy ToCompressionPolicy(
         this BakeMode mode
     ) =>
@@ -24,15 +22,10 @@ internal static class BakeModeExtensions
             : RayBork.Internal.PackCompressionPolicy.Debug;
 
     /// <summary>Gets the lowercase CLI name of a mode.</summary>
-    /// <param name="mode">The mode.</param>
-    /// <returns><c>debug</c> or <c>release</c>.</returns>
     internal static string ToName(this BakeMode mode) =>
         mode == BakeMode.Release ? "release" : "debug";
 
-    /// <summary>Parses a <c>--mode</c> value case-insensitively.</summary>
-    /// <param name="value">The value.</param>
-    /// <param name="mode">The parsed mode.</param>
-    /// <returns><see langword="true"/> for <c>debug</c> or <c>release</c>.</returns>
+    /// <summary>Parses <c>debug</c> or <c>release</c>, case-insensitively.</summary>
     internal static bool TryParse(string? value, out BakeMode mode)
     {
         if (string.Equals(value, "debug", StringComparison.OrdinalIgnoreCase))

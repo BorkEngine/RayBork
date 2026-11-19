@@ -6,21 +6,13 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The backend-owned fullscreen quad the custom post-process pass instances: four vertices in the fixed
-/// 88-byte engine vertex layout and six 32-bit indices.
+/// The backend-owned fullscreen quad: four vertices in the fixed 88-byte layout and six 32-bit
+/// indices.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The positions span <c>[-0.5, 0.5]</c> in the local XY plane and the UVs span <c>[0, 1]</c> with
-/// <c>(0, 0)</c> at the image top-left. The contract vertex stage maps it with
-/// <c>vUv = aUv; gl_Position = vec4(aPosition.xy * 2.0, 0.0, 1.0);</c>, so a pass preserves the
-/// top-left image orientation that the resolved color and depth images and the present and store-back
-/// passes use.
-/// </para>
-/// <para>
-/// The buffers are a small host-visible coherent allocation owned by the backend, not a public asset.
-/// They are created with the device and destroyed with it; render-thread only.
-/// </para>
+/// The positions span <c>[-0.5, 0.5]</c> with UVs in <c>[0, 1]</c> from the image top-left, so a pass
+/// preserves the top-left orientation of the resolved and present images. The host-visible buffers
+/// are created and destroyed with the device; render-thread only.
 /// </remarks>
 internal sealed unsafe class VulkanFullscreenQuad : IDisposable
 {
@@ -51,13 +43,7 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable
     /// <summary>Gets the indexed triangle count: six indices, two triangles.</summary>
     internal static uint IndexCount => INDEX_COUNT;
 
-    /// <summary>
-    /// Creates the vertex and index buffers and fills them with the fullscreen quad.
-    /// </summary>
-    /// <param name="device">The device that owns the buffers.</param>
-    /// <returns>The created quad.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <c>null</c>.</exception>
-    /// <exception cref="GraphicsException">A buffer or its memory could not be created.</exception>
+    /// <summary>Creates the vertex and index buffers and fills them with the quad.</summary>
     internal static VulkanFullscreenQuad Create(VulkanDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -75,10 +61,7 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable
         }
     }
 
-    /// <summary>
-    /// Unmaps and destroys the vertex and index buffers. The call is idempotent and must run before the
-    /// device is destroyed.
-    /// </summary>
+    /// <summary>Unmaps and destroys the buffers; idempotent and must run before the device.</summary>
     public void Dispose()
     {
         if (_disposed)

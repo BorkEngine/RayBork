@@ -7,15 +7,12 @@ namespace RayBork.Internal;
 /// validates them, and builds the program upload.
 /// </summary>
 /// <remarks>
-/// The format is stateless, so one shared instance serves every program load on the loader thread. The
-/// runtime never parses GLSL or SPIR-V; it only checks the descriptor's shader ABI version and that
-/// each module is a non-empty, 4-byte aligned blob.
+/// The format is stateless and runs on the loader thread. It never parses GLSL or SPIR-V; it
+/// checks the descriptor ABI version and that each module is a non-empty, 4-byte aligned blob.
 /// </remarks>
 internal sealed class ShaderProgramAssetFormat : IEngineAssetFormat<ShaderProgram>
 {
-    /// <summary>
-    /// The shared format instance.
-    /// </summary>
+    /// <summary>The shared format instance.</summary>
     internal static readonly ShaderProgramAssetFormat Instance = new();
 
     private ShaderProgramAssetFormat() { }

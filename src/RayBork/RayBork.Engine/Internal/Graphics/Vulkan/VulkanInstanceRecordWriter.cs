@@ -3,35 +3,17 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Writes the little-endian shader-ABI instance record and frame payloads the geometry and post-process
-/// paths share.
-/// </summary>
+/// <summary>Writes little-endian shader-ABI instance records and frame payloads.</summary>
 /// <remarks>
-/// The methods are pure byte writers for the render thread's host-visible frame and instance storage
-/// buffers. They allocate nothing and are safe from any single thread; the callers serialize the
-/// buffers by frame slot.
+/// The writers are pure and allocate nothing; callers serialize each buffer by frame slot.
 /// </remarks>
 internal static class VulkanInstanceRecordWriter
 {
-    /// <summary>Rounds a byte offset up to <paramref name="alignment"/>.</summary>
-    /// <param name="value">The byte offset to align.</param>
-    /// <param name="alignment">The positive alignment in bytes.</param>
-    /// <returns>The smallest multiple of <paramref name="alignment"/> not below <paramref name="value"/>.</returns>
+    /// <summary>Rounds a byte offset up to the next multiple of an alignment.</summary>
     internal static ulong AlignUp(ulong value, ulong alignment) =>
         checked(((value + alignment - 1) / alignment) * alignment);
 
-    /// <summary>
-    /// Writes one System.Numerics matrix in its storage order.
-    /// </summary>
-    /// <remarks>
-    /// The words are written M11..M44 (row-major). GLSL reads a <c>mat4</c> from std140/std430 storage
-    /// as column-major, so it sees the transpose of what this method writes, which is the engine's
-    /// row-vector matrix expressed in the shader's column-vector convention.
-    /// </remarks>
-    /// <param name="destination">The record buffer.</param>
-    /// <param name="offset">The byte offset of the matrix.</param>
-    /// <param name="value">The matrix to write.</param>
+    /// <summary>Writes a matrix row-major, transposed for GLSL's column-major <c>mat4</c>.</summary>
     internal static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value)
     {
         Span<byte> target = destination[offset..];
@@ -54,9 +36,6 @@ internal static class VulkanInstanceRecordWriter
     }
 
     /// <summary>Writes one <c>vec4</c> at a byte offset.</summary>
-    /// <param name="destination">The record buffer.</param>
-    /// <param name="offset">The byte offset of the vector.</param>
-    /// <param name="value">The vector to write.</param>
     internal static void WriteVector4(Span<byte> destination, int offset, Vector4 value)
     {
         Span<byte> target = destination[offset..];
@@ -67,16 +46,10 @@ internal static class VulkanInstanceRecordWriter
     }
 
     /// <summary>Writes one little-endian <c>float</c> at a byte offset.</summary>
-    /// <param name="destination">The record buffer.</param>
-    /// <param name="offset">The byte offset of the value.</param>
-    /// <param name="value">The value to write.</param>
     internal static void WriteSingle(Span<byte> destination, int offset, float value) =>
         BinaryPrimitives.WriteSingleLittleEndian(destination[offset..], value);
 
     /// <summary>Writes one little-endian <c>uint</c> at a byte offset.</summary>
-    /// <param name="destination">The record buffer.</param>
-    /// <param name="offset">The byte offset of the value.</param>
-    /// <param name="value">The value to write.</param>
     internal static void WriteUInt32(Span<byte> destination, int offset, uint value) =>
         BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
 }

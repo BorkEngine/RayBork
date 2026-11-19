@@ -4,34 +4,14 @@ using RayBork.Internal;
 namespace RayBork.Tests;
 
 /// <summary>
-/// GPU integration tests for the M7 screen-space drawing model: they convert render pixels to world
-/// transforms with the production <see cref="Camera.ScreenToWorldTransform"/>, record the production
-/// quad, disc, texture, and text helpers, submit the sealed camera packet through
-/// <see cref="Vulkan12Backend"/>, and assert validation-layer cleanliness, render statistics, and
-/// stable linear scene-target pixel probes.
+/// GPU integration tests for the M7 screen-space drawing model through the production camera, draw
+/// helpers, and <see cref="Vulkan12Backend"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Every test loads the real <see cref="PrimitiveAssets"/> from the built-in pack through a real GPU
-/// asset bridge and worker (<see cref="PrimitiveDrawGpuHarness"/>), builds textures through the catalog's
-/// real procedural service, and, for the text case, generates glyph textures through the real MSDF
-/// generator. The camera, the screen transform, the draw helpers, the batching planner, the pipelines,
-/// and the readback path are the production ones. There are no golden images and no sleeps.
-/// </para>
-/// <para>
-/// The harness scene target is the render resolution the window reports, so passing
-/// <see cref="PrimitiveDrawGpuHarness.Height"/> as the orthographic height makes the screen transform
-/// scale exactly one world unit per render pixel at 100% DPI: a destination rectangle in render pixels
-/// maps to the same rectangle on the target. All pixel probes read the interior of the requested
-/// rectangle, or a pixel inside a single disc fan triangle clear of its center vertex and radial
-/// edges, with an explicit tolerance; tests that read a single pixel use a single-sample target so no
-/// resolved sample can land on an antialiased edge.
-/// </para>
-/// <para>
-/// GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and
-/// Vulkan loader setup. A host without a usable Vulkan device is reported as a skip with the reason
-/// by <see cref="PrimitiveDrawGpuHarness.CreateOrSkip"/>.
-/// </para>
+/// Every test loads the real assets through <see cref="PrimitiveDrawGpuHarness"/> and probes linear
+/// scene-target pixels with explicit tolerances. GPU test classes run in parallel while
+/// <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader setup; a host without
+/// a usable Vulkan device is skipped.
 /// </remarks>
 public sealed class ScreenDrawGpuTests
 {
@@ -45,24 +25,23 @@ public sealed class ScreenDrawGpuTests
     private const float COLOR_TOLERANCE = 2e-3f;
 
     /// <summary>
-    /// The tolerance for a blended color: the scene target is half-float, so a source-over result can
-    /// differ from the analytic value by a few half-precision steps.
+    /// The tolerance for a blended color; the half-float scene target stores only a few steps of
+    /// precision.
     /// </summary>
     private const float BLEND_TOLERANCE = 4e-3f;
 
     /// <summary>
-    /// The tolerance for an MSDF ink probe: a glyph quad interior reconstructs full coverage, but the
-    /// distance field still rounds the fragment coverage at a pixel that borders the ink edge.
+    /// The tolerance for an MSDF ink probe; coverage still rounds at the ink edge.
     /// </summary>
     private const float INK_TOLERANCE = 2e-2f;
 
-    /// <summary>The plane distance for the screen-space quads; the orthographic near plane is 0.1.</summary>
+    /// <summary>The screen-plane distance for screen-space quads.</summary>
     private const float SCREEN_DISTANCE = 1f;
 
     /// <summary>The em height, in render pixels, of the score text.</summary>
     private const float TEXT_PIXEL_SIZE = 120f;
 
-    /// <summary>The two-glyph score whose second glyph has a solid stem through its quad center.</summary>
+    /// <summary>The two-glyph score whose second glyph has a solid stem through its center.</summary>
     private const string SCORE_TEXT = "HI";
 
     [Fact]
@@ -535,16 +514,11 @@ public sealed class ScreenDrawGpuTests
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
-    /// <summary>
-    /// Builds the 2x2 nearest-sampled texture whose four cells have distinct colors, in row-major order
-    /// from the top row to the bottom row.
-    /// </summary>
+    /// <summary>Creates the 2x2 nearest-sampled texture holding the four quadrant colors.</summary>
     private static Texture CreateQuadrantTexture(PrimitiveDrawGpuHarness harness) =>
         harness.CreateTexture(2, 2, _topLeft, _topRight, _bottomLeft, _bottomRight);
 
-    /// <summary>
-    /// Draws one textured quad whose destination is a render-pixel rectangle, using the full texture.
-    /// </summary>
+    /// <summary>Draws one textured quad into a render-pixel rectangle using the full texture.</summary>
     private static void DrawTexturedRect(
         Camera camera,
         Texture texture,
@@ -557,10 +531,7 @@ public sealed class ScreenDrawGpuTests
         camera.DrawQuad(transform, destination.Size, texture, tint, renderState);
     }
 
-    /// <summary>
-    /// Draws one textured quad whose destination is a render-pixel rectangle and whose source is a
-    /// normalized texture sub-rectangle.
-    /// </summary>
+    /// <summary>Draws one textured quad with an explicit normalized source rectangle.</summary>
     private static void DrawTexturedRect(
         Camera camera,
         Texture texture,
@@ -572,9 +543,7 @@ public sealed class ScreenDrawGpuTests
         camera.DrawQuad(transform, destination.Size, texture, source);
     }
 
-    /// <summary>
-    /// Draws one solid quad whose destination is a render-pixel rectangle.
-    /// </summary>
+    /// <summary>Draws one solid quad into a render-pixel rectangle.</summary>
     private static void DrawSolidRect(
         Camera camera,
         Rect destination,
@@ -586,9 +555,7 @@ public sealed class ScreenDrawGpuTests
         camera.DrawQuad(transform, destination.Size, color, renderState);
     }
 
-    /// <summary>
-    /// Gets the screen-plane transform whose center is the center of <paramref name="destination"/>.
-    /// </summary>
+    /// <summary>Gets the screen-plane transform centered on a render-pixel rectangle.</summary>
     private static Transform ScreenRectTransform(Camera camera, Rect destination) =>
         camera.ScreenToWorldTransform(
             new Vector2(
@@ -598,10 +565,7 @@ public sealed class ScreenDrawGpuTests
             SCREEN_DISTANCE
         );
 
-    /// <summary>
-    /// Lays the score out with the engine layout engine over the loaded font's metrics at the pixel em
-    /// height the screen transform authors.
-    /// </summary>
+    /// <summary>Lays the score out with the engine layout engine at the pixel em height.</summary>
     private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(
         Font font,
         string text
@@ -621,13 +585,8 @@ public sealed class ScreenDrawGpuTests
         return (result, buffer.Glyphs.ToArray());
     }
 
-    /// <summary>
-    /// Places the layout origin so the block's layout bounds center on a render-pixel point.
-    /// </summary>
-    /// <remarks>
-    /// The layout runs <c>+X</c> right and <c>+Y</c> up while render rows increase downward, so the origin
-    /// pixel is left of and above the requested center.
-    /// </remarks>
+    /// <summary>Places the layout origin so its bounds center on a render-pixel point.</summary>
+    /// <remarks>The layout runs <c>+X</c> right and <c>+Y</c> up while render rows increase downward.</remarks>
     private static Transform ScreenTextTransform(
         Camera camera,
         TextLayoutResult layout,
@@ -639,9 +598,7 @@ public sealed class ScreenDrawGpuTests
         return camera.ScreenToWorldTransform(originPixel, SCREEN_DISTANCE);
     }
 
-    /// <summary>
-    /// Gets the center pixel of one laid-out glyph's padded quad.
-    /// </summary>
+    /// <summary>Gets the center pixel of one laid-out glyph's padded quad.</summary>
     private static (uint X, uint Y) GlyphCenterPixel(
         Camera camera,
         TextGlyphInstance glyph,
@@ -655,10 +612,7 @@ public sealed class ScreenDrawGpuTests
 
     private static uint Pixel(float coordinate) => checked((uint)MathF.Floor(coordinate));
 
-    /// <summary>
-    /// Gets the source-over result of a straight-alpha source color over the destination color, the
-    /// result the <see cref="BlendMode.Alpha"/> preset produces.
-    /// </summary>
+    /// <summary>Gets the source-over result of a straight-alpha source over the destination.</summary>
     private static Color SourceOver(Color source, Color destination) =>
         new(
             (source.R * source.A) + (destination.R * (1f - source.A)),
@@ -667,10 +621,7 @@ public sealed class ScreenDrawGpuTests
             1f
         );
 
-    /// <summary>
-    /// Converts a color to the value an RGBA8 texture upload stores, so a texture probe is compared
-    /// against the quantized sample rather than the authored color.
-    /// </summary>
+    /// <summary>Quantizes a color to the value an RGBA8 texture upload stores.</summary>
     private static Color Unorm(Color color) =>
         new(
             UnormChannel(color.R),

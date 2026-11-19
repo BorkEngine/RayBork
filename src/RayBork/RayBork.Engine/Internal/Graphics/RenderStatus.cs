@@ -5,15 +5,8 @@ namespace RayBork.Internal;
 /// <see cref="EngineContext.Stats"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The render thread writes the values and the tick thread reads them. Each property returns a copy
-/// of a value type, so <see cref="Info"/> and <see cref="Stats"/> are independent, non-transactional
-/// snapshots: a reader can observe a newer <see cref="Stats"/> with an older <see cref="Info"/>.
-/// </para>
-/// <para>
-/// The lock is held for a struct copy only and is never held across a wait, a callback, or an
-/// <c>await</c>. A reader therefore blocks for at most one writer's copy.
-/// </para>
+/// The render thread writes and the tick thread reads; each property copies one value type, so
+/// <see cref="Info"/> and <see cref="Stats"/> are independent, non-transactional snapshots.
 /// </remarks>
 internal sealed class RenderStatus
 {
@@ -21,10 +14,7 @@ internal sealed class RenderStatus
     private EngineInfo _info = CreateDefaultInfo();
     private RenderStats _stats;
 
-    /// <summary>
-    /// Gets the last written engine information. The render thread writes it at startup and after a
-    /// recovery that changes the device or presentation state.
-    /// </summary>
+    /// <summary>Gets the last written engine information.</summary>
     internal EngineInfo Info
     {
         get
@@ -36,9 +26,7 @@ internal sealed class RenderStatus
         }
     }
 
-    /// <summary>
-    /// Gets the last written render statistics, which describe the last completed frame.
-    /// </summary>
+    /// <summary>Gets the last written statistics, describing the last completed frame.</summary>
     internal RenderStats Stats
     {
         get
@@ -50,11 +38,7 @@ internal sealed class RenderStatus
         }
     }
 
-    /// <summary>
-    /// Gets the default <see cref="EngineInfo"/> used before the renderer starts: the engine name and
-    /// version with no backend, device, or surface selected.
-    /// </summary>
-    /// <returns>The default engine information.</returns>
+    /// <summary>Creates the default information used before the renderer starts.</summary>
     internal static EngineInfo CreateDefaultInfo() =>
         new(
             "RayBork",
@@ -69,9 +53,7 @@ internal sealed class RenderStatus
             false
         );
 
-    /// <summary>
-    /// Replaces the engine information. Called on the render thread.
-    /// </summary>
+    /// <summary>Replaces the engine information on the render thread.</summary>
     /// <param name="info">The new value.</param>
     internal void SetInfo(EngineInfo info)
     {
@@ -81,9 +63,7 @@ internal sealed class RenderStatus
         }
     }
 
-    /// <summary>
-    /// Replaces the render statistics. Called on the render thread after a frame completes.
-    /// </summary>
+    /// <summary>Replaces the render statistics on the render thread.</summary>
     /// <param name="stats">The new value.</param>
     internal void SetStats(RenderStats stats)
     {

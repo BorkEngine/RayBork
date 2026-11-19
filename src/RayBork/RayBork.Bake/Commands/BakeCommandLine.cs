@@ -7,10 +7,7 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Commands;
 
-/// <summary>
-/// The command surface shared by every assets executable: argument parsing, configuration validation,
-/// dispatch, exit codes, and stdout/stderr routing.
-/// </summary>
+/// <summary>Shared command surface: parsing, validation, dispatch, and exit codes.</summary>
 internal static class BakeCommandLine
 {
     internal const int SUCCESS_EXIT_CODE = 0;
@@ -21,12 +18,6 @@ internal static class BakeCommandLine
     private static readonly string[] _commands = ["bake", "clean", "inspect"];
 
     /// <summary>Runs one command.</summary>
-    /// <param name="definition">The builder configuration.</param>
-    /// <param name="args">The arguments, excluding the executable name.</param>
-    /// <param name="output">The summary stream.</param>
-    /// <param name="error">The diagnostic stream.</param>
-    /// <param name="programName">The CLI prefix.</param>
-    /// <returns>The documented exit code.</returns>
     internal static int Run(
         BakeProjectDefinition definition,
         string[] args,

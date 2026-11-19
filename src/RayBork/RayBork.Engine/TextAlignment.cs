@@ -1,22 +1,14 @@
 namespace RayBork;
 
-/// <summary>
-/// Selects how the lines of a text block are aligned horizontally inside the block's layout box.
-/// </summary>
+/// <summary>Selects the horizontal alignment of a text block's lines.</summary>
 public enum TextAlignment
 {
-    /// <summary>
-    /// Each line starts at the left edge of the layout box.
-    /// </summary>
+    /// <summary>Lines start at the left edge.</summary>
     Left,
 
-    /// <summary>
-    /// Each line is centered horizontally inside the layout box.
-    /// </summary>
+    /// <summary>Lines are centered horizontally.</summary>
     Center,
 
-    /// <summary>
-    /// Each line ends at the right edge of the layout box.
-    /// </summary>
+    /// <summary>Lines end at the right edge.</summary>
     Right,
 }
