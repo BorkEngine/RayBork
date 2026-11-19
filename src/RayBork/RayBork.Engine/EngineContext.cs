@@ -4,15 +4,14 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The engine context: the asset catalog, engine defaults, window, input, logging, renderer status,
-/// frame clock, runtime tone mapping, and exit control.
+/// The engine context: assets, defaults, window, input, logging, renderer status, frame clock, tone
+/// mapping, and exit control.
 /// </summary>
 /// <remarks>
-/// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
-/// Read them from <see cref="IGame.Setup"/>, <see cref="IGame.Tick"/>, or <see cref="IGame.Shutdown"/>
-/// instead of caching them across frames. <see cref="Tonemapping"/> is the app-lifetime exception: it
-/// is one mutable settings object, and each frame records a snapshot of it when the tick seals the
-/// frame.
+/// Lives for the app lifetime; per-frame members are tick-thread snapshots, so read them in
+/// <see cref="IGame.Setup"/>, <see cref="IGame.Tick"/>, or <see cref="IGame.Shutdown"/>. Asset and camera
+/// members throw <see cref="ObjectDisposedException"/> after the app stops or a dependency is disposed;
+/// <see cref="Tonemapping"/> is the mutable exception, snapshotted per frame.
 /// </remarks>
 public sealed class EngineContext
 {
@@ -75,50 +74,32 @@ public sealed class EngineContext
     }
 
     /// <summary>
-    /// Gets the app's asset catalog. It is valid from <see cref="IGame.Setup"/> and safe to call from
-    /// any thread.
+    /// Gets the app's asset catalog. Valid from <see cref="IGame.Setup"/> and safe from any thread.
     /// </summary>
     /// <remarks>
-    /// The catalog is mounted and its loader thread is running before <see cref="IGame.Setup"/> runs.
-    /// Engine assets are shared and reference-counted; custom data returns a fresh caller-owned
-    /// instance per call. After the app stops, every catalog member throws
-    /// <see cref="ObjectDisposedException"/>.
+    /// Its loader thread runs before <see cref="IGame.Setup"/>. Engine assets are shared and
+    /// reference-counted, while custom data returns a fresh caller-owned instance per call.
     /// </remarks>
     public IAssetCatalog Assets { get; }
 
     /// <summary>
-    /// Gets the engine-owned default assets: the built-in mesh shader program, the white and error
-    /// textures, and the built-in default and monospaced fonts. Valid from <see cref="IGame.Setup"/> and
-    /// released during shutdown.
+    /// Gets the engine-owned defaults: mesh shader, white and error textures, and fonts.
     /// </summary>
     /// <remarks>
-    /// The defaults are preloaded after the catalog starts and before <see cref="IGame.Setup"/> runs.
-    /// <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material per call;
-    /// <see cref="EngineDefaults.White"/>, <see cref="EngineDefaults.Error"/>,
-    /// <see cref="EngineDefaults.DefaultFont"/>, and <see cref="EngineDefaults.DefaultMonoFont"/> are
-    /// engine-owned and must not be disposed by the game. After the app stops, every member throws
-    /// <see cref="ObjectDisposedException"/>.
+    /// Preloaded before <see cref="IGame.Setup"/>; the textures and fonts are engine-owned and must not be
+    /// disposed. <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material.
     /// </remarks>
     public EngineDefaults Defaults { get; }
 
     /// <summary>
     /// Creates a builder for one procedural <see cref="Mesh"/>.
     /// </summary>
-    /// <param name="topology">The primitive topology of the mesh. The default is triangle list.</param>
-    /// <returns>The builder. Its <see cref="MeshBuilder.BuildAsync"/> creates one immutable mesh.</returns>
+    /// <param name="topology">The primitive topology; the default is triangle list.</param>
+    /// <returns>The builder; <see cref="MeshBuilder.BuildAsync"/> creates one immutable mesh.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="topology"/> is not a defined value.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     /// <remarks>
-    /// <para>
-    /// The factory and the builder's CPU and build members are safe to call from any thread and do not
-    /// touch tick-affine engine state. Awaiting <see cref="MeshBuilder.BuildAsync"/> on the tick thread
-    /// suspends that tick's continuation like an asset load; a build may also be started on a worker
-    /// thread. A builder instance is not thread-safe, so create one per thread.
-    /// </para>
-    /// <para>
-    /// After the app stops, this member and every builder it created throw
-    /// <see cref="ObjectDisposedException"/>.
-    /// </para>
+    /// Safe from any thread; awaiting <see cref="MeshBuilder.BuildAsync"/> on the tick thread suspends
+    /// that tick. A builder instance is not thread-safe, so create one per thread.
     /// </remarks>
     public MeshBuilder CreateMeshBuilder(
         PrimitiveTopology topology = PrimitiveTopology.TriangleList
@@ -127,30 +108,23 @@ public sealed class EngineContext
     /// <summary>
     /// Creates a builder for one procedural <see cref="Texture"/>.
     /// </summary>
-    /// <param name="width">The base-level width in pixels.</param>
-    /// <param name="height">The base-level height in pixels.</param>
+    /// <param name="width">The base-level width, in pixels.</param>
+    /// <param name="height">The base-level height, in pixels.</param>
     /// <param name="format">
-    /// The uncompressed storage format: <see cref="TextureFormat.Rgba8Srgb"/> (the default),
+    /// The uncompressed format: <see cref="TextureFormat.Rgba8Srgb"/> (the default),
     /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.R8Unorm"/>.
     /// </param>
     /// <param name="generateMips">
-    /// Whether <see cref="TextureBuilder.BuildAsync"/> generates the full mip chain when no chain
-    /// exists. The default is <see langword="true"/>.
+    /// Whether <see cref="TextureBuilder.BuildAsync"/> fills the mip chain; the default is true.
     /// </param>
     /// <param name="sampler">
     /// The sampler state, or <see langword="null"/> for linear filtering with repeat wrapping.
     /// </param>
-    /// <returns>The builder. Its <see cref="TextureBuilder.BuildAsync"/> creates one immutable texture.</returns>
+    /// <returns>The builder; <see cref="TextureBuilder.BuildAsync"/> creates one immutable texture.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive or exceeds 16384.</exception>
-    /// <exception cref="ArgumentException">
-    /// The format is not an uncompressed procedural format, or the sampler state is not valid.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="ArgumentException">The format is not procedural or the sampler is invalid.</exception>
     /// <remarks>
-    /// The factory and the builder's CPU and build members are safe to call from any thread and do not
-    /// touch tick-affine engine state. A builder instance is not thread-safe, so create one per thread.
-    /// The CPU pixels stay owned by the builder and are never exposed on the built asset. After the app
-    /// stops, this member and every builder it created throw <see cref="ObjectDisposedException"/>.
+    /// Safe from any thread; a builder is not thread-safe. CPU pixels stay builder-owned.
     /// </remarks>
     public TextureBuilder CreateTextureBuilder(
         int width,
@@ -160,72 +134,48 @@ public sealed class EngineContext
         SamplerState? sampler = null
     ) => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
 
-    /// <summary>
-    /// Creates a camera for the requested projection that records one pass into the current frame.
-    /// Exactly the size argument selected by <paramref name="projection"/> is used.
-    /// </summary>
-    /// <param name="transform">The world-space camera transform. The camera looks down local <c>-Z</c>.</param>
-    /// <param name="projection">The projection kind.</param>
+    /// <summary>Creates a camera that records one pass into the current frame.</summary>
+    /// <param name="transform">The world-space transform; the camera looks down local <c>-Z</c>.</param>
+    /// <param name="projection">The projection kind; exactly its size argument is used.</param>
     /// <param name="fieldOfView">
-    /// The perspective vertical field of view in degrees. It must be finite and inside <c>(0, 180)</c>
-    /// for a perspective camera and must be <c>0</c> for an orthographic camera, which uses
-    /// <paramref name="orthographicHeight"/> instead.
+    /// The perspective vertical field of view in degrees, in <c>(0, 180)</c>; <c>0</c> for orthographic.
     /// </param>
     /// <param name="orthographicHeight">
-    /// The visible world-space height. It must be finite and greater than zero for an orthographic
-    /// camera and must be <c>0</c> for a perspective camera, which uses
-    /// <paramref name="fieldOfView"/> instead.
+    /// The visible world-space height, finite and positive; <c>0</c> for perspective.
     /// </param>
-    /// <param name="clearMode">The buffers the pass clears. The default is color and depth.</param>
+    /// <param name="clearMode">The buffers to clear; the default is color and depth.</param>
     /// <param name="clearColor">
-    /// The linear clear color. <see langword="null"/> means opaque black; HDR components above <c>1</c>
-    /// are allowed.
+    /// The linear clear color; <see langword="null"/> is opaque black, HDR above <c>1</c> allowed.
     /// </param>
-    /// <param name="near">The near clip distance. It must be finite and greater than zero.</param>
+    /// <param name="near">The near clip distance; finite and greater than zero.</param>
     /// <param name="far">
-    /// The far clip distance. It must be greater than <paramref name="near"/>; positive infinity is
-    /// allowed for a perspective camera and rejected for an orthographic camera. The default is
-    /// <c>1000</c>; pass <see cref="float.PositiveInfinity"/> for an infinite perspective far plane.
+    /// The far clip distance, greater than <paramref name="near"/>; the default is <c>1000</c>, and
+    /// positive infinity is allowed for perspective only.
     /// </param>
     /// <param name="viewport">
-    /// The pixel viewport, or <see langword="null"/> for the full target render size. The rectangle is
-    /// clamped to the target and must not clamp to an empty region.
+    /// The pixel viewport, or <see langword="null"/> for the full target; clamped and non-empty.
     /// </param>
     /// <param name="target">
-    /// The render texture the pass writes, or <see langword="null"/> for the app's linear HDR scene
-    /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
-    /// uses the clamped viewport.
+    /// The render texture to write, or <see langword="null"/> for the linear HDR scene target; the
+    /// viewport and aspect ratio use the target's clamped size.
     /// </param>
     /// <param name="postProcess">
-    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
-    /// post-processing. The stack runs after the camera's geometry pass and before the next camera or
-    /// the present pass. The stack, each effect's enabled value, and each custom effect's shader cursor
-    /// and texture bindings are frozen when the camera is created, so later changes apply to later
-    /// cameras only. Effects work on the scene target and on a <see cref="RenderTexture"/> target.
+    /// The caller-owned stack snapshotted at creation, or <see langword="null"/> for none; it runs after
+    /// geometry, before the next camera or present, and later edits apply to later cameras only.
     /// </param>
-    /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
+    /// <returns>The camera; dispose it before <see cref="IGame.Tick"/> returns.</returns>
     /// <exception cref="ArgumentException">
-    /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
-    /// viewport is invalid or empty, or the clear color has a non-finite component.
+    /// A wrong size argument, an invalid viewport, or a non-finite clear color.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="projection"/> is not defined, <paramref name="clearMode"/> contains bits outside
-    /// <see cref="ClearMode.All"/>, or a selected projection or clip-plane parameter is outside its range.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The camera's <paramref name="target"/> or a post-process effect's shader, bound texture, or
-    /// sampled render target is disposed.
+    /// A projection or clear-mode value is undefined, has unknown bits, or is out of range.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
-    /// transform is singular, or a post-process effect violates the custom shader contract. A custom
-    /// effect whose shader does not declare the required <c>sourceColor</c> binding, or that declares
-    /// <c>sourceDepth</c> for a target without depth, is rejected here with a message naming the shader.
+    /// Not the tick thread, no frame, another camera active, a singular transform, or a bad effect.
     /// </exception>
     /// <remarks>
-    /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
-    /// the next. A camera left undisposed when the tick returns stops the app with
-    /// <see cref="InvalidOperationException"/> naming it; the frame is not published.
+    /// Legal only during <see cref="IGame.Tick"/>; dispose each camera before the next. An undisposed
+    /// camera stops the app at tick return and the frame is not published.
     /// </remarks>
     public Camera CreateCamera(
         Transform transform,
@@ -255,164 +205,90 @@ public sealed class EngineContext
         );
 
     /// <summary>
-    /// Creates one runtime render texture and returns it after the render thread allocated its images.
+    /// Creates one runtime render texture after the render thread allocated its images.
     /// </summary>
-    /// <param name="description">
-    /// The target size, color format, depth-attachment flag, and requested MSAA sample count.
-    /// </param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <param name="description">The size, color format, depth flag, and requested MSAA sample count.</param>
+    /// <param name="cancellationToken">Cancels the request before the allocation completes.</param>
     /// <returns>
-    /// The created render texture. Dispose it when it is no longer used; a camera targeting it must be
-    /// disposed before the target is disposed.
+    /// The created texture; the caller owns it and must dispose any camera targeting it first.
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds <c>16384</c>, or the sample count is not <c>1</c>, <c>2</c>,
-    /// <c>4</c>, or <c>8</c>.
+    /// A dimension is not positive or exceeds <c>16384</c>, or the sample count is not 1, 2, 4, or 8.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// The color format is not <see cref="TextureFormat.Rgba16Float"/>,
-    /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
+    /// The format is not <see cref="TextureFormat.Rgba16Float"/>, <see cref="TextureFormat.Rgba8Unorm"/>,
+    /// or <see cref="TextureFormat.Rgba8Srgb"/>.
     /// </exception>
     /// <exception cref="OperationCanceledException">
     /// <paramref name="cancellationToken"/> was canceled before the render thread created the target.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The creation queue is full (256 pending requests) because the render thread is not draining it.
+    /// The creation queue is full (256 pending) because the render thread is not draining it.
     /// </exception>
     /// <exception cref="GraphicsException">The renderer could not create the target's images.</exception>
     /// <remarks>
-    /// <para>
-    /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It returns after the
-    /// render thread allocated the target's images; the render thread services the request independently
-    /// of the tick thread, so the tick thread never deadlocks. <see cref="IGame.Setup"/> can
-    /// <c>await</c> the call directly. <see cref="IGame.Tick"/> is <c>void</c>, so a target created in a
-    /// tick uses the blocking form <c>GetAwaiter().GetResult()</c> and stalls that tick until the
-    /// allocation finished; creating the target in <c>Setup</c> is the preferred pattern.
-    /// </para>
-    /// <para>
-    /// The returned target's contents are undefined until a camera writes them. The effective MSAA count
-    /// is the highest device-supported count not exceeding the request, or <c>1</c>; a fallback logs a
-    /// warning. <see cref="RenderTexture.SampleCount"/> reports the effective count; a device recovery
-    /// re-selects it from the recreated device and updates the property.
-    /// </para>
+    /// Legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>; the render thread services it
+    /// independently, so it never deadlocks the tick thread. Setup can await it, while a tick must block
+    /// and stalls until allocation finishes, so prefer Setup. Contents are undefined until a camera writes
+    /// them. The effective MSAA count is the highest supported count not exceeding the request (or
+    /// <c>1</c>, with a warning), reported by <see cref="RenderTexture.SampleCount"/> and re-selected after
+    /// a device recovery.
     /// </remarks>
     public async Task<RenderTexture> CreateRenderTextureAsync(
         RenderTextureDescription description,
         CancellationToken cancellationToken = default
     ) => await _renderTextures.CreateAsync(description, cancellationToken).ConfigureAwait(false);
 
-    /// <summary>
-    /// Gets the input snapshot for the current tick. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the current tick's input snapshot.</summary>
     public IInput Input { get; private set; }
 
-    /// <summary>
-    /// Gets the application window. Getters are snapshots and setters are queued, so this member is
-    /// safe to use from any thread.
-    /// </summary>
+    /// <summary>Gets the window; snapshots and queued setters make it thread-safe.</summary>
     public IWindow Window => _platform.Window;
 
-    /// <summary>
-    /// Gets the app-owned logger factory. It is never <see langword="null"/> and is safe to use from
-    /// any thread.
-    /// </summary>
+    /// <summary>Gets the app-owned logger factory; thread-safe and never null.</summary>
     public ILoggerFactory LoggerFactory { get; }
 
-    /// <summary>
-    /// Gets the renderer, device, and presentation information. Valid from <see cref="IGame.Setup"/>
-    /// and safe to read from any thread.
-    /// </summary>
+    /// <summary>Gets renderer, device, and presentation info; thread-safe.</summary>
     /// <remarks>
-    /// The render thread writes the value at startup and after a recovery that changes the device or
-    /// presentation state. A read can be stale by one tick and is not transactional with respect to
-    /// <see cref="Stats"/>.
+    /// The render thread writes it at startup and after a recovery; a read can be a tick stale.
     /// </remarks>
     public EngineInfo Info => _renderStatus.Info;
 
-    /// <summary>
-    /// Gets absolute monotonic seconds since the app started. During <see cref="IGame.Setup"/> this is
-    /// the live elapsed time; during ticks it is the value captured at the start of the tick. It is
-    /// not reset at the first tick. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets monotonic seconds since start; live in Setup, captured at tick start.</summary>
     public double Time => _hasFrame ? _time : _elapsedTime();
 
-    /// <summary>
-    /// Gets the clamped seconds since the previous tick. It is <c>0</c> in
-    /// <see cref="IGame.Setup"/> and on the first tick. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the clamped delta; zero in Setup and on the first tick.</summary>
     public double DeltaTime { get; private set; }
 
-    /// <summary>
-    /// Gets the unclamped seconds since the previous tick. It is <c>0</c> in
-    /// <see cref="IGame.Setup"/>. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the unclamped delta; zero in Setup.</summary>
     public double UnscaledDeltaTime { get; private set; }
 
-    /// <summary>
-    /// Gets the number of completed ticks. It is <c>0</c> in <see cref="IGame.Setup"/> and <c>1</c>
-    /// during the first <see cref="IGame.Tick"/>. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the completed tick count; <c>0</c> in Setup and <c>1</c> on the first tick.</summary>
     public long FrameCount { get; private set; }
 
-    /// <summary>
-    /// Gets the smoothed number of ticks per second. It is the tick rate, not the presented frame
-    /// rate: difference <see cref="RenderStats.PresentedFrames"/> over a window for presented
-    /// frames per second. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the smoothed tick rate, not the presented frame rate.</summary>
     public double Fps { get; private set; }
 
-    /// <summary>
-    /// Gets whether the current tick is the first tick. It is <see langword="true"/> only during the
-    /// first <see cref="IGame.Tick"/>. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets whether this is the first tick.</summary>
     public bool IsFirstTick { get; private set; }
 
-    /// <summary>
-    /// Gets whether the app is exiting. It becomes <see langword="true"/> after
-    /// <see cref="RequestExit"/>, a window close request, or an engine stop request. Read it on the
-    /// tick thread.
-    /// </summary>
+    /// <summary>Gets whether the app is exiting after an exit request, close, or stop.</summary>
     public bool IsExiting => _appControl.IsExitRequested;
 
-    /// <summary>
-    /// Gets the configured clamp for <see cref="DeltaTime"/>, in seconds. Read it on the tick thread.
-    /// </summary>
+    /// <summary>Gets the <see cref="DeltaTime"/> clamp, in seconds.</summary>
     public double MaxDeltaTime { get; }
 
-    /// <summary>
-    /// Gets the render statistics of the last completed frame. Valid from <see cref="IGame.Setup"/>
-    /// and safe to read from any thread.
-    /// </summary>
-    /// <remarks>
-    /// The render thread updates the snapshot after a frame completes, so a read can be stale by one
-    /// tick. Individual fields are not a consistent transactional snapshot; use it for diagnostics
-    /// and overlays, not for synchronization.
-    /// </remarks>
+    /// <summary>Gets render stats of the last completed frame; thread-safe.</summary>
     public RenderStats Stats => _renderStatus.Stats;
 
-    /// <summary>
-    /// Gets the app-lifetime runtime tone-mapping settings. Read and write them on the tick thread.
-    /// </summary>
+    /// <summary>Gets the app-lifetime runtime tone-mapping settings.</summary>
     /// <remarks>
-    /// <para>
-    /// The values start from the <see cref="RayBorkAppBuilder"/> configuration. Changing them during
-    /// <see cref="IGame.Tick"/> affects the frame that tick records: the tick thread copies the values
-    /// into the frame packet when it seals the frame, and the present pass is frame-global. A frame
-    /// that was already published keeps its own snapshot, so a write never reaches an earlier frame.
-    /// </para>
-    /// <para>
-    /// The instance is stable for the app lifetime and is the same object on every tick. It is not
-    /// disposable and not thread-safe; read and write it only from <see cref="IGame.Setup"/>,
-    /// <see cref="IGame.Tick"/>, or <see cref="IGame.Shutdown"/>.
-    /// </para>
+    /// Values start from the <see cref="RayBorkAppBuilder"/> configuration; a write affects the sealing
+    /// frame, and published frames keep their snapshots. The object is stable and not thread-safe.
     /// </remarks>
     public TonemappingSettings Tonemapping { get; }
 
-    /// <summary>
-    /// Requests a graceful exit. The current tick completes and the final frame is presented. Call it
-    /// on the tick thread.
-    /// </summary>
+    /// <summary>Requests a graceful exit after the current tick.</summary>
     public void RequestExit() => _appControl.RequestExit();
 
     internal void SetInput(IInput input)

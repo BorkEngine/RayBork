@@ -4,52 +4,15 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Interprets one CFF Type 2 charstring into raw charstring-space contours.
-/// </summary>
+/// <summary>Interprets one CFF Type 2 charstring into raw charstring-space contours.</summary>
 /// <remarks>
-/// <para>
-/// The interpreter is created per glyph resolution and owns that resolution's operand stack,
-/// transient array, contour list, and hint state; <see cref="CffFont"/> applies the FontMatrix to the
-/// returned points. Operations follow the Type 2 specification: a leading width operand is consumed
-/// on the first stack-clearing operator and ignored (advances come from <c>hmtx</c>), every contour is
-/// closed with a straight line when its last point is not its first, the optional trailing argument of
-/// <c>hvcurveto</c>/<c>vhcurveto</c> overrides the final on-axis delta, the flex operators expand to two
-/// cubic segments, and <c>seac</c> composes the base glyph at the origin with the accent glyph
-/// translated by <c>(adx, ady)</c>. Zero-length and other degenerate contours with no segments are
-/// dropped, so a glyph without drawing operators resolves to no contours.
-/// </para>
-/// <para>
-/// Defensive limits are checked before the outline or the operand stack grows, and all raise
-/// <see cref="FontUnsupportedException"/> with the limit named: operand stack depth
-/// <see cref="MAX_OPERAND_STACK"/>, subroutine nesting <see cref="MAX_SUBROUTINE_NESTING"/>, total
-/// subroutine calls <see cref="MAX_SUBROUTINE_CALLS"/>, executed charstring tokens
-/// <see cref="MAX_EXECUTED_TOKENS"/>, hint zones <see cref="MAX_HINT_COUNT"/>, points per glyph
-/// <see cref="MAX_POINTS_PER_GLYPH"/>, and contours per glyph <see cref="MAX_CONTOURS_PER_GLYPH"/>.
-/// The executed-token budget counts every number and operator decoded, including arithmetic-only
-/// subroutines that add no outline data, so a runaway charstring cannot burn CPU while leaving the
-/// point and contour counters untouched. The counters are shared with <c>seac</c> components, so a
-/// composite cannot multiply them. Malformed instructions — unknown operators, stack underflow, a
-/// transient index outside its fixed <see cref="TRANSIENT_ARRAY_SIZE"/>-entry array, a subroutine
-/// index outside its INDEX, a <c>hintmask</c> whose mask bytes are past the end, a drawing operator
-/// before the first <c>moveto</c>, and unsupported operand counts — raise
-/// <see cref="FontFormatException"/>.
-/// </para>
-/// <para>
-/// <c>index</c> clamps a negative depth to the top of the stack and rejects a depth past the stack;
-/// <c>roll</c> reduces its shift modulo the element count and rotates toward the top for a positive
-/// shift, matching PostScript. <c>random</c> is deterministic: it always pushes
-/// <see cref="DETERMINISTIC_RANDOM_VALUE"/> so parsing the same face twice produces identical
-/// outlines. <c>div</c> by zero and the square root of a negative value produce zero, the defined
-/// fallbacks for the specification's undefined results. The transient array is zero-initialized, so
-/// reading an unwritten entry is deterministic. The deprecated no-argument <c>dotsection</c> operator
-/// is accepted and treated as a stack-clearing no-op. <c>endchar</c> ends the glyph even when it
-/// appears in a called subroutine, because some real fonts terminate from a shared subroutine; bytes
-/// after it are ignored. The instance is mutable and single-use; it is never shared across threads,
-/// and a second <see cref="Run"/> throws <see cref="InvalidOperationException"/>. Its operand-stack
-/// and transient scratch arrays are rented from the shared array pool inside <see cref="Run"/> and
-/// returned when it completes, so per-token work is bounded by the fixed stack size.
-/// </para>
+/// The interpreter is single-use and per glyph, owns that resolution's stack and hint state, and
+/// returns closed contours for the face to map to font units. Malformed instructions are
+/// <see cref="FontFormatException"/>s, while exceeding <see cref="MAX_OPERAND_STACK"/>,
+/// <see cref="MAX_SUBROUTINE_NESTING"/>, <see cref="MAX_SUBROUTINE_CALLS"/>,
+/// <see cref="MAX_EXECUTED_TOKENS"/>, <see cref="MAX_HINT_COUNT"/>,
+/// <see cref="MAX_POINTS_PER_GLYPH"/>, or <see cref="MAX_CONTOURS_PER_GLYPH"/> is a
+/// <see cref="FontUnsupportedException"/>.
 /// </remarks>
 internal sealed class CffType2Interpreter
 {
@@ -62,22 +25,22 @@ internal sealed class CffType2Interpreter
     /// <summary>The maximum subroutine call nesting depth.</summary>
     internal const int MAX_SUBROUTINE_NESTING = 10;
 
-    /// <summary>The maximum number of subroutine calls one glyph resolution may execute.</summary>
+    /// <summary>The maximum subroutine-call count per glyph resolution.</summary>
     internal const int MAX_SUBROUTINE_CALLS = 65536;
 
-    /// <summary>The maximum number of outline points one glyph resolution may produce.</summary>
+    /// <summary>The maximum outline-point count per glyph resolution.</summary>
     internal const int MAX_POINTS_PER_GLYPH = 20000;
 
-    /// <summary>The maximum number of contours one glyph resolution may start.</summary>
+    /// <summary>The maximum contour count per glyph resolution.</summary>
     internal const int MAX_CONTOURS_PER_GLYPH = 4096;
 
-    /// <summary>The maximum number of charstring tokens one glyph resolution may decode.</summary>
+    /// <summary>The maximum charstring-token count per glyph resolution.</summary>
     internal const int MAX_EXECUTED_TOKENS = 1000000;
 
-    /// <summary>The maximum number of hint zones one glyph resolution may declare.</summary>
+    /// <summary>The maximum hint-zone count per glyph resolution.</summary>
     internal const int MAX_HINT_COUNT = 65536;
 
-    /// <summary>The fixed value that <c>random</c> pushes, keeping glyph generation reproducible.</summary>
+    /// <summary>The fixed value <c>random</c> pushes, keeping generation reproducible.</summary>
     internal const double DETERMINISTIC_RANDOM_VALUE = 0.5;
 
     private const byte SHORT_INT = 28;
@@ -152,14 +115,6 @@ internal sealed class CffType2Interpreter
     private int _subroutineNesting;
 
     /// <summary>Initializes one glyph-resolution interpreter.</summary>
-    /// <param name="font">The face that owns the charstrings, global subrs, and charset.</param>
-    /// <param name="budget">The counters shared with any <c>seac</c> component.</param>
-    /// <param name="privateDict">The private dictionary selected for the glyph.</param>
-    /// <param name="glyphId">The glyph identifier, used only in failure reasons.</param>
-    /// <param name="allowSeac">
-    /// <see langword="false"/> when the interpreter is resolving a <c>seac</c> component, which the
-    /// specification forbids from nesting.
-    /// </param>
     internal CffType2Interpreter(
         CffFont font,
         CffGlyphBudget budget,
@@ -176,8 +131,6 @@ internal sealed class CffType2Interpreter
     }
 
     /// <summary>Gets the Type 2 subroutine bias for one subroutine count.</summary>
-    /// <param name="subroutineCount">The number of subroutines in the INDEX.</param>
-    /// <returns>The bias: 107, 1,131, or 32,768.</returns>
     internal static int GetSubroutineBias(int subroutineCount) =>
         subroutineCount switch
         {
@@ -187,11 +140,6 @@ internal sealed class CffType2Interpreter
         };
 
     /// <summary>Runs one glyph's charstring and closes its last contour.</summary>
-    /// <param name="charString">The charstring bytes from the CharStrings INDEX.</param>
-    /// <returns>The closed contours in raw charstring coordinates, in drawing order.</returns>
-    /// <exception cref="FontFormatException">The charstring or a called subroutine is malformed.</exception>
-    /// <exception cref="FontUnsupportedException">The glyph exceeds an interpreter limit or uses an unsupported feature.</exception>
-    /// <exception cref="InvalidOperationException">The single-use interpreter has already run.</exception>
     internal OutlineContour[] Run(ReadOnlyMemory<byte> charString)
     {
         if (_run)

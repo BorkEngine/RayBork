@@ -5,29 +5,12 @@ using RayBork;
 namespace Input;
 
 /// <summary>
-/// The M9 input and window sample: a single-line text field with a blinking caret, a clipboard and
-/// cursor playground, window/monitor/DPI telemetry, an event log, and gamepad hotplug and rumble
-/// feedback.
+/// An orthographic HUD sample for text input, clipboard, cursor, window, monitor, and gamepad
+/// telemetry.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Every drawn tick records one orthographic HUD camera whose visible height is the current render
-/// height, so a screen-space plane anchored with <see cref="Camera.ScreenToWorldTransform"/> has a
-/// scale of exactly one render pixel per local unit. Every draw is a <see cref="Camera.DrawQuad"/>
-/// or a <see cref="Camera.DrawText"/> on that plane; the sample has no scene geometry, no asset
-/// pack, no render target, and no post-process stack.
-/// </para>
-/// <para>
-/// The text field is the sample's centerpiece. <see cref="IInput.TextInput"/> appends committed IME
-/// text in layout order, and <see cref="IWindow.SetTextInputArea"/> places the native candidate
-/// window over the field every drawn tick in window coordinates. Clipboard reads are asynchronous
-/// in the engine, so a paste records one tick before it reads and appends the refreshed cache. The
-/// event log keeps a bounded view of what the user just did.
-/// </para>
-/// <para>
-/// A minimized or zero-extent tick draws no HUD, so it records no camera and makes no
-/// <see cref="IWindow.SetTextInputArea"/> call.
-/// </para>
+/// Every draw is a <see cref="Camera.DrawQuad"/> or <see cref="Camera.DrawText"/> on a screen-space
+/// plane with one render pixel per unit. Window, DPI, and gamepad changes go to the event log.
 /// </remarks>
 internal sealed class InputGame : IGame
 {
@@ -102,12 +85,7 @@ internal sealed class InputGame : IGame
     private int _lastRenderHeight;
     private int _frameCount;
 
-    /// <summary>
-    /// Creates the sample.
-    /// </summary>
-    /// <param name="frameLimit">
-    /// The number of ticks to run, or zero to run until the window closes.
-    /// </param>
+    /// <summary>Creates the sample.</summary>
     internal InputGame(int frameLimit)
     {
         _frameLimit = frameLimit;
@@ -1093,10 +1071,7 @@ internal sealed class InputGame : IGame
     private static bool IsAltDown(IInput input) =>
         input.IsKeyDown(Key.LeftAlt) || input.IsKeyDown(Key.RightAlt);
 
-    /// <summary>
-    /// The text sizes and line rows for one frame, derived from the mono face metrics and whether
-    /// the window is at its compact size.
-    /// </summary>
+    /// <summary>The text sizes and line rows for one frame.</summary>
     private readonly record struct HudStyle(
         float TitleSize,
         float TitleRow,
@@ -1122,10 +1097,7 @@ internal sealed class InputGame : IGame
         bool ShowSubtitle
     );
 
-    /// <summary>
-    /// The screen-space rectangles for one frame. Every height is clamped to zero or more before it
-    /// reaches a draw, so a small or transient render extent cannot produce an inverted rectangle.
-    /// </summary>
+    /// <summary>The screen-space rectangles for one frame.</summary>
     private readonly record struct HudLayout(
         Rect TitleAccent,
         Rect Title,

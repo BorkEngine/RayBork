@@ -4,13 +4,12 @@ using RayBork;
 namespace RayBork.Tests.Graphics.Assets;
 
 /// <summary>
-/// Writes the narrow KTX2 2.0 profile the runtime reader accepts, for the parser and GPU upload tests.
+/// Writes the narrow KTX2 2.0 profile the runtime reader accepts, for the parser and GPU tests.
 /// </summary>
 /// <remarks>
-/// The writer is an independent implementation of the bake profile so a reader change is exercised
-/// against a second encoder: identifier, 80-byte header, level index, one basic data format
-/// descriptor block, and a complete mip chain. Tests corrupt the returned bytes at the documented
-/// field offsets to cover the failure modes.
+/// Independent of the bake profile: identifier, 80-byte header, level index, one data format
+/// descriptor block, and a complete mip chain. Tests corrupt bytes at the documented offsets to
+/// cover the failure modes.
 /// </remarks>
 internal static class Ktx2TestWriter
 {
@@ -55,21 +54,7 @@ internal static class Ktx2TestWriter
         0x0A,
     ];
 
-    /// <summary>
-    /// Writes one complete KTX2 payload for a packed texture format.
-    /// </summary>
-    /// <param name="format">The packed texture format.</param>
-    /// <param name="width">The base-level width in pixels.</param>
-    /// <param name="height">The base-level height in pixels.</param>
-    /// <param name="srgb">
-    /// Overrides the data format transfer function; the default follows the format. A value that
-    /// disagrees with the format produces a payload the reader must reject.
-    /// </param>
-    /// <param name="mipLevels">
-    /// Overrides the stored level count; the default is the complete mip chain. A value that is not
-    /// the complete chain produces a payload the reader must reject.
-    /// </param>
-    /// <returns>The complete KTX2 2.0 file bytes.</returns>
+    /// <summary>Writes one complete KTX2 payload, possibly invalid for rejection tests.</summary>
     internal static byte[] Write(
         TextureFormat format,
         int width,
@@ -157,17 +142,8 @@ internal static class Ktx2TestWriter
     }
 
     /// <summary>
-    /// Writes a solid-color linear <c>Rgba8Unorm</c> KTX2 payload.
+    /// Writes a solid-color linear <c>Rgba8Unorm</c> payload whose mip chain is uniformly filled.
     /// </summary>
-    /// <remarks>
-    /// Every mip level is filled with the same color, which is a valid box-filtered chain for a
-    /// uniform source. The GPU draw tests use this to make a sampled texel a known linear color.
-    /// </remarks>
-    /// <param name="color">The linear color; the components are clamped to <c>[0, 1]</c>.</param>
-    /// <param name="width">The base-level width in pixels.</param>
-    /// <param name="height">The base-level height in pixels.</param>
-    /// <param name="mipLevels">An optional level count; the default is the complete mip chain.</param>
-    /// <returns>The complete KTX2 2.0 file bytes.</returns>
     internal static byte[] WriteRgba8Solid(
         Color color,
         int width = 1,
@@ -194,21 +170,15 @@ internal static class Ktx2TestWriter
         return payload;
     }
 
-    /// <summary>
-    /// Gets the absolute data format descriptor offset of a well-formed payload.
-    /// </summary>
+    /// <summary>Gets the data format descriptor offset of a well-formed payload.</summary>
     internal static int DfdOffset(byte[] payload) =>
         (int)BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(DFD_OFFSET_FIELD));
 
-    /// <summary>
-    /// Gets the absolute level index entry offset of one level.
-    /// </summary>
+    /// <summary>Gets the level index entry offset of one level.</summary>
     internal static int LevelEntryOffset(int level) =>
         HEADER_SIZE + (level * LEVEL_INDEX_ENTRY_SIZE);
 
-    /// <summary>
-    /// Gets the complete mip chain length of a base extent.
-    /// </summary>
+    /// <summary>Gets the complete mip chain length of a base extent.</summary>
     internal static int FullMipCount(int width, int height)
     {
         int largest = Math.Max(width, height);
@@ -222,9 +192,7 @@ internal static class Ktx2TestWriter
         return count;
     }
 
-    /// <summary>
-    /// Gets one level's pixel extent.
-    /// </summary>
+    /// <summary>Gets one level's pixel extent.</summary>
     internal static int LevelExtent(int baseExtent, int level) => Math.Max(1, baseExtent >> level);
 
     private static void WriteDfd(

@@ -2,22 +2,11 @@ using RayBork.Internal;
 
 namespace RayBork;
 
-/// <summary>
-/// The inputs for one custom asset load: the canonical path, the combined catalog and caller
-/// cancellation token, the already-read packed payload, and the catalog that can serve nested loads.
-/// </summary>
+/// <summary>The inputs for one custom asset load: path, token, payload, and catalog.</summary>
 /// <remarks>
-/// <para>
-/// The context is immutable and thread-safe. <see cref="LoadPayloadAsync"/> returns the same array on
-/// every call; the loader must treat the payload as read-only and must not mutate it.
-/// </para>
-/// <para>
-/// The context is valid only during the <see cref="IAssetLoader{T}.LoadAsync"/> call that received
-/// it. A loader that needs another asset calls <see cref="LoadAsync{T}"/>, <see cref="LoadDataAsync"/>,
-/// or <see cref="Exists"/>. A nested load is queued on the same <c>RayBork.Asset</c> loader thread as
-/// the current load, so the loader must not block waiting for it. The load chain rejects a loader that
-/// requests the asset type and path it is currently loading instead of queueing the request forever.
-/// </para>
+/// The context is immutable and valid only during the <see cref="IAssetLoader{T}.LoadAsync"/> call
+/// that received it; its payload is shared and must not be mutated. Nested loads are queued on the
+/// same <c>RayBork.Asset</c> loader thread, so a loader must not block waiting for one.
 /// </remarks>
 public sealed class AssetLoadContext
 {
@@ -26,19 +15,7 @@ public sealed class AssetLoadContext
     private readonly LoadChain? _chain;
     private readonly byte[] _payload;
 
-    /// <summary>
-    /// Initializes a context for one load.
-    /// </summary>
-    /// <param name="catalog">The catalog that dispatched the load.</param>
-    /// <param name="canonicalPath">The canonical path, without a leading slash.</param>
-    /// <param name="payload">The complete payload bytes read from the pack entry.</param>
-    /// <param name="chain">
-    /// The chain of loads that requested this load, or <see langword="null"/> for a top-level load.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// The token canceled when either the catalog stops or the caller cancels.
-    /// </param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes a context for one load.</summary>
     internal AssetLoadContext(
         AssetCatalog catalog,
         string canonicalPath,
@@ -58,38 +35,22 @@ public sealed class AssetLoadContext
         _chain = chain;
     }
 
-    /// <summary>
-    /// Gets the asset path in public form, with a leading slash.
-    /// </summary>
+    /// <summary>Gets the asset path in public form, with a leading slash.</summary>
     public string Path => AssetPath.ToPublic(_canonicalPath);
 
-    /// <summary>
-    /// Gets the canonical path, without a leading slash.
-    /// </summary>
+    /// <summary>Gets the canonical path, without a leading slash.</summary>
     internal string CanonicalPath => _canonicalPath;
 
-    /// <summary>
-    /// Gets the token canceled when the catalog stops or the caller cancels.
-    /// </summary>
+    /// <summary>Gets the token canceled when the catalog stops or the caller cancels.</summary>
     public CancellationToken CancellationToken { get; }
 
-    /// <summary>
-    /// Requests another asset as part of the current load.
-    /// </summary>
+    /// <summary>Requests another asset as part of this load; do not block on it.</summary>
     /// <typeparam name="T">The requested asset type.</typeparam>
-    /// <param name="path">The asset path.</param>
-    /// <param name="cancellationToken">
-    /// An optional token for this nested load; the context token is used when it cannot be canceled.
-    /// </param>
-    /// <returns>The nested load. The loader must not block waiting for it.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
-    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not registered.</exception>
+    /// <param name="path">The asset path, validated before the lookup.</param>
+    /// <param name="cancellationToken">Overrides the context token when cancelable.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is invalid.</exception>
     /// <exception cref="AssetNotFoundException">The path is not in any mounted pack.</exception>
-    /// <exception cref="AssetTypeMismatchException">The entry type differs from the registered type.</exception>
-    /// <exception cref="AssetLoadException">The payload is corrupt or a nested load fails.</exception>
-    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
-    /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
+    /// <exception cref="AssetLoadException">The payload is corrupt or the load fails.</exception>
     public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default)
     {
         CancellationToken token = cancellationToken.CanBeCanceled
@@ -98,21 +59,12 @@ public sealed class AssetLoadContext
         return _catalog.LoadCore<T>(path, _chain, token);
     }
 
-    /// <summary>
-    /// Requests the packed payload of another entry as part of the current load.
-    /// </summary>
-    /// <param name="path">The asset path.</param>
-    /// <param name="cancellationToken">
-    /// An optional token for this nested load; the context token is used when it cannot be canceled.
-    /// </param>
-    /// <returns>The nested payload load. The loader must not block waiting for it.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
+    /// <summary>Requests another entry's payload as part of this load; do not block on it.</summary>
+    /// <param name="path">The asset path, validated before the lookup.</param>
+    /// <param name="cancellationToken">Overrides the context token when cancelable.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is invalid.</exception>
     /// <exception cref="AssetNotFoundException">The path is not in any mounted pack.</exception>
-    /// <exception cref="AssetPackException">A mounted pack is corrupt or cannot be read.</exception>
-    /// <exception cref="AssetLoadException">The payload is corrupt or exceeds the supported size.</exception>
-    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
-    /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
+    /// <exception cref="AssetLoadException">The payload is corrupt or too large.</exception>
     public Task<byte[]> LoadDataAsync(string path, CancellationToken cancellationToken = default)
     {
         CancellationToken token = cancellationToken.CanBeCanceled
@@ -121,19 +73,11 @@ public sealed class AssetLoadContext
         return _catalog.LoadData(path, token);
     }
 
-    /// <summary>
-    /// Tests whether another asset path is present in the mounted packs.
-    /// </summary>
-    /// <param name="path">The asset path.</param>
+    /// <summary>Tests whether another asset path is present in the mounted packs.</summary>
     /// <returns><see langword="true"/> when the canonical path resolves to a pack entry.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
-    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
     public bool Exists(string path) => _catalog.Exists(path);
 
-    /// <summary>
-    /// Gets the complete packed payload for the entry.
-    /// </summary>
-    /// <returns>A completed task holding the already-read payload array.</returns>
+    /// <summary>Gets the already-read packed payload for the entry.</summary>
+    /// <returns>The shared payload array; do not mutate it.</returns>
     public Task<byte[]> LoadPayloadAsync() => Task.FromResult(_payload);
 }

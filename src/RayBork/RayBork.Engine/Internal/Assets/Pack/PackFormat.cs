@@ -1,12 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The fixed RAYBORKP v1 prefix, index, and payload constants.
-/// </summary>
+/// <summary>The fixed RAYBORKP v1 prefix, index, and payload constants.</summary>
 /// <remarks>
-/// The pack is little-endian. The prefix is 40 bytes, followed by the index, followed by
-/// alignment-padded payloads. Paths are canonical asset paths without a leading slash. The index is
-/// sorted by ordinal path order; its hash and every payload hash are verified before use.
+/// The pack is little-endian: a 40-byte prefix, then the ordinal path-sorted index, then
+/// alignment-padded payloads. Paths are canonical asset paths without a leading slash.
 /// </remarks>
 internal static class PackFormat
 {
@@ -68,27 +65,18 @@ internal static class PackFormat
     internal const ushort ENTRY_FLAG_MASK = ENTRY_FLAG_COMPRESSED | ENTRY_FLAG_ALIGNED;
 
     /// <summary>
-    /// The fixed bytes of one index entry: the path-length field, the type and flag fields, the
-    /// payload offset, the two lengths, the alignment, and the payload hash. Path bytes follow the
-    /// path-length field.
+    /// The fixed bytes of one index entry before its path bytes: length, type, flags, offset,
+    /// lengths, alignment, and hash.
     /// </summary>
     internal const int INDEX_ENTRY_FIXED_LENGTH = 2 + 2 + 2 + 8 + 4 + 4 + 4 + 8;
 
     /// <summary>The allowed payload alignment values.</summary>
     internal static ReadOnlySpan<uint> Alignments => [1u, 16u, 64u, 256u];
 
-    /// <summary>
-    /// Validates a payload alignment.
-    /// </summary>
-    /// <param name="alignment">The alignment in bytes.</param>
-    /// <returns><see langword="true"/> when the alignment is one of the v1 values.</returns>
+    /// <summary>Validates a payload alignment; the v1 values are 1, 16, 64, and 256.</summary>
     internal static bool IsValidAlignment(uint alignment) => alignment is 1 or 16 or 64 or 256;
 
-    /// <summary>
-    /// Validates a stored asset entry type.
-    /// </summary>
-    /// <param name="type">The entry type to test.</param>
-    /// <returns><see langword="true"/> when the type is defined by pack v1.</returns>
+    /// <summary>Validates a stored asset entry type against the pack v1 set.</summary>
     internal static bool IsValidEntryType(AssetEntryType type) =>
         type
             is AssetEntryType.Raw
@@ -99,12 +87,7 @@ internal static class PackFormat
                 or AssetEntryType.Font
                 or AssetEntryType.Data;
 
-    /// <summary>
-    /// Rounds a non-negative offset up to the next multiple of a v1 alignment.
-    /// </summary>
-    /// <param name="offset">The offset to align.</param>
-    /// <param name="alignment">An alignment accepted by <see cref="IsValidAlignment"/>.</param>
-    /// <returns>The aligned offset.</returns>
+    /// <summary>Rounds an offset up to the next multiple of a v1 alignment.</summary>
     internal static long Align(long offset, uint alignment) =>
         checked((offset + (alignment - 1)) & ~(long)(alignment - 1));
 }

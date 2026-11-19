@@ -3,26 +3,11 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The frozen state of one <see cref="SsaoEffect"/> inside a recorded camera pass.
-/// </summary>
+/// <summary>The frozen state of one <see cref="SsaoEffect"/> inside a recorded camera pass.</summary>
 /// <remarks>
-/// <para>
-/// The snapshot fixes the public settings and the quality variant, then records four fullscreen
-/// passes: AO into the first camera-sized target, two bilateral denoise iterations through the
-/// three-target per-extent set, and the composite from the chain input captured before the first
-/// completion. The rent skips the current chain source, so a prior effect's output survives. The AO
-/// and denoise targets are released with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>;
-/// the final composite target is completed with
-/// <see cref="PostProcessContext.CompleteColorTarget"/> so the engine store-back runs once.
-/// </para>
-/// <para>
-/// Every pass writes one shader-ABI instance record. The ordered layout has four entries, with the AO,
-/// denoise, denoise, and composite strides, so the frame's instance buffer is sized for all of them.
-/// The AO and denoise programs are selected by the frozen quality variant; changing the effect after
-/// camera creation cannot change a recorded frame. The snapshot is pooled by the effect and keeps its
-/// layout array across cameras.
-/// </para>
+/// Freezes the settings and quality, then records AO, two bilateral denoise passes, and the composite
+/// from the chain input. AO and denoise targets complete as auxiliary, the composite as color, so
+/// store-back runs once.
 /// </remarks>
 internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot
 {
@@ -72,15 +57,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot
     /// <inheritdoc/>
     internal override ReadOnlySpan<PostProcessInstanceRecord> InstanceLayout => _instanceLayout;
 
-    /// <summary>
-    /// Rents a snapshot from the effect's pool, or creates one, and fills it with the settings and the
-    /// quality's built-in shader programs.
-    /// </summary>
-    /// <param name="owner">The effect that will pool the snapshot after its camera pass is recycled.</param>
-    /// <param name="settings">The frozen public settings.</param>
-    /// <param name="assets">The loaded engine-owned SSAO assets.</param>
-    /// <returns>The captured snapshot.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="owner"/> or <paramref name="assets"/> is <c>null</c>.</exception>
+    /// <summary>Rents a pooled snapshot filled with the frozen settings and quality's programs.</summary>
+    /// <exception cref="ArgumentNullException">The effect or assets are <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">An SSAO asset was disposed.</exception>
     internal static SsaoEffectSnapshot Rent(
         PostProcessEffect owner,

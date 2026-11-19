@@ -4,10 +4,7 @@ using RayBork.Bake.Processors;
 
 namespace RayBork.Bake.Baking;
 
-/// <summary>
-/// The mutable builder-side configuration model that the bake application validates into a
-/// <see cref="BakeProject"/>.
-/// </summary>
+/// <summary>The mutable configuration validated into a <see cref="BakeProject"/>.</summary>
 internal sealed class BakeProjectDefinition
 {
     private readonly List<BakePackDefinition> _packs = [];
@@ -19,7 +16,7 @@ internal sealed class BakeProjectDefinition
     private bool _defaultAssetsUsed;
     private bool _defaultProcessorsUsed;
 
-    /// <summary>Gets the configured project root, or <see langword="null"/> when unset.</summary>
+    /// <summary>Gets the project root, or <see langword="null"/> when unset.</summary>
     internal string? ProjectRoot { get; private set; }
 
     /// <summary>Gets the configured packs in order.</summary>
@@ -45,17 +42,13 @@ internal sealed class BakeProjectDefinition
     internal string? ToolVersionOverride { get; private set; }
 
     /// <summary>Sets the base for relative roots, pack paths, and diagnostics.</summary>
-    /// <param name="path">The project root path.</param>
     internal void SetProjectRoot(string path) => ProjectRoot = path;
 
     /// <summary>Adds one configured pack.</summary>
-    /// <param name="packPath">The output-root-relative pack path.</param>
-    /// <param name="root">The project-root-relative asset root.</param>
     internal void AddPack(string packPath, string root) =>
         _packs.Add(new BakePackDefinition(packPath, root));
 
     /// <summary>Registers one explicit data type.</summary>
-    /// <typeparam name="T">The shapeable data type.</typeparam>
     internal void AddAsset<T>()
         where T : IShapeable<T>
     {
@@ -73,8 +66,6 @@ internal sealed class BakeProjectDefinition
     }
 
     /// <summary>Registers one explicit data type and appends a validator.</summary>
-    /// <typeparam name="T">The shapeable data type.</typeparam>
-    /// <param name="validator">The validator.</param>
     internal void AddAssetValidator<T>(IAssetValidator<T> validator)
         where T : IShapeable<T>
     {
@@ -113,7 +104,6 @@ internal sealed class BakeProjectDefinition
     }
 
     /// <summary>Adds one processor.</summary>
-    /// <param name="processor">The processor.</param>
     internal void AddProcessor(IAssetProcessor processor)
     {
         ArgumentNullException.ThrowIfNull(processor);
@@ -121,8 +111,6 @@ internal sealed class BakeProjectDefinition
     }
 
     /// <summary>Sets the texture defaults.</summary>
-    /// <param name="filter">The default filter.</param>
-    /// <param name="wrap">The default wrap mode.</param>
     internal void SetTextureDefaults(RayBork.TextureFilter filter, RayBork.TextureWrap wrap)
     {
         if (
@@ -154,7 +142,6 @@ internal sealed class BakeProjectDefinition
     }
 
     /// <summary>Sets the test-only tool version override.</summary>
-    /// <param name="version">The version to record and compare in the manifest.</param>
     internal void SetToolVersionOverride(string version)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
@@ -162,8 +149,6 @@ internal sealed class BakeProjectDefinition
     }
 
     /// <summary>Records one semantic configuration issue.</summary>
-    /// <param name="code">The stable code.</param>
-    /// <param name="message">The message.</param>
     internal void AddIssue(string code, string message) =>
         _issues.Add(
             new BakeDiagnostic(

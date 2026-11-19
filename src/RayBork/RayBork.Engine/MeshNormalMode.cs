@@ -1,19 +1,11 @@
 namespace RayBork;
 
-/// <summary>
-/// Selects how <see cref="MeshBuilder.ComputeNormals"/> derives the vertex normals of a triangle mesh.
-/// </summary>
+/// <summary>Selects how <see cref="MeshBuilder.ComputeNormals"/> derives vertex normals.</summary>
 public enum MeshNormalMode
 {
-    /// <summary>
-    /// Area-weighted face normals accumulated per shared position and normalized per vertex. Vertices
-    /// that share a position receive the same smoothed normal.
-    /// </summary>
+    /// <summary>Area-weighted face normals shared by vertices at the same position.</summary>
     Smooth = 0,
 
-    /// <summary>
-    /// The face normal of each triangle, with the triangle split into three vertices so every face
-    /// keeps its hard edge.
-    /// </summary>
+    /// <summary>A face normal per triangle, with each triangle split into three vertices.</summary>
     Flat = 1,
 }

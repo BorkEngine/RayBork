@@ -3,8 +3,8 @@ using RayBork.Internal;
 namespace RayBork.Tests;
 
 /// <summary>
-/// A fake <see cref="IEnginePlatform"/> that records lifecycle calls and exposes deterministic hooks
-/// for pumping, input capture, and startup failure.
+/// A fake <see cref="IEnginePlatform"/> that records lifecycle calls and exposes deterministic
+/// hooks for pumping, input capture, and startup failure.
 /// </summary>
 internal sealed class FakeEnginePlatform : IEnginePlatform
 {
@@ -23,18 +23,14 @@ internal sealed class FakeEnginePlatform : IEnginePlatform
 
     public IPlatformWindow Window => FakeWindow;
 
-    /// <summary>
-    /// Gets or sets the cached window HDR state reported by the platform.
-    /// </summary>
+    /// <summary>Gets or sets the cached window HDR state the platform reports.</summary>
     public WindowHdrState WindowHdrState { get; set; } = WindowHdrState.Sdr;
 
     public PlatformOptions? Options { get; private set; }
 
     public int InitializeCount { get; private set; }
 
-    /// <summary>
-    /// Gets whether <see cref="Initialize"/> has been called.
-    /// </summary>
+    /// <summary>Gets whether <see cref="Initialize"/> has been called.</summary>
     public bool InitializeCalled { get; private set; }
 
     public int PumpCount { get; private set; }
@@ -55,48 +51,31 @@ internal sealed class FakeEnginePlatform : IEnginePlatform
 
     public List<VibrationCall> VibrationCalls { get; } = [];
 
-    /// <summary>
-    /// Gets or sets the instance extensions returned by <see cref="GetVulkanInstanceExtensions"/>.
-    /// </summary>
+    /// <summary>Gets or sets the Vulkan instance extensions the platform reports.</summary>
     public IReadOnlyList<string> VulkanInstanceExtensions { get; set; } =
         OperatingSystem.IsWindows()
             ? ["VK_KHR_surface", "VK_KHR_win32_surface"]
             : ["VK_KHR_surface", "VK_KHR_xlib_surface"];
 
-    /// <summary>
-    /// Gets or sets the surface handle returned by <see cref="CreateVulkanSurface"/>.
-    /// </summary>
+    /// <summary>Gets or sets the handle <see cref="CreateVulkanSurface"/> returns.</summary>
     public IntPtr VulkanSurface { get; set; } = _defaultVulkanSurface;
 
-    /// <summary>
-    /// Gets the Vulkan instance handles passed to successful <see cref="CreateVulkanSurface"/> calls.
-    /// </summary>
+    /// <summary>Gets the instance handles passed to successful surface creations.</summary>
     public IReadOnlyList<IntPtr> CreatedSurfaceInstances => _createdSurfaceInstances;
 
-    /// <summary>
-    /// Gets the non-zero surface handles passed to <see cref="DestroyVulkanSurface"/> calls.
-    /// </summary>
+    /// <summary>Gets the non-zero handles passed to surface destruction.</summary>
     public IReadOnlyList<IntPtr> DestroyedSurfaces => _destroyedSurfaces;
 
-    /// <summary>
-    /// Gets the number of <see cref="CreateVulkanSurface"/> calls, including calls that threw.
-    /// </summary>
+    /// <summary>Gets the <see cref="CreateVulkanSurface"/> call count, including failures.</summary>
     public int CreateSurfaceCallCount { get; private set; }
 
-    /// <summary>
-    /// Gets the managed thread id of the last <see cref="CreateVulkanSurface"/> call.
-    /// </summary>
+    /// <summary>Gets the thread id of the last <see cref="CreateVulkanSurface"/> call.</summary>
     public int? CreateSurfaceThreadId { get; private set; }
 
-    /// <summary>
-    /// Gets the managed thread id of the last <see cref="DestroyVulkanSurface"/> call.
-    /// </summary>
+    /// <summary>Gets the thread id of the last <see cref="DestroyVulkanSurface"/> call.</summary>
     public int? DestroySurfaceThreadId { get; private set; }
 
-    /// <summary>
-    /// Gets or sets the exception that <see cref="CreateVulkanSurface"/> throws instead of returning
-    /// a surface handle.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="CreateVulkanSurface"/> throws.</summary>
     public Exception? SurfaceCreationException { get; set; }
 
     public void Initialize(PlatformOptions options, Action onExitRequested)
@@ -117,9 +96,7 @@ internal sealed class FakeEnginePlatform : IEnginePlatform
         }
     }
 
-    /// <summary>
-    /// Returns <see cref="VulkanInstanceExtensions"/> when the platform is initialized.
-    /// </summary>
+    /// <summary>Returns the configured extensions when the platform is initialized.</summary>
     /// <exception cref="PlatformException">The platform is not initialized or has been disposed.</exception>
     public IReadOnlyList<string> GetVulkanInstanceExtensions()
     {
@@ -131,10 +108,7 @@ internal sealed class FakeEnginePlatform : IEnginePlatform
         return VulkanInstanceExtensions;
     }
 
-    /// <summary>
-    /// Records the call and returns <see cref="VulkanSurface"/>, or throws
-    /// <see cref="SurfaceCreationException"/> when one is configured.
-    /// </summary>
+    /// <summary>Records the call, then returns <see cref="VulkanSurface"/> or throws.</summary>
     /// <exception cref="ObjectDisposedException">The platform has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The platform is not initialized.</exception>
     public IntPtr CreateVulkanSurface(IntPtr instance)
@@ -156,9 +130,7 @@ internal sealed class FakeEnginePlatform : IEnginePlatform
         return VulkanSurface;
     }
 
-    /// <summary>
-    /// Records a non-zero surface handle as destroyed.
-    /// </summary>
+    /// <summary>Records a non-zero surface handle as destroyed.</summary>
     public void DestroyVulkanSurface(IntPtr instance, IntPtr surface)
     {
         if (surface == IntPtr.Zero)

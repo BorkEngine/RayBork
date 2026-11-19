@@ -11,32 +11,19 @@ using Tomlyn.Model;
 
 namespace RayBork.Bake.Toml;
 
-/// <summary>
-/// The shape-driven TOML binder used by <c>[raybork]</c> data sources and processor sidecars.
-/// </summary>
+/// <summary>The shape-driven binder for <c>[raybork]</c> data and processor sidecars.</summary>
 /// <remarks>
-/// <para>
-/// Binding walks the compiled PolyType shape; it never reflects over members. Keys are snake_case by
-/// default, <see cref="JsonPropertyNameAttribute"/> overrides a member key, and
-/// <see cref="JsonIgnoreAttribute"/> excludes one. Reads are case-insensitive, unknown keys are
-/// errors, and <see cref="JsonRequiredAttribute"/> or a C# <c>required</c> member must be present.
-/// </para>
-/// <para>
-/// Supported leaves are strings, booleans, signed and unsigned integers (range checked), floats,
-/// enums (member names case-insensitively, with snake_case accepted, never numeric values),
-/// <see cref="Vector2"/>/<see cref="Vector3"/>/<see cref="Vector4"/>, <see cref="Color"/>, arrays,
-/// nested tables, table arrays, and nullable members. Constructor parameters and writable properties
-/// are bound through the shape.
-/// </para>
+/// Keys are snake_case by default, <see cref="JsonPropertyNameAttribute"/> overrides a key,
+/// <see cref="JsonIgnoreAttribute"/> excludes one, reads are case-insensitive, unknown keys are
+/// errors, and required members must be present.
+/// Leaves include strings, booleans, range-checked integers, floats, enum names (never numeric),
+/// vectors, colors, arrays, tables, and nullable members.
 /// </remarks>
 internal static class TomlShapeBinder
 {
     private static readonly ShapeVisitor _visitor = new();
 
     /// <summary>Binds a parsed document root into the mapped type.</summary>
-    /// <typeparam name="T">The mapped type, which must carry a compiled shape.</typeparam>
-    /// <param name="context">The binding context.</param>
-    /// <returns>The bound value, or a default value when a diagnostic was reported.</returns>
     internal static object? Bind<T>(BakeBindContext context)
         where T : IShapeable<T>
     {
@@ -44,12 +31,7 @@ internal static class TomlShapeBinder
         return BindShape(T.GetTypeShape(), context, BakeBindNode.Root(context.Root, TomlPath.Root));
     }
 
-    /// <summary>Binds one sidecar table into the mapped type.</summary>
-    /// <param name="shape">The compiled sidecar shape.</param>
-    /// <param name="context">The sidecar's binding context.</param>
-    /// <param name="table">The processor-named table.</param>
-    /// <param name="tableName">The exact processor name, which is the table path.</param>
-    /// <returns>The bound value, or a default value when a diagnostic was reported.</returns>
+    /// <summary>Binds one processor-named sidecar table into the mapped type.</summary>
     internal static object? BindTable(
         ITypeShape shape,
         BakeBindContext context,

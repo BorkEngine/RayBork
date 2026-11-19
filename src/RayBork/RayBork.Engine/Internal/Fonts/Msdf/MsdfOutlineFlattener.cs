@@ -2,43 +2,11 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Flattens a font-unit glyph outline into deterministic pixel-space line edges and assigns each edge
-/// its MSDF colour pair.
-/// </summary>
+/// <summary>Flattens a glyph outline into deterministic pixel-space line edges.</summary>
 /// <remarks>
-/// <para>
-/// Quadratic and cubic segments are sampled uniformly. The sample count comes from the exact chord
-/// error bound of a C2 parametric curve: a quadratic's maximum deviation is a quarter of its second
-/// difference and a cubic's is three quarters of its largest second difference, and a uniform
-/// subdivision into <c>n</c> pieces divides the deviation by <c>n²</c>. The count therefore keeps
-/// every chord within <see cref="FLATTEN_TOLERANCE_PX"/> output pixels of the curve. The count is
-/// capped at <see cref="MAXIMUM_SEGMENTS_PER_CURVE"/> per segment; when that cap binds, the curve is
-/// accepted at 256 pieces and may flatten coarser than the tolerance. Computing the count costs one
-/// square root for a quadratic and two for a cubic.
-/// </para>
-/// <para>
-/// A segment whose start and end map to the same pixel and whose flattening is a single chord
-/// contributes no edge: that chord would be zero-length, adds no boundary, and never changes the
-/// winding number.
-/// </para>
-/// <para>
-/// Each flattened edge carries two of the three distance channels: yellow is red and green, cyan is
-/// green and blue, and magenta is red and blue. The nearest edge must feed two of the three values
-/// that the median sees, so that the third value is farther and cannot move the median; the same pair
-/// also keeps the reconstructed edge stable when neighbouring texels are linearly interpolated. The
-/// pairs cycle over the flattened edges of a contour in order, so any two consecutive edges carry
-/// different pairs that share exactly one channel. When the closing edge would repeat the first edge's
-/// pair (a contour with <c>3n + 1</c> edges so the cycle lands on yellow again), it takes cyan, the
-/// pair that differs from both the first edge and its own predecessor.
-/// </para>
-/// <para>
-/// Colouring is per contour, and every contour restarts the cycle at yellow. Crossing contours (which
-/// a valid font outline never has) still reconstruct the nearest edge at texel centres because that
-/// edge feeds two channels; under bilinear filtering, however, the same channel can interpolate
-/// between nearest edges of different contours and disturb the median, and the global non-zero winding
-/// sign is only meaningful for the non-overlapping regions a real font uses.
-/// </para>
+/// Uniform curve subdivision keeps each chord within <see cref="FLATTEN_TOLERANCE_PX"/> pixels,
+/// capped at <see cref="MAXIMUM_SEGMENTS_PER_CURVE"/> pieces per segment. Edges cycle yellow, cyan,
+/// and magenta so consecutive edges share exactly one channel, and each contour restarts the cycle.
 /// </remarks>
 internal static class MsdfOutlineFlattener
 {
@@ -62,12 +30,6 @@ internal static class MsdfOutlineFlattener
     private const double CUBIC_ERROR_FACTOR = 0.75;
 
     /// <summary>Counts the line edges that flattening an outline produces.</summary>
-    /// <param name="outline">The closed font-unit outline.</param>
-    /// <param name="layout">The layout that supplies the pixel transform.</param>
-    /// <returns>The number of flattened line edges.</returns>
-    /// <exception cref="MsdfLimitException">
-    /// The outline flattens to more than <see cref="MsdfGenerator.MAX_FLATTENED_EDGES"/> edges.
-    /// </exception>
     internal static int CountEdges(OutlinePath outline, in MsdfGlyphLayout layout)
     {
         long count = 0;
@@ -96,12 +58,7 @@ internal static class MsdfOutlineFlattener
         return (int)count;
     }
 
-    /// <summary>Flattens an outline into the supplied edge buffer.</summary>
-    /// <param name="outline">The closed font-unit outline.</param>
-    /// <param name="layout">The layout that supplies the pixel transform.</param>
-    /// <param name="edges">
-    /// The destination span. It must hold exactly <see cref="CountEdges"/> edges.
-    /// </param>
+    /// <summary>Fills a correctly sized edge buffer with the flattened outline.</summary>
     internal static void Flatten(
         OutlinePath outline,
         in MsdfGlyphLayout layout,

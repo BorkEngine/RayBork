@@ -2,33 +2,10 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The shared lifetime and frame-retention state behind one loaded engine asset.
-/// </summary>
+/// <summary>The shared lifetime and frame-retention state behind one loaded engine asset.</summary>
 /// <remarks>
-/// <para>
-/// The catalog owns one instance per cached <c>(canonical path, engine asset type)</c> key and hands
-/// it to the public <see cref="Mesh"/>, <see cref="Texture"/>, <see cref="Shader"/>, or
-/// <see cref="Font"/> wrapper. Owner references are acquired by the catalog for every successful load
-/// and released by the public <c>Dispose</c>. Frame holds are acquired by the M4 draw recorder and
-/// released by the frame ring after the consuming frame completes.
-/// </para>
-/// <para>
-/// A CPU-only asset such as <see cref="Font"/> has no GPU resource of its own, so
-/// <see cref="Resource"/> is <see langword="null"/> and no GPU destruction is queued. Its CPU state
-/// is disposed through the optional release callback, which runs exactly once at the same transition
-/// as the GPU destruction would. Every mesh, texture, and shader asset keeps a resource and is
-/// unchanged.
-/// </para>
-/// <para>
-/// The owner count, frame-hold count, disposed flag, and destruction decision are guarded by one
-/// internal lock, so a cache-hit retain can never interleave with the transition to zero owners. An
-/// owner reference or a frame hold added after disposal throws <see cref="ObjectDisposedException"/>.
-/// The asset becomes disposed exactly when the owner count reaches zero; the teardown is claimed
-/// exactly once and only after both the owner count and the frame-hold count are zero. The catalog
-/// callback, the CPU-only release, and the bridge destruction request run outside the lock, so a
-/// waiter or a public <c>Dispose</c> never blocks the render thread on asset bookkeeping.
-/// </para>
+/// Owner references come from successful loads and frame holds from the draw recorder; the asset
+/// disposes once both reach zero. A CPU-only asset such as <see cref="Font"/> owns no GPU resource.
 /// </remarks>
 internal sealed class EngineAsset : ITextureOwner
 {
@@ -42,29 +19,16 @@ internal sealed class EngineAsset : ITextureOwner
     private bool _disposed;
     private bool _destructionQueued;
 
-    /// <summary>
-    /// Initializes the lifetime state for one uploaded asset.
-    /// </summary>
+    /// <summary>Initializes the lifetime state for one asset.</summary>
     /// <param name="publicPath">The canonical path with a leading slash.</param>
-    /// <param name="resource">
-    /// The GPU resource created for the asset, or <see langword="null"/> for a CPU-only asset that owns
-    /// no GPU resource.
-    /// </param>
+    /// <param name="resource">The GPU resource, or <see langword="null"/> when CPU-only.</param>
     /// <param name="queueDestruction">
-    /// Queues a GPU resource for destruction on the render thread. It is called exactly once, after the
-    /// last owner reference and frame hold are gone, and only when <paramref name="resource"/> is not
-    /// <see langword="null"/>.
+    /// Queues the resource for destruction on the render thread, exactly once at teardown.
     /// </param>
-    /// <param name="onOwnersReleased">
-    /// Removes the asset from the catalog cache when the last owner reference is released. It is
-    /// called exactly once and must not throw.
-    /// </param>
+    /// <param name="onOwnersReleased">Removes the asset from the cache; must not throw.</param>
     /// <param name="release">
-    /// The CPU-only teardown to run exactly once when the asset is destroyed, or <see langword="null"/>
-    /// when the asset has no CPU state beyond the public object.
+    /// The CPU-only teardown to run exactly once, or <see langword="null"/>.
     /// </param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="publicPath"/> is not canonical.</exception>
     internal EngineAsset(
         string publicPath,
         GpuAssetResource? resource,
@@ -84,15 +48,10 @@ internal sealed class EngineAsset : ITextureOwner
         _release = release;
     }
 
-    /// <summary>
-    /// Gets the canonical public path with a leading slash. It stays readable after disposal.
-    /// </summary>
+    /// <summary>Gets the canonical public path, readable after disposal.</summary>
     internal string Path { get; }
 
-    /// <summary>
-    /// Gets the GPU resource behind the asset, or <see langword="null"/> for a CPU-only asset that owns
-    /// no GPU resource. It is valid until the destruction request is queued.
-    /// </summary>
+    /// <summary>Gets the GPU resource, or <see langword="null"/> for a CPU-only asset.</summary>
     internal GpuAssetResource? Resource => _resource;
 
     /// <inheritdoc/>
@@ -113,9 +72,7 @@ internal sealed class EngineAsset : ITextureOwner
     /// <inheritdoc/>
     void ITextureOwner.ReleaseOwnerReference() => ReleaseOwnerReference();
 
-    /// <summary>
-    /// Gets whether the asset was disposed. It stays readable after disposal.
-    /// </summary>
+    /// <summary>Gets whether the asset is disposed.</summary>
     internal bool IsDisposed
     {
         get
@@ -127,9 +84,7 @@ internal sealed class EngineAsset : ITextureOwner
         }
     }
 
-    /// <summary>
-    /// Adds one owner reference for a successful load.
-    /// </summary>
+    /// <summary>Adds one owner reference for a successful load.</summary>
     /// <exception cref="ObjectDisposedException">The asset is already disposed.</exception>
     internal void AddOwnerReference()
     {
@@ -141,11 +96,7 @@ internal sealed class EngineAsset : ITextureOwner
         }
     }
 
-    /// <summary>
-    /// Releases one owner reference. The transition to zero disposes the asset and removes it from the
-    /// catalog cache; the CPU-only release runs and GPU destruction is queued only when every frame
-    /// hold is gone.
-    /// </summary>
+    /// <summary>Releases one owner reference and disposes the asset when it reaches zero.</summary>
     /// <exception cref="ObjectDisposedException">The owner count is already zero.</exception>
     internal void ReleaseOwnerReference()
     {
@@ -176,10 +127,7 @@ internal sealed class EngineAsset : ITextureOwner
         }
     }
 
-    /// <summary>
-    /// Disposes the asset without requiring a matching owner release. The catalog uses it during
-    /// shutdown so a game that leaked a reference cannot keep a GPU resource alive past the app.
-    /// </summary>
+    /// <summary>Disposes the asset without a matching owner release, for shutdown.</summary>
     internal void ForceDispose()
     {
         bool destroy;
@@ -216,7 +164,9 @@ internal sealed class EngineAsset : ITextureOwner
     }
 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">The frame-hold count is already zero.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The frame-hold count is already zero.
+    /// </exception>
     public void ReleaseFrameHold()
     {
         bool destroy;

@@ -11,7 +11,7 @@ internal enum BakeStatus
     /// <summary>The incremental manifest matched; nothing was written.</summary>
     UpToDate,
 
-    /// <summary>Source, binding, processor, validation, or pack diagnostics failed the bake.</summary>
+    /// <summary>A source, binding, processor, validation, or pack error failed the bake.</summary>
     DiagnosticsError,
 
     /// <summary>The builder, project, or output configuration is invalid.</summary>
@@ -22,10 +22,6 @@ internal enum BakeStatus
 internal sealed class BakedPackResult
 {
     /// <summary>Initializes a pack result.</summary>
-    /// <param name="pack">The configured pack.</param>
-    /// <param name="packPath">The absolute output path.</param>
-    /// <param name="packWritten">Whether the pack was written.</param>
-    /// <param name="entries">The pack entries in ordinal path order.</param>
     internal BakedPackResult(
         BakePack pack,
         string packPath,
@@ -68,10 +64,6 @@ internal sealed class BakedPackResult
 internal sealed class BakeResult
 {
     /// <summary>Initializes a result.</summary>
-    /// <param name="status">The outcome classification.</param>
-    /// <param name="packs">The per-pack results.</param>
-    /// <param name="entries">The aggregate entries in ordinal path order.</param>
-    /// <param name="diagnostics">The sorted diagnostics.</param>
     internal BakeResult(
         BakeStatus status,
         IReadOnlyList<BakedPackResult> packs,

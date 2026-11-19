@@ -1,20 +1,13 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The submission plan for one camera pass.
-/// </summary>
-/// <remarks>
-/// <see cref="Pass"/> carries the pass value snapshot (matrices, camera position, viewport, clear mode,
-/// and clear color). <see cref="Batches"/> is in submission order: opaque batches first in
-/// first-record order, then transparent batches sorted back-to-front.
-/// </remarks>
+/// <summary>The submission plan for one camera pass.</summary>
+/// <remarks><see cref="Batches"/> orders opaque batches first in first-record order, then transparent
+/// batches back-to-front.</remarks>
 internal sealed class PassPlan
 {
     private readonly List<PlannedBatch> _batches;
 
-    /// <summary>
-    /// Initializes a pass plan.
-    /// </summary>
+    /// <summary>Initializes a pass plan.</summary>
     /// <param name="pass">The recorded pass the plan consumes.</param>
     /// <param name="batches">The batches in submission order.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>

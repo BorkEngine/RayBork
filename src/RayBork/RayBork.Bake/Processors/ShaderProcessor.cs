@@ -8,30 +8,12 @@ using Silk.NET.Shaderc;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The built-in shader processor: compiles one <c>[shader]</c> TOML source's GLSL vertex and fragment
-/// stages and emits a <see cref="ShaderAssetDescriptor"/> plus the two SPIR-V payloads.
-/// </summary>
+/// <summary>The built-in shader processor: compiles a <c>[shader]</c> TOML source and emits a
+/// <see cref="ShaderAssetDescriptor"/> plus <c>-vert</c>/<c>-frag</c> SPIR-V payloads.</summary>
 /// <remarks>
-/// <para>
-/// The TOML source is the processor source and its own sidecar. It names two GLSL files relative to
-/// itself; the paths must resolve inside the source's directory subtree. Both files are registered
-/// through <see cref="AssetProcessorContext.AddInput"/> as tracked inputs and are read as strict
-/// UTF-8. The processor builds the instance layout from the sidecar uniforms and textures, validates
-/// each user stage against the generated ABI, and inserts the M4 prologue after the stage's
-/// <c>#version</c> directive (prepending <c>#version 450</c> when the source has none).
-/// </para>
-/// <para>
-/// shaderc ignores GLSL entry point names, so the generated wrapper is compiled with the entry point
-/// <c>main</c>; the compiled <c>OpEntryPoint</c> is then renamed to the fixed <c>main_vertex</c> or
-/// <c>main_fragment</c> name and validated with <see cref="SpirvEntryPointInspector"/>. A validation,
-/// compile, entry-point, or metadata failure is <c>RB4008</c> and emits no outputs; unknown keys and
-/// wrong types are the framework's <c>RB4002</c> binding errors.
-/// </para>
-/// <para>
-/// The processor is synchronous, runs on the bake thread, and keeps no per-source state, matching the
-/// processor contract.
-/// </para>
+/// The TOML source is its own sidecar and names two GLSL files relative to itself that must stay
+/// inside its directory subtree. A validation, compile, entry-point, or metadata failure is
+/// <c>RB4008</c> and emits no outputs; unknown keys and wrong types are <c>RB4002</c> errors.
 /// </remarks>
 internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar>
 {
@@ -49,10 +31,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar>
     );
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// A shader source is discovered by its root <c>[shader]</c> table; the compound extension is the
-    /// processor's registered identity for diagnostics and configuration hashing.
-    /// </remarks>
+    /// <remarks>The compound <c>shader.toml</c> extension is the registered identity.</remarks>
     public override string Name => "shader";
 
     /// <inheritdoc/>

@@ -8,34 +8,12 @@ namespace RayBork.Internal;
 /// The Vulkan 1.2 logical device, queues, and capability snapshot owned by the render thread.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The device is created from a platform-owned surface. Creation enumerates every physical device,
-/// selects one with the pure <see cref="VulkanPhysicalDeviceSelector"/>, chooses queue families with
-/// <see cref="VulkanQueueFamilySelection"/>, requires a usable swapchain surface, and creates one
-/// logical device with <c>VK_KHR_swapchain</c> enabled.
-/// </para>
-/// <para>
-/// M4 requires Vulkan 1.2 core, the descriptor-indexing subset in
-/// <see cref="VulkanBindlessFeatures"/>, and enough update-after-bind sampled images for the fixed
-/// <c>RayBorkTextures[2048]</c> array; a physical device without them is rejected. The optional
-/// <c>samplerAnisotropy</c>, <c>textureCompressionBC</c>, and <c>fillModeNonSolid</c> features are
-/// enabled when the selected device advertises them, because the asset path samples BC-compressed
-/// textures and may request anisotropic filtering, and <see cref="Camera.DrawWireModel"/> needs
-/// <c>fillModeNonSolid</c> to create its polygon-mode-line pipeline. Update-after-bind stays disabled
-/// for uniform and storage buffers, and variable descriptor counts are never used. A physical device
-/// must also advertise the Vulkan 1.2 sample-zero depth resolve mode, because every multisampled
-/// depth-bearing render target resolves its depth attachment into a sampled depth image with
-/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>.
-/// </para>
-/// <para>
-/// Every member is render-thread only. Dispose the device before the surface and the instance.
-/// </para>
+/// Creation requires the descriptor-indexing subset, 2048 update-after-bind sampled images, and
+/// sample-zero depth resolve; optional features are enabled only when advertised.
 /// </remarks>
 internal sealed class VulkanDevice : IDisposable
 {
-    /// <summary>
-    /// The prefix of the message thrown when the loader reports no physical device at all.
-    /// </summary>
+    /// <summary>The prefix of the message thrown when no physical device exists.</summary>
     internal const string NO_PHYSICAL_DEVICE_MESSAGE_PREFIX = "No Vulkan physical device was found";
 
     private const string SWAPCHAIN_EXTENSION_NAME = "VK_KHR_swapchain";
@@ -71,52 +49,29 @@ internal sealed class VulkanDevice : IDisposable
         _logger = logger;
     }
 
-    /// <summary>
-    /// Gets the loaded Vulkan API.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The device has been disposed.</exception>
+    /// <summary>Gets the loaded Vulkan API; reading it after disposal throws.</summary>
     internal Vk Vulkan => _vulkan ?? throw new ObjectDisposedException(nameof(VulkanDevice));
 
-    /// <summary>
-    /// Gets the selected physical device.
-    /// </summary>
+    /// <summary>Gets the selected physical device.</summary>
     internal PhysicalDevice PhysicalDevice { get; }
 
-    /// <summary>
-    /// Gets the native <c>VkDevice</c> handle. It is the default handle after disposal.
-    /// </summary>
+    /// <summary>Gets the native <c>VkDevice</c> handle, default after disposal.</summary>
     internal Device Device => _device;
 
-    /// <summary>
-    /// Gets the queue used for graphics work.
-    /// </summary>
+    /// <summary>Gets the queue used for graphics work.</summary>
     internal Queue GraphicsQueue { get; }
 
-    /// <summary>
-    /// Gets the queue used for presentation. It is the same handle as <see cref="GraphicsQueue"/> when
-    /// one family supports both operations.
-    /// </summary>
+    /// <summary>Gets the queue used for presentation; may equal the graphics queue.</summary>
     internal Queue PresentQueue { get; }
 
-    /// <summary>
-    /// Gets the device capability snapshot captured at creation.
-    /// </summary>
+    /// <summary>Gets the device capability snapshot captured at creation.</summary>
     internal VulkanDeviceCapabilities Capabilities { get; }
 
     /// <summary>
-    /// Creates the logical device and its queues.
+    /// Creates the logical device and its queues from a non-zero platform surface.
     /// </summary>
-    /// <remarks>
-    /// Runs on the render thread after <see cref="VulkanInstance.Create"/> and after the platform has
-    /// created the native surface.
-    /// </remarks>
-    /// <param name="instance">The created Vulkan instance.</param>
-    /// <param name="surface">The non-zero native <c>VkSurfaceKHR</c> handle.</param>
-    /// <param name="logger">The renderer logger.</param>
-    /// <returns>The created device.</returns>
     /// <exception cref="GraphicsException">
-    /// The surface is invalid, no physical device is available or suitable, the surface cannot
-    /// support a swapchain, or logical-device creation failed. The diagnostic code is <c>RB3001</c>.
+    /// The surface is invalid or no suitable physical device exists.
     /// </exception>
     internal static unsafe VulkanDevice Create(
         VulkanInstance instance,
@@ -318,11 +273,7 @@ internal sealed class VulkanDevice : IDisposable
     /// <summary>
     /// Projects the device state into the immutable public <see cref="EngineInfo"/> value.
     /// </summary>
-    /// <remarks>
-    /// The swapchain-dependent fields stay empty or zero until the swapchain task selects the
-    /// surface format, HDR mode, sample count, and present mode.
-    /// </remarks>
-    /// <returns>The engine information snapshot.</returns>
+    /// <remarks>Swapchain-dependent fields stay empty until the swapchain is created.</remarks>
     internal EngineInfo CreateEngineInfo() =>
         new(
             "RayBork",
@@ -337,9 +288,7 @@ internal sealed class VulkanDevice : IDisposable
             _instance.ValidationLayersEnabled
         );
 
-    /// <summary>
-    /// Waits for the device to become idle and destroys it. The call is idempotent.
-    /// </summary>
+    /// <summary>Waits for device idle, destroys the device, and is idempotent.</summary>
     public unsafe void Dispose()
     {
         lock (_processGate)

@@ -2,18 +2,14 @@ using System.Text;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Writes the fixed engine mesh payload: 88-byte vertices followed by 32-bit indices.
-/// </summary>
+/// <summary>Writes the fixed engine mesh payload: 88-byte vertices then 32-bit indices.</summary>
 internal static class VertexLayoutWriter
 {
     /// <summary>The fixed vertex stride in bytes.</summary>
     internal const int VERTEX_STRIDE = 88;
 
     /// <summary>Serializes one mesh payload little-endian.</summary>
-    /// <param name="mesh">The validated mesh.</param>
     /// <returns>The vertex bytes followed by the index bytes.</returns>
-    /// <exception cref="ModelReadException">A count is too large or an index is out of range.</exception>
     internal static byte[] Write(MeshData mesh)
     {
         ArgumentNullException.ThrowIfNull(mesh);

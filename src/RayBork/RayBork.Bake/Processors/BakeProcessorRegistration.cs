@@ -2,15 +2,12 @@ using PolyType;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The framework registration over one public <see cref="IAssetProcessor"/>.
-/// </summary>
+/// <summary>The framework registration over one public <see cref="IAssetProcessor"/>.</summary>
 internal sealed class BakeProcessorRegistration
 {
     private readonly IAssetProcessor _processor;
 
     /// <summary>Initializes a registration.</summary>
-    /// <param name="processor">The public processor instance.</param>
     internal BakeProcessorRegistration(IAssetProcessor processor)
     {
         ArgumentNullException.ThrowIfNull(processor);
@@ -36,8 +33,6 @@ internal sealed class BakeProcessorRegistration
     internal ITypeShape? SidecarShape => _processor.SidecarShape;
 
     /// <summary>Creates the in-memory default sidecar for a missing optional sidecar.</summary>
-    /// <param name="context">The per-source context.</param>
-    /// <returns>The default sidecar.</returns>
     internal object CreateDefaultSidecar(AssetProcessorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -52,8 +47,6 @@ internal sealed class BakeProcessorRegistration
     }
 
     /// <summary>Processes one source with its optional bound sidecar.</summary>
-    /// <param name="context">The per-source context.</param>
-    /// <param name="sidecar">The bound sidecar, or <see langword="null"/> for a sidecar-free processor.</param>
     internal void Process(AssetProcessorContext context, object? sidecar)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -82,9 +75,7 @@ internal sealed class BakeProcessorRegistration
     }
 }
 
-/// <summary>The processor that owns one matched file and the extension it matched.</summary>
-/// <param name="Processor">The owning processor.</param>
-/// <param name="Extension">The normalized matched extension, without a leading dot.</param>
+/// <summary>The processor that owns one matched file and its normalized extension.</summary>
 internal readonly record struct BakeProcessorMatch(
     BakeProcessorRegistration Processor,
     string Extension

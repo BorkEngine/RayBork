@@ -1,12 +1,9 @@
 namespace RayBork;
 
-/// <summary>
-/// Physical keyboard scancodes whose numeric values match the SDL3 scancode set.
-/// </summary>
+/// <summary>Physical keyboard scancodes matching the SDL3 scancode set.</summary>
 /// <remarks>
-/// Values are SDL3 scancode numbers, so a platform scancode can be cast directly to <see cref="Key"/>.
-/// Names describe key positions, not layout characters: <see cref="W"/> is the key in the W position on a
-/// US layout regardless of the active layout. There is one name per value.
+/// A platform scancode casts directly to <see cref="Key"/>. Names describe US-layout key positions,
+/// not the active layout's characters.
 /// </remarks>
 public enum Key
 {

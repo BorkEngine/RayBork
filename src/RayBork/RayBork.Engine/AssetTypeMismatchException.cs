@@ -1,28 +1,16 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when an asset path exists but was baked as a different asset type.
-/// </summary>
+/// <summary>Thrown when an asset path was baked as a different type.</summary>
 public sealed class AssetTypeMismatchException : AssetException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetTypeMismatchException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="AssetTypeMismatchException"/>.</summary>
     public AssetTypeMismatchException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetTypeMismatchException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetTypeMismatchException"/>.</summary>
     public AssetTypeMismatchException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AssetTypeMismatchException"/> class with a message
-    /// and an inner exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="AssetTypeMismatchException"/>.</summary>
     public AssetTypeMismatchException(string message, Exception? innerException)
         : base(message, innerException) { }
 

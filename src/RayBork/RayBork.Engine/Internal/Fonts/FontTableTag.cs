@@ -2,17 +2,14 @@ using System.Buffers.Binary;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// A four-byte sfnt table tag, compared as its big-endian tag value.
-/// </summary>
+/// <summary>A four-byte sfnt table tag, compared as its big-endian value.</summary>
 /// <remarks>
-/// Tags are stored without allocating a string. <see cref="ToName"/> materializes a printable name
-/// only for diagnostics, replacing bytes outside the printable ASCII range.
+/// A tag is stored as a <see cref="uint"/> without allocating; <see cref="ToName"/> builds a printable
+/// name only for diagnostics.
 /// </remarks>
 internal readonly struct FontTableTag : IEquatable<FontTableTag>
 {
-    /// <summary>Initializes a tag from its big-endian value.</summary>
-    /// <param name="value">The four tag bytes as one big-endian value.</param>
+    /// <summary>Initializes a tag from its packed four-byte value.</summary>
     internal FontTableTag(uint value)
     {
         Value = value;
@@ -60,10 +57,7 @@ internal readonly struct FontTableTag : IEquatable<FontTableTag>
     /// <summary>Gets the four tag bytes as one big-endian value.</summary>
     internal uint Value { get; }
 
-    /// <summary>Builds a tag from its four big-endian bytes.</summary>
-    /// <param name="bytes">Exactly the four tag bytes.</param>
-    /// <returns>The tag.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytes"/> is not four bytes long.</exception>
+    /// <summary>Builds a tag from exactly four ASCII bytes; any other length is rejected.</summary>
     internal static FontTableTag FromAscii(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length != 4)
@@ -74,8 +68,7 @@ internal readonly struct FontTableTag : IEquatable<FontTableTag>
         return new FontTableTag(BinaryPrimitives.ReadUInt32BigEndian(bytes));
     }
 
-    /// <summary>Gets the four tag characters, with non-printable bytes replaced by <c>?</c>.</summary>
-    /// <returns>The printable tag name.</returns>
+    /// <summary>Gets a printable four-character name, replacing non-printable bytes.</summary>
     internal string ToName()
     {
         Span<byte> bytes = stackalloc byte[4];
@@ -103,14 +96,8 @@ internal readonly struct FontTableTag : IEquatable<FontTableTag>
     public override string ToString() => ToName();
 
     /// <summary>Compares two tags for equality.</summary>
-    /// <param name="left">The first tag.</param>
-    /// <param name="right">The second tag.</param>
-    /// <returns><see langword="true"/> when both tags hold the same bytes.</returns>
     public static bool operator ==(FontTableTag left, FontTableTag right) => left.Equals(right);
 
     /// <summary>Compares two tags for inequality.</summary>
-    /// <param name="left">The first tag.</param>
-    /// <param name="right">The second tag.</param>
-    /// <returns><see langword="true"/> when the tags differ.</returns>
     public static bool operator !=(FontTableTag left, FontTableTag right) => !left.Equals(right);
 }

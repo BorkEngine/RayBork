@@ -1,20 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The kerning data of a face: legacy <c>kern</c> pairs and GPOS pair positioning.
-/// </summary>
+/// <summary>The kerning data of a face: legacy <c>kern</c> pairs and GPOS positioning.</summary>
 /// <remarks>
-/// <para>
-/// When the face has GPOS pair positioning referenced by its <c>kern</c> feature, GPOS is
-/// authoritative: <see cref="GetKerning"/> returns its value and a pair that GPOS does not position
-/// has zero kerning even when the legacy <c>kern</c> table declares it. The <c>kern</c> table is the
-/// fallback for a face without GPOS pair positioning. A face with neither table, or a pair neither
-/// source declares, has zero kerning.
-/// </para>
-/// <para>
-/// Values are in font units. The instance is immutable after construction and safe to read from any
-/// thread without locks.
-/// </para>
+/// GPOS is authoritative when it has kern pair positioning; otherwise the legacy <c>kern</c> table
+/// is the fallback. Values are in font units, and the instance is immutable and safe to read from
+/// any thread.
 /// </remarks>
 internal sealed class KerningReader
 {
@@ -28,14 +18,6 @@ internal sealed class KerningReader
     }
 
     /// <summary>Parses the optional kerning tables of a face.</summary>
-    /// <param name="kern">The complete <c>kern</c> table bytes, or empty when absent.</param>
-    /// <param name="gpos">The complete <c>GPOS</c> table bytes, or empty when absent.</param>
-    /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
-    /// <returns>The kerning lookup; it never returns <see langword="null"/>.</returns>
-    /// <exception cref="FontFormatException">A present table is malformed.</exception>
-    /// <exception cref="FontUnsupportedException">
-    /// A present table is valid but exceeds a documented defensive parser limit.
-    /// </exception>
     internal static KerningReader Parse(
         ReadOnlyMemory<byte> kern,
         ReadOnlyMemory<byte> gpos,
@@ -47,10 +29,7 @@ internal sealed class KerningReader
         return new KerningReader(kernPairs, gposKerning);
     }
 
-    /// <summary>Looks up one horizontal pair.</summary>
-    /// <param name="leftGlyphId">The left glyph identifier.</param>
-    /// <param name="rightGlyphId">The right glyph identifier.</param>
-    /// <returns>The kerning adjustment in font units, or zero when the pair is not kerned.</returns>
+    /// <summary>Looks up one horizontal pair and returns its adjustment in font units, or zero.</summary>
     internal int GetKerning(int leftGlyphId, int rightGlyphId)
     {
         if (_gpos is not null)

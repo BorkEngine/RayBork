@@ -2,31 +2,12 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The physical-device facts used by <see cref="VulkanPhysicalDeviceSelector"/>.
-/// </summary>
-/// <param name="Index">The index of the device in the loader's physical-device array.</param>
-/// <param name="Name">The device name reported by <c>vkGetPhysicalDeviceProperties</c>.</param>
-/// <param name="ApiVersion">The packed Vulkan API version supported by the device.</param>
-/// <param name="DeviceType">The device type reported by Vulkan.</param>
-/// <param name="SupportsGraphicsQueue">Whether at least one queue family supports graphics.</param>
-/// <param name="SupportsPresentQueue">
-/// Whether at least one queue family supports presentation to the target surface.
-/// </param>
-/// <param name="HasSwapchainExtension">Whether the device advertises <c>VK_KHR_swapchain</c>.</param>
-/// <param name="BindlessTextureCapacity">
-/// The number of update-after-bind sampled images the device supports: the smaller of its per-stage
-/// and per-set limits.
-/// </param>
-/// <param name="MissingBindlessFeatures">
-/// The M4 descriptor-indexing feature names the device does not advertise, separated by commas, or an
-/// empty string when the bindless subset is supported.
-/// </param>
-/// <param name="SupportedDepthResolveModes">
-/// The depth resolve modes <c>VkPhysicalDeviceDepthStencilResolveProperties</c> advertises. The
-/// renderer requires <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> to resolve a multisampled depth attachment
-/// without changing the stored reverse-Z value.
-/// </param>
+/// <summary>The physical-device facts for <see cref="VulkanPhysicalDeviceSelector"/>.</summary>
+/// <remarks>
+/// Capacity is the smaller of the per-stage and per-set update-after-bind limits. Missing
+/// features are comma-separated; depth resolve must include
+/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>.
+/// </remarks>
 internal readonly record struct VulkanPhysicalDeviceCandidate(
     int Index,
     string Name,

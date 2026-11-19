@@ -5,26 +5,19 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Maps Silk.NET Vulkan formats to the stable names the public API reports.
-/// </summary>
+/// <summary>Maps Silk.NET Vulkan formats to the stable names the public API reports.</summary>
 /// <remarks>
-/// <see cref="EngineInfo.SwapchainFormat"/> is a Vulkan format token without the <c>VK_FORMAT_</c>
-/// prefix, for example <c>B8G8R8A8_SRGB</c>. The Silk.NET enum member names use a different casing,
-/// so the mapping reads the native-name metadata that Silk.NET emits for every format.
+/// <see cref="EngineInfo.SwapchainFormat"/> is a token without the <c>VK_FORMAT_</c> prefix,
+/// for example <c>B8G8R8A8_SRGB</c>; the mapping reads Silk.NET's native-name metadata.
 /// </remarks>
 internal static class VulkanFormatInfo
 {
     private const string VK_FORMAT_PREFIX = "VK_FORMAT_";
     private const string SRGB_TOKEN = "_SRGB";
 
-    /// <summary>
-    /// Gets the stable public name of a Vulkan format.
-    /// </summary>
-    /// <param name="format">The Vulkan format.</param>
+    /// <summary>Returns the public token without the <c>VK_FORMAT_</c> prefix.</summary>
     /// <returns>
-    /// The format token without the <c>VK_FORMAT_</c> prefix, or <c>VK_FORMAT_</c> followed by the
-    /// numeric value when the format is not defined by Vulkan.
+    /// The token, or <c>VK_FORMAT_</c> plus the numeric value when the format is undefined.
     /// </returns>
     internal static string Describe(Format format)
     {
@@ -50,23 +43,14 @@ internal static class VulkanFormatInfo
             : name;
     }
 
-    /// <summary>
-    /// Determines whether a format is HDR-capable for M2 presentation.
-    /// </summary>
+    /// <summary>Returns whether a format is HDR-capable for M2 presentation.</summary>
     /// <remarks>
-    /// M2 presents HDR through scRGB and keeps HDR10 deferred, so only
-    /// <c>R16G16B16A16_SFLOAT</c> and <c>A2B10G10R10_UNORM_PACK32</c> are reported as HDR.
+    /// Only <c>R16G16B16A16_SFLOAT</c> and <c>A2B10G10R10_UNORM_PACK32</c> are HDR formats.
     /// </remarks>
-    /// <param name="format">The Vulkan format.</param>
-    /// <returns><see langword="true"/> when the format is an HDR-capable surface format.</returns>
     internal static bool IsHdr(Format format) =>
         format is Format.R16G16B16A16Sfloat or Format.A2B10G10R10UnormPack32;
 
-    /// <summary>
-    /// Determines whether a format transfers through the sRGB transfer function.
-    /// </summary>
-    /// <param name="format">The Vulkan format.</param>
-    /// <returns><see langword="true"/> when the format name contains the sRGB token.</returns>
+    /// <summary>Returns whether a format name contains the sRGB token.</summary>
     internal static bool IsSrgb(Format format) =>
         Describe(format).Contains(SRGB_TOKEN, StringComparison.Ordinal);
 }

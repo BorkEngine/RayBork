@@ -5,22 +5,12 @@ namespace RayBork.Internal;
 /// material over the cached internal <see cref="ShaderProgram"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Every successful load returns a distinct material. The program load uses the engine cache and
-/// reference counting, so every material over the same path shares one GPU program while each keeps
-/// its own uniform cursor and texture bindings.
-/// </para>
-/// <para>
-/// The caller owns the returned material and must dispose it exactly once. The load's own program
-/// reference is released as soon as the material acquired its own, whether the material was created or
-/// the load was canceled first; an already-canceled caller never receives a material.
-/// </para>
+/// Every load returns a distinct material; materials over the same path share one reference-counted
+/// GPU program. The caller owns the material and must dispose it exactly once.
 /// </remarks>
 internal sealed class ShaderMaterialLoader : IAssetLoader<Shader>
 {
-    /// <summary>
-    /// The shared loader instance.
-    /// </summary>
+    /// <summary>The shared loader instance.</summary>
     internal static readonly ShaderMaterialLoader Instance = new();
 
     private ShaderMaterialLoader() { }

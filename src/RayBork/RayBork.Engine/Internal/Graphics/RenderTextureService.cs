@@ -1,43 +1,13 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The thread-safe handoff between the tick thread and the render thread for render texture creation,
-/// resize, readback, and destruction.
+/// Queues render texture creation, resize, readback, and destruction between the tick thread and
+/// the render thread.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Any thread may call <see cref="CreateAsync"/>. The request is queued with one completion task and the
-/// render loop's render thread services the queue before it acquires the next frame, so the call returns
-/// after the render thread allocated the images. Awaiting it on the tick thread suspends the tick's
-/// continuation through the engine synchronization context; the render thread still services the request,
-/// so the tick thread never deadlocks. Cancellation before completion completes the task as canceled and
-/// a target created for a canceled request is destroyed instead of leaking.
-/// </para>
-/// <para>
-/// <see cref="ResizeAsync"/> queues one target resize and returns a task that completes after the render
-/// thread recreated the images, render pass, framebuffer, bindless views, and pipeline cache, or faults
-/// with the render-thread failure. <see cref="RenderTexture.Resize"/> blocks on that task, so the tick
-/// thread never observes a half-resized target. A resize is rejected with
-/// <see cref="InvalidOperationException"/> while a recorded or in-flight frame holds the target; the
-/// render thread re-checks the hold and the last-use fence before it recreates anything.
-/// </para>
-/// <para>
-/// <see cref="ReadPixelsAsync"/> and <see cref="ReadColorsAsync"/> queue one color readback and return
-/// a task that the render thread completes with the copied and converted resolved color image when a
-/// completed frame wrote content, or with the defined opaque-black default when it did not. The render
-/// thread waits for the target's last-use fence, so the readback observes the last completed frame that
-/// wrote or sampled the target instead of racing it. Cancellation is checked before the
-/// request is queued and again when the render thread services it; a cancellation that arrives while
-/// the copy is executing is best effort and discards the result without leaving the target in a
-/// different layout. Readback is a screenshot/diagnostic path that stalls the render thread, not a
-/// per-frame operation.
-/// </para>
-/// <para>
-/// The service owns no GPU object. It hands target lifetimes to the renderer and receives the target's
-/// destruction request when the public <see cref="RenderTexture"/> and every frame that used it released
-/// the target. <see cref="Stop"/> rejects later requests and fails the queued ones with
-/// <see cref="ObjectDisposedException"/>, which is what a call after app shutdown observes.
-/// </para>
+/// The render thread services the queue before it acquires the next frame; readback waits for the
+/// target's last-use fence. A stopped service fails later and queued requests with
+/// <see cref="ObjectDisposedException"/>.
 /// </remarks>
 internal sealed class RenderTextureService : IDisposable
 {
@@ -55,15 +25,10 @@ internal sealed class RenderTextureService : IDisposable
     private bool _closed;
     private bool _disposed;
 
-    /// <summary>
-    /// Gets the wait handle the render loop waits on with the frame-ring and GPU asset signals. It is
-    /// signaled while a creation, resize, readback, or destruction request is queued.
-    /// </summary>
+    /// <summary>Gets the wait handle the render loop waits on while a request is queued.</summary>
     internal WaitHandle Signal => _workAvailable;
 
-    /// <summary>
-    /// Gets whether the service already stopped accepting requests.
-    /// </summary>
+    /// <summary>Gets whether the service stopped accepting requests.</summary>
     internal bool IsStopped
     {
         get
@@ -75,10 +40,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets whether a creation, resize, readback, or destruction request is queued. The render loop uses
-    /// it to keep polling the render thread while no frame is published.
-    /// </summary>
+    /// <summary>Gets whether any request is queued.</summary>
     internal bool HasPendingWork
     {
         get
@@ -93,16 +55,8 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Queues one render texture creation request. Safe from any thread.
-    /// </summary>
-    /// <param name="description">The validated description.</param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>
-    /// The created render texture once the render thread allocated its images; a canceled task when the
-    /// token was canceled before completion.
-    /// </returns>
-    /// <exception cref="ObjectDisposedException">The service already stopped.</exception>
+    /// <summary>Queues a creation request; safe from any thread.</summary>
+    /// <returns>Created texture, or a canceled task when the token was already canceled.</returns>
     /// <exception cref="InvalidOperationException">The creation queue is full.</exception>
     internal Task<RenderTexture> CreateAsync(
         RenderTextureDescription description,
@@ -155,29 +109,12 @@ internal sealed class RenderTextureService : IDisposable
         return request.Completion.Task;
     }
 
-    /// <summary>
-    /// Queues one render texture resize request and returns its completion. The render thread recreates
-    /// the target's images, render pass, framebuffer, bindless views, and pipeline cache before it
-    /// completes the request.
-    /// </summary>
-    /// <param name="lifetime">The target lifetime to resize.</param>
-    /// <param name="width">The new width in pixels.</param>
-    /// <param name="height">The new height in pixels.</param>
-    /// <returns>
-    /// A task that completes after the render thread recreated the target, or faults with the
-    /// render-thread failure.
-    /// </returns>
-    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <summary>Queues a resize; an unchanged size completes without recreating anything.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive, exceeds <c>16384</c>, or exceeds the current device's maximum 2D
-    /// image dimension on the render thread.
+    /// A dimension is not positive, exceeds <see cref="RenderTextureValidation.MAX_DIMENSION"/>, or
+    /// exceeds the device maximum on the render thread.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">
-    /// The target lifetime is disposed, or the service already stopped.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// A recorded or in-flight frame holds the target. The request is not queued.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The target is in use by a frame.</exception>
     internal Task ResizeAsync(RenderTextureTargetLifetime lifetime, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(lifetime);
@@ -232,36 +169,15 @@ internal sealed class RenderTextureService : IDisposable
         return request.Completion.Task;
     }
 
-    /// <summary>
-    /// Queues one display-referred RGBA8 readback of a target's resolved color image. The render thread
-    /// waits for the target's last-use fence, copies and converts the full image when a completed frame
-    /// wrote content, and otherwise returns the defined opaque-black default without copying.
-    /// </summary>
-    /// <param name="lifetime">The target lifetime to read.</param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>
-    /// The RGBA8 pixels in row-major top-left order once the render thread copied and converted the
-    /// image; a canceled task when the token was canceled before the render thread completed it.
-    /// </returns>
-    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <summary>Queues a display-referred RGBA8 readback of the resolved color image.</summary>
+    /// <returns>Row-major top-left pixels; opaque black when no frame wrote content.</returns>
     internal Task<byte[]> ReadPixelsAsync(
         RenderTextureTargetLifetime lifetime,
         CancellationToken cancellationToken
     ) => QueueReadback<byte[]>(lifetime, cancellationToken);
 
-    /// <summary>
-    /// Queues one scene-linear color readback of a target's resolved color image. The render thread waits
-    /// for the target's last-use fence, copies the full image when a completed frame wrote content, and
-    /// otherwise returns the defined opaque-black default without copying; the CPU decode preserves HDR
-    /// values.
-    /// </summary>
-    /// <param name="lifetime">The target lifetime to read.</param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>
-    /// The raw scene-linear colors indexed <c>[y, x]</c> once the render thread copied the image; a
-    /// canceled task when the token was canceled before the render thread completed it.
-    /// </returns>
-    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <summary>Queues a scene-linear, HDR-preserving readback of the color image.</summary>
+    /// <returns>Raw colors indexed <c>[y, x]</c>; opaque black if never written.</returns>
     internal Task<Color[,]> ReadColorsAsync(
         RenderTextureTargetLifetime lifetime,
         CancellationToken cancellationToken
@@ -314,12 +230,7 @@ internal sealed class RenderTextureService : IDisposable
         return request.Completion.Task;
     }
 
-    /// <summary>
-    /// Releases the public render texture's owner reference. The target is queued for destruction after
-    /// every frame that used it completed.
-    /// </summary>
-    /// <param name="target">The render texture to release.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
+    /// <summary>Releases the owner reference; destruction follows the last frame hold.</summary>
     internal static void ReleaseTarget(RenderTexture target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -327,16 +238,10 @@ internal sealed class RenderTextureService : IDisposable
         target.Lifetime.ReleaseOwner();
     }
 
-    /// <summary>
-    /// Gets the next unique target id. Render-thread only; an id is never reused.
-    /// </summary>
-    /// <returns>The positive target id.</returns>
+    /// <summary>Gets the next unique target id; render-thread only and never reused.</summary>
     internal long NextTargetId() => Interlocked.Increment(ref _nextTargetId);
 
-    /// <summary>
-    /// Wakes the render loop. Best effort: a cancellation callback can race the service's disposal after
-    /// the render loop joined, and a disposed wait handle must not throw into the caller's cancellation.
-    /// </summary>
+    /// <summary>Wakes the render loop; best effort once the wait handle is disposed.</summary>
     internal void SignalWork()
     {
         try
@@ -349,12 +254,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Queues one target lifetime for destruction on the render thread. The lifetime calls this exactly
-    /// once, after its owner and every frame hold are gone.
-    /// </summary>
-    /// <param name="lifetime">The released target lifetime.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <summary>Queues a released lifetime for destruction on the render thread.</summary>
     internal void QueueDestruction(RenderTextureTargetLifetime lifetime)
     {
         ArgumentNullException.ThrowIfNull(lifetime);
@@ -372,11 +272,7 @@ internal sealed class RenderTextureService : IDisposable
         _workAvailable.Set();
     }
 
-    /// <summary>
-    /// Removes every queued creation request. The renderer completes each one after it creates or rejects
-    /// the target. Render-thread only.
-    /// </summary>
-    /// <returns>The queued requests, in request order.</returns>
+    /// <summary>Removes and returns every queued creation request; render-thread only.</summary>
     internal CreateRequest[] DrainCreates()
     {
         lock (_gate)
@@ -392,11 +288,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Removes every queued resize request. The renderer completes each one after it recreated the target
-    /// or rejected the resize. Render-thread only.
-    /// </summary>
-    /// <returns>The queued requests, in request order.</returns>
+    /// <summary>Removes and returns every queued resize request; render-thread only.</summary>
     internal ResizeRequest[] DrainResizes()
     {
         lock (_gate)
@@ -412,11 +304,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Removes every queued readback request. The renderer completes each one after it read and converted
-    /// content, returned the defined default, or failed it. Render-thread only.
-    /// </summary>
-    /// <returns>The queued requests, in request order.</returns>
+    /// <summary>Removes and returns every queued readback request; render-thread only.</summary>
     internal ReadbackRequest[] DrainReadbacks()
     {
         lock (_gate)
@@ -432,10 +320,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Removes every queued destruction request. Render-thread only.
-    /// </summary>
-    /// <returns>The queued target lifetimes, in destruction order.</returns>
+    /// <summary>Removes and returns queued destruction requests; render-thread only.</summary>
     internal RenderTextureTargetLifetime[] DrainDestroys()
     {
         lock (_gate)
@@ -451,12 +336,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Puts a target lifetime that is still in use by a submitted frame back into the destruction queue.
-    /// The render loop keeps polling while pending work exists, so the next turn retries.
-    /// </summary>
-    /// <param name="lifetime">The target lifetime that is not idle yet.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <summary>Requeues a lifetime a submitted frame still uses; the next turn retries.</summary>
     internal void RequeueDestruction(RenderTextureTargetLifetime lifetime)
     {
         ArgumentNullException.ThrowIfNull(lifetime);
@@ -473,8 +353,7 @@ internal sealed class RenderTextureService : IDisposable
     }
 
     /// <summary>
-    /// Stops the service: rejects later requests and fails every queued creation, resize, or readback
-    /// request with <see cref="ObjectDisposedException"/>. Idempotent.
+    /// Stops the service; later and queued requests fail with <see cref="ObjectDisposedException"/>.
     /// </summary>
     internal void Stop()
     {
@@ -516,12 +395,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Stops the service when the render loop ends. A queued creation, resize, or readback request receives
-    /// the loop failure when there is one, or <see cref="ObjectDisposedException"/> for a graceful stop.
-    /// Idempotent.
-    /// </summary>
-    /// <param name="failure">The render loop failure, or <see langword="null"/> for a graceful stop.</param>
+    /// <summary>Stops the service at loop end, publishing the loop failure if any.</summary>
     internal void Close(Exception? failure)
     {
         CreateRequest[] creates;
@@ -564,9 +438,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Disposes the service's wait handle. The app calls it after the render loop joined. Idempotent.
-    /// </summary>
+    /// <summary>Disposes the wait handle after the render loop joined; idempotent.</summary>
     public void Dispose()
     {
         lock (_gate)
@@ -592,15 +464,10 @@ internal sealed class RenderTextureService : IDisposable
     private static ObjectDisposedException CreateDisposedTargetException() =>
         new(nameof(RenderTexture), "The render texture is disposed; it cannot be read back.");
 
-    /// <summary>
-    /// One queued readback request and its typed completion task. The base class owns the cancellation
-    /// registration so the typed subclass carries only its completion source.
-    /// </summary>
+    /// <summary>One queued readback request and its typed completion.</summary>
     /// <remarks>
-    /// Cancellation before the render thread starts completes the task as canceled and wakes the render
-    /// loop, which skips the request. Cancellation after the render thread started is best effort: a
-    /// copy that already began and its layout restore still complete, and only the result is discarded;
-    /// the never-written default completes without a copy.
+    /// Cancellation before the render thread starts cancels the task; later cancellation is best
+    /// effort and only discards the result.
     /// </remarks>
     internal abstract class ReadbackRequest
     {
@@ -632,14 +499,11 @@ internal sealed class RenderTextureService : IDisposable
         /// <summary>Gets the caller's cancellation token.</summary>
         internal CancellationToken CancellationToken { get; }
 
-        /// <summary>Gets whether the completion task already is completed, canceled, or faulted.</summary>
+        /// <summary>Gets whether the completion task already finished.</summary>
         internal abstract bool IsCompleted { get; }
 
         /// <summary>
-        /// Registers the caller's cancellation callback for a cancelable token. If the service already
-        /// disposed the request's registration during shutdown, the late registration is skipped: the
-        /// request was completed by <see cref="Stop"/> or <see cref="Close"/> and must not leave a live
-        /// callback behind.
+        /// Registers the caller's cancellation callback unless shutdown already completed it.
         /// </summary>
         internal void RegisterCancellation()
         {
@@ -657,7 +521,7 @@ internal sealed class RenderTextureService : IDisposable
             }
         }
 
-        /// <summary>Disposes the cancellation registration. Safe when cancellation was never registered.</summary>
+        /// <summary>Disposes the cancellation registration; safe if none was registered.</summary>
         internal void DisposeRegistration()
         {
             CancellationTokenRegistration registration;
@@ -671,13 +535,10 @@ internal sealed class RenderTextureService : IDisposable
             registration.Dispose();
         }
 
-        /// <summary>Completes the request as canceled by its caller's token.</summary>
-        /// <returns><see langword="true"/> when this call completed the task.</returns>
+        /// <summary>Completes the request as canceled by the caller's token.</summary>
         internal abstract bool TrySetCanceled();
 
         /// <summary>Completes the request with a failure.</summary>
-        /// <param name="exception">The failure to publish.</param>
-        /// <returns><see langword="true"/> when this call completed the task.</returns>
         internal abstract bool TrySetException(Exception exception);
 
         private void Cancel()
@@ -691,11 +552,7 @@ internal sealed class RenderTextureService : IDisposable
         }
     }
 
-    /// <summary>
-    /// One typed readback request: a <c>byte[]</c> for the display-referred pixels or a
-    /// <see cref="Color"/> array for the raw scene-linear colors.
-    /// </summary>
-    /// <typeparam name="T">The completed readback value.</typeparam>
+    /// <summary>A typed readback request for pixels or scene-linear colors.</summary>
     internal sealed class ReadbackRequest<T> : ReadbackRequest
     {
         internal ReadbackRequest(
@@ -724,9 +581,7 @@ internal sealed class RenderTextureService : IDisposable
             Completion.TrySetException(exception);
     }
 
-    /// <summary>
-    /// One queued resize request and its single completion task.
-    /// </summary>
+    /// <summary>One queued resize request and its completion.</summary>
     internal sealed class ResizeRequest
     {
         internal ResizeRequest(RenderTextureTargetLifetime lifetime, int width, int height)
@@ -757,9 +612,7 @@ internal sealed class RenderTextureService : IDisposable
         internal TaskCompletionSource Completion { get; }
     }
 
-    /// <summary>
-    /// One queued creation request and its single completion task.
-    /// </summary>
+    /// <summary>One queued creation request and its completion.</summary>
     internal sealed class CreateRequest
     {
         private readonly RenderTextureService _owner;

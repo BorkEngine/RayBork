@@ -3,17 +3,10 @@ using System.Text;
 
 namespace RayBork.Tests.Fonts;
 
-/// <summary>
-/// Builds deterministic, structurally valid CFF 1.0 tables and whole OTF faces for the CFF tests.
-/// </summary>
+/// <summary>Builds deterministic, structurally valid CFF 1.0 tables and OTF faces.</summary>
 /// <remarks>
-/// The builder writes the CFF header, Name INDEX, Top DICT INDEX, String INDEX, Global Subr INDEX,
-/// CharStrings INDEX, the optional charset, the optional Private DICT and local subroutine INDEX, and
-/// — for a CID-keyed face — the FDArray, per-FD private dictionaries, and FDSelect. All INDEXes use a
-/// four-byte offset size so a block's length is known before its offsets are, and every DICT offset
-/// operand is written as a five-byte longint for the same reason. Tests mutate the returned table
-/// through <see cref="Build"/> or the whole face through <see cref="SyntheticFontBuilder.FindTable"/>
-/// for corrupt-input cases; the offsets captured by <see cref="Build"/> locate the structures.
+/// Every INDEX uses four-byte offsets and every DICT offset is a five-byte longint, so
+/// <see cref="Build"/> can report the structure offsets tests use to corrupt the table.
 /// </remarks>
 internal sealed class SyntheticCff
 {
@@ -87,20 +80,14 @@ internal sealed class SyntheticCff
     internal static SyntheticCff Create() => new();
 
     /// <summary>Encodes one raw Top DICT or Private DICT key with longint operands.</summary>
-    /// <param name="operatorCode">The one-byte operator code.</param>
-    /// <param name="operands">The integer operands in order.</param>
     internal static byte[] DictKey(int operatorCode, params int[] operands) =>
         [.. EncodeDictKey(operatorCode, escapeCode: null, operands)];
 
     /// <summary>Encodes one raw escaped Top DICT key with longint operands.</summary>
-    /// <param name="escapeCode">The second operator byte after <c>12</c>.</param>
-    /// <param name="operands">The integer operands in order.</param>
     internal static byte[] DictEscapeKey(int escapeCode, params int[] operands) =>
         [.. EncodeDictKey(operatorCode: 12, escapeCode, operands)];
 
-    /// <summary>Adds one glyph charstring.</summary>
-    /// <param name="charString">The complete Type 2 charstring.</param>
-    /// <returns>The glyph identifier.</returns>
+    /// <summary>Adds one glyph charstring and returns its glyph id.</summary>
     internal int AddGlyph(byte[] charString)
     {
         _charStrings.Add(charString);
@@ -108,8 +95,6 @@ internal sealed class SyntheticCff
     }
 
     /// <summary>Adds one glyph charstring from concatenated fragments.</summary>
-    /// <param name="fragments">The charstring fragments.</param>
-    /// <returns>The glyph identifier.</returns>
     internal int AddGlyph(params byte[][] fragments) =>
         AddGlyph(SyntheticCffCharStrings.Concat(fragments));
 
@@ -134,8 +119,6 @@ internal sealed class SyntheticCff
         WithCharsetFormat(CHARSET_FORMAT_0, sids);
 
     /// <summary>Sets a charset with one SID per glyph after <c>.notdef</c>.</summary>
-    /// <param name="format">The charset format: 0, 1, or 2.</param>
-    /// <param name="sids">The SIDs for glyphs 1..n-1.</param>
     internal SyntheticCff WithCharsetFormat(int format, params int[] sids)
     {
         _predefinedCharset = null;
@@ -152,7 +135,6 @@ internal sealed class SyntheticCff
     }
 
     /// <summary>Uses a predefined charset offset instead of a charset table.</summary>
-    /// <param name="offset">The predefined charset offset: 0, 1, or 2.</param>
     internal SyntheticCff WithPredefinedCharset(int offset)
     {
         _charset = null;
@@ -205,23 +187,16 @@ internal sealed class SyntheticCff
     }
 
     /// <summary>Adds one Font DICT with its own local subroutine INDEX.</summary>
-    /// <param name="localSubrs">The Font DICT local subroutine entries.</param>
-    /// <returns>The Font DICT index.</returns>
     internal int AddFontDict(params byte[][] localSubrs) => AddFontDictWithPrivate([], localSubrs);
 
-    /// <summary>Adds one Font DICT with a private DICT prefix and local subroutine INDEX.</summary>
-    /// <param name="privateDictExtra">Raw bytes written before the generated Private DICT keys.</param>
-    /// <param name="localSubrs">The Font DICT local subroutine entries.</param>
-    /// <returns>The Font DICT index.</returns>
+    /// <summary>Adds one Font DICT with a private DICT prefix and local subroutines.</summary>
     internal int AddFontDictWithPrivate(byte[] privateDictExtra, params byte[][] localSubrs)
     {
         _fontDicts.Add(new SyntheticCffFontDict(privateDictExtra, [.. localSubrs]));
         return _fontDicts.Count - 1;
     }
 
-    /// <summary>Adds a Font DICT that reuses another Font DICT's Private DICT and local subroutines.</summary>
-    /// <param name="fontDictIndex">The Font DICT to share.</param>
-    /// <returns>The new Font DICT index.</returns>
+    /// <summary>Adds a Font DICT that reuses another's private DICT and subroutines.</summary>
     internal int AddSharedFontDict(int fontDictIndex)
     {
         if ((uint)fontDictIndex >= (uint)_fontDicts.Count)
@@ -546,15 +521,10 @@ internal sealed class SyntheticCff
     }
 
     /// <summary>Builds a complete OTF face whose CFF table is this builder's output.</summary>
-    /// <param name="mappings">The cmap format 4 mappings; a default maps <c>A</c> when omitted.</param>
-    /// <returns>The face bytes.</returns>
     internal byte[] BuildFace(params (int Codepoint, int GlyphId)[] mappings) =>
         BuildFace(1000, mappings);
 
-    /// <summary>Builds a complete OTF face whose CFF table is this builder's output.</summary>
-    /// <param name="unitsPerEm">The face <c>head</c> units per em.</param>
-    /// <param name="mappings">The cmap format 4 mappings; a default maps <c>A</c> when omitted.</param>
-    /// <returns>The face bytes.</returns>
+    /// <summary>Builds a complete OTF face at the given units per em.</summary>
     internal byte[] BuildFace(int unitsPerEm, params (int Codepoint, int GlyphId)[] mappings)
     {
         if (_charStrings.Count == 0)

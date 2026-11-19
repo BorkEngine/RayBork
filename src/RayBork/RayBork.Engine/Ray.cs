@@ -2,38 +2,21 @@ using System.Numerics;
 
 namespace RayBork;
 
-/// <summary>
-/// A world-space ray: a finite origin and a unit direction.
-/// </summary>
+/// <summary>A world-space ray with a finite origin and a unit direction.</summary>
 /// <remarks>
-/// <para>
-/// The constructor validates a finite <see cref="Origin"/> and a finite, non-zero direction and
-/// stores <see cref="Direction"/> normalized to unit length. Assigning <see cref="Origin"/> or
-/// <see cref="Direction"/> through an <c>init</c> accessor, as an object initializer or a <c>with</c>
-/// expression does, applies the same validation and normalization. <c>default(Ray)</c> and an object
-/// initializer that never assigns <see cref="Direction"/> leave a zero direction, which is not a
+/// The constructor and <c>init</c> accessors reject non-finite origins and non-finite or zero
+/// directions, and normalize valid ones. <c>default(Ray)</c> has a zero direction and is not a
 /// valid ray.
-/// </para>
-/// <para>
-/// The collision queries report a miss for a ray with a zero direction, and
-/// <see cref="Camera.DrawRay"/> records nothing. Use <see cref="Camera.ScreenToWorldRay"/> to build
-/// a ray from a render-pixel position.
-/// </para>
 /// </remarks>
 public readonly record struct Ray
 {
     private readonly Vector3 _origin;
     private readonly Vector3 _direction;
 
-    /// <summary>
-    /// Initializes a ray with a finite origin and a normalized direction.
-    /// </summary>
+    /// <summary>Initializes a ray with a finite origin and a normalized direction.</summary>
     /// <param name="origin">The finite world-space start point.</param>
     /// <param name="direction">The finite, non-zero world-space direction.</param>
-    /// <exception cref="ArgumentException">
-    /// A component of <paramref name="origin"/> is not finite, or <paramref name="direction"/> is not
-    /// finite or is zero.
-    /// </exception>
+    /// <exception cref="ArgumentException">A non-finite value or a zero direction.</exception>
     public Ray(Vector3 origin, Vector3 direction)
     {
         _origin = ValidateOrigin(origin, nameof(origin));
@@ -41,7 +24,7 @@ public readonly record struct Ray
     }
 
     /// <summary>Gets the finite world-space start point.</summary>
-    /// <exception cref="ArgumentException">The assigned origin has a non-finite component.</exception>
+    /// <exception cref="ArgumentException">The assigned origin is non-finite.</exception>
     public Vector3 Origin
     {
         get => _origin;
@@ -49,7 +32,7 @@ public readonly record struct Ray
     }
 
     /// <summary>Gets the unit world-space direction.</summary>
-    /// <exception cref="ArgumentException">The assigned direction is non-finite or zero.</exception>
+    /// <exception cref="ArgumentException">The direction is zero or non-finite.</exception>
     public Vector3 Direction
     {
         get => _direction;
@@ -57,8 +40,6 @@ public readonly record struct Ray
     }
 
     /// <summary>Deconstructs the ray into its origin and unit direction.</summary>
-    /// <param name="origin">The finite world-space start point.</param>
-    /// <param name="direction">The unit world-space direction.</param>
     public void Deconstruct(out Vector3 origin, out Vector3 direction)
     {
         origin = _origin;

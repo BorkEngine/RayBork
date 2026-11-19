@@ -6,28 +6,17 @@ namespace RayBork;
 /// Builds one immutable procedural <see cref="Texture"/> from mutable CPU pixels.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Create the builder with <see cref="EngineContext.CreateTextureBuilder"/>, set the base level with
-/// one of the <c>SetPixels</c> overloads, and call <see cref="BuildAsync"/>. The texture is one-shot:
-/// the builder owns its CPU pixels and the asset exposes only GPU metadata, so the pixel data is not
-/// readable from the built texture. The builder can be reused to build another texture.
-/// </para>
-/// <para>
-/// A builder instance is not thread-safe; use one per thread. The factory, the CPU members, and
-/// <see cref="BuildAsync"/> do not touch tick-affine engine state, so they may be called from any
-/// thread, including a worker thread. Awaiting a build on the tick thread suspends that tick's
-/// continuation exactly like an asset load. After the app stops, every member that touches the
-/// builder throws <see cref="ObjectDisposedException"/>.
-/// </para>
-/// <para>
-/// Procedural textures use the uncompressed <see cref="TextureFormat.Rgba8Unorm"/>,
-/// <see cref="TextureFormat.Rgba8Srgb"/>, and <see cref="TextureFormat.R8Unorm"/> formats. There is no
-/// runtime block encoder and no raw KTX2 upload: block-compressed textures come from the bake.
-/// </para>
+/// Create it with <see cref="EngineContext.CreateTextureBuilder"/>; it copies the CPU pixels and
+/// may build multiple textures, and supports only <see cref="TextureFormat.Rgba8Unorm"/>,
+/// <see cref="TextureFormat.Rgba8Srgb"/>, and <see cref="TextureFormat.R8Unorm"/>.
+/// An instance is not thread-safe, but its members may run on any thread; after the app stops
+/// they throw <see cref="ObjectDisposedException"/>.
 /// </remarks>
 public sealed class TextureBuilder
 {
-    /// <summary>The largest accepted base-level width or height in pixels. It matches the bake limit.</summary>
+    /// <summary>
+    /// The largest accepted base-level width or height in pixels; matches the bake limit.
+    /// </summary>
     private const int MAX_DIMENSION = 16384;
 
     private const float SRGB_LINEAR_THRESHOLD = 0.0031308f;
@@ -48,19 +37,13 @@ public sealed class TextureBuilder
     private byte[][]? _mipChain;
 
     /// <summary>
-    /// Initializes a builder. Game code uses <see cref="EngineContext.CreateTextureBuilder"/> so the
-    /// builder always has the app's GPU upload service.
+    /// Initializes a builder; game code uses <see cref="EngineContext.CreateTextureBuilder"/>.
     /// </summary>
-    /// <param name="service">The app's procedural asset service.</param>
-    /// <param name="width">The base-level width in pixels.</param>
-    /// <param name="height">The base-level height in pixels.</param>
-    /// <param name="format">The uncompressed storage format.</param>
-    /// <param name="generateMips">Whether a build generates the full mip chain when none exists.</param>
-    /// <param name="sampler">The sampler state, or the default linear repeat sampler when omitted.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="service"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive or exceeds 16384.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive or exceeds <c>16384</c>.
+    /// </exception>
     /// <exception cref="ArgumentException">
-    /// The format is not an uncompressed procedural format, or the sampler state is not valid.
+    /// The format is not procedural, or the sampler state is invalid.
     /// </exception>
     internal TextureBuilder(
         ProceduralAssetService service,
@@ -98,9 +81,7 @@ public sealed class TextureBuilder
         _sampler = sampler ?? new SamplerState(TextureFilter.Linear, TextureWrap.Repeat, 1f);
     }
 
-    /// <summary>
-    /// Gets the base-level width in pixels.
-    /// </summary>
+    /// <summary>Gets the base-level width in pixels.</summary>
     public int Width
     {
         get
@@ -110,9 +91,7 @@ public sealed class TextureBuilder
         }
     }
 
-    /// <summary>
-    /// Gets the base-level height in pixels.
-    /// </summary>
+    /// <summary>Gets the base-level height in pixels.</summary>
     public int Height
     {
         get
@@ -122,9 +101,7 @@ public sealed class TextureBuilder
         }
     }
 
-    /// <summary>
-    /// Gets the uncompressed storage format.
-    /// </summary>
+    /// <summary>Gets the uncompressed storage format.</summary>
     public TextureFormat Format
     {
         get
@@ -134,9 +111,7 @@ public sealed class TextureBuilder
         }
     }
 
-    /// <summary>
-    /// Gets the sampler state the built texture uses.
-    /// </summary>
+    /// <summary>Gets the sampler state the built texture uses.</summary>
     public SamplerState Sampler
     {
         get
@@ -147,7 +122,7 @@ public sealed class TextureBuilder
     }
 
     /// <summary>
-    /// Gets whether <see cref="BuildAsync"/> generates the full mip chain when no chain exists.
+    /// Gets whether <see cref="BuildAsync"/> generates a full mip chain when none exists.
     /// </summary>
     public bool GenerateMipsEnabled
     {
@@ -159,16 +134,16 @@ public sealed class TextureBuilder
     }
 
     /// <summary>
-    /// Sets the base-level pixels from a tightly packed byte buffer. The buffer length must be exactly
-    /// <c>width × height × 4</c> for the RGBA8 formats or <c>width × height</c> for
-    /// <see cref="TextureFormat.R8Unorm"/>.
+    /// Sets the base-level pixels from packed bytes; the length must equal <c>width × height × 4</c>
+    /// for RGBA8 or <c>width × height</c> for <see cref="TextureFormat.R8Unorm"/>.
     /// </summary>
     /// <param name="pixels">
-    /// The base-level pixels. For the sRGB format the bytes are already sRGB-encoded; the alpha
-    /// channel of every format is linear. The builder keeps a copy.
+    /// The base-level pixels; sRGB bytes are already encoded and alpha is linear. The builder copies
+    /// them.
     /// </param>
-    /// <exception cref="ArgumentException">The buffer length does not match the size and format.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="ArgumentException">
+    /// The buffer length does not match the size and format.
+    /// </exception>
     public void SetPixels(ReadOnlySpan<byte> pixels)
     {
         _service.ThrowIfStopped();
@@ -187,19 +162,14 @@ public sealed class TextureBuilder
         _mipChain = null;
     }
 
-    /// <summary>
-    /// Sets the base-level pixels from one linear <see cref="Color"/> per pixel.
-    /// </summary>
+    /// <summary>Sets the base-level pixels from one linear <see cref="Color"/> per pixel.</summary>
     /// <param name="colors">
-    /// The base-level colors. For <see cref="TextureFormat.Rgba8Srgb"/> the RGB channels are converted
-    /// to 8-bit sRGB and alpha stays linear. For <see cref="TextureFormat.Rgba8Unorm"/> every channel
-    /// is stored as linear unorm. For <see cref="TextureFormat.R8Unorm"/> only the red channel is
-    /// stored. Components are clamped to <c>[0, 1]</c>. The builder keeps a converted copy.
+    /// The base-level colors; components are clamped to <c>[0, 1]</c>, sRGB RGB is encoded, and
+    /// alpha stays linear. The builder keeps a converted copy.
     /// </param>
     /// <exception cref="ArgumentException">
-    /// The color count does not match the size, or a component is not finite.
+    /// The color count is wrong, or a component is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     public void SetPixels(ReadOnlySpan<Color> colors)
     {
         _service.ThrowIfStopped();
@@ -250,17 +220,10 @@ public sealed class TextureBuilder
         _mipChain = null;
     }
 
-    /// <summary>
-    /// Regenerates the full mip chain from the current base level.
-    /// </summary>
+    /// <summary>Regenerates the full mip chain from the current base level.</summary>
     /// <exception cref="InvalidOperationException">The base-level pixels were not set.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     /// <remarks>
-    /// Every level is produced by the bake's deterministic box filter: the destination level has
-    /// <c>max(1, width / 2)</c> by <c>max(1, height / 2)</c> pixels, and each destination pixel
-    /// averages the source rectangle it covers with half-up integer rounding. The filter averages the
-    /// stored bytes; for the sRGB format it does not decode the transfer function first. A build with
-    /// mip generation enabled calls this automatically when no chain exists.
+    /// Each level uses the bake's deterministic box filter; sRGB bytes are averaged without decoding.
     /// </remarks>
     public void GenerateMips()
     {
@@ -276,20 +239,15 @@ public sealed class TextureBuilder
     }
 
     /// <summary>
-    /// Uploads the texture on the render thread and returns the immutable asset after the GPU resource
-    /// is ready.
+    /// Uploads the texture on the render thread and returns it when the GPU resource is ready.
     /// </summary>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>The created texture. The caller owns one reference and must dispose it exactly once.</returns>
+    /// <returns>The texture; the caller owns one reference and must dispose it once.</returns>
     /// <exception cref="InvalidOperationException">The base-level pixels were not set.</exception>
-    /// <exception cref="OperationCanceledException">The token was canceled before the upload completed.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="OperationCanceledException">Canceled before the upload completed.</exception>
     /// <exception cref="AssetLoadException">The GPU upload failed.</exception>
     /// <remarks>
-    /// With mip generation enabled, the build generates the full chain when <see cref="GenerateMips"/>
-    /// was not called. The raw levels are uploaded through the non-blocking GPU bridge without a KTX2
-    /// container. The returned texture has <see cref="Texture.IsProcedural"/> set and a reserved
-    /// synthetic <see cref="Texture.Path"/>.
+    /// With mip generation enabled, the chain is generated when <see cref="GenerateMips"/> was not
+    /// called; the result is procedural with a synthetic <see cref="Texture.Path"/>.
     /// </remarks>
     public async Task<Texture> BuildAsync(CancellationToken cancellationToken = default)
     {

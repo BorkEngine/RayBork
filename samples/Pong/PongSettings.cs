@@ -4,17 +4,11 @@ using PolyType;
 namespace Pong;
 
 /// <summary>
-/// The custom TOML data asset for the sample's design values, loaded from <c>/data/game</c>.
+/// The baked TOML settings for the Pong sample, in 1280x720 design pixels.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The sample project compiles this file and the assets executable references the sample project, so
-/// the bake and the runtime bind the same type. The host registers the type with
-/// <c>WithAssetType&lt;PongSettings&gt;()</c>, the bake registers it with
-/// <c>RegisterAsset&lt;PongSettings&gt;()</c>, and the compiled <see cref="GenerateShapeAttribute"/>
-/// shape keeps the runtime load reflection-free and Native AOT compatible. Values are in design
-/// pixels on the 1280x720 playfield.
-/// </para>
+/// Loaded from <c>/data/game</c> through the compiled <see cref="GenerateShapeAttribute"/> shape,
+/// which keeps the runtime load reflection-free and Native AOT compatible.
 /// </remarks>
 [GenerateShape]
 public sealed partial class PongSettings

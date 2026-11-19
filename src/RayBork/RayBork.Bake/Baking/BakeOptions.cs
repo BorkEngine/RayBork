@@ -4,11 +4,6 @@ namespace RayBork.Bake.Baking;
 internal sealed class BakeOptions
 {
     /// <summary>Initializes invocation options.</summary>
-    /// <param name="outputRoot">The absolute output root.</param>
-    /// <param name="mode">The payload compression mode.</param>
-    /// <param name="check">Whether the run writes nothing and always processes every source.</param>
-    /// <param name="force">Whether the run bypasses the incremental cache.</param>
-    /// <param name="warningsAsErrors">Whether warnings fail the bake.</param>
     internal BakeOptions(
         string outputRoot,
         BakeMode mode,

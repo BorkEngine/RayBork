@@ -3,32 +3,17 @@ using BCnEncoder.Shared;
 
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// Encodes one RGBA8 mip level with the BCnEncoder.Net block encoder.
-/// </summary>
+/// <summary>Encodes one RGBA8 mip level with the BCnEncoder.Net block encoder.</summary>
 /// <remarks>
-/// <para>
-/// The bake uses BC7 for RGBA and opaque RGB storage and BC5 for RG storage. BC5 reads the red and
-/// green components explicitly so the channel mapping does not depend on the library defaults.
-/// </para>
-/// <para>
-/// Quality is the encoder's best setting. The input is the level's straight-alpha RGBA8 data, so the
-/// caller must generate the mip chain before encoding; the encoder is told not to generate its own.
-/// </para>
+/// BC7 stores RGBA and opaque RGB; BC5 stores RG explicitly. The caller supplies the finished mip
+/// chain and the encoder runs at best quality without generating mips.
 /// </remarks>
 internal static class BcTextureEncoder
 {
     private static readonly PixelFormat _pixelFormat = PixelFormat.Rgba32;
 
-    /// <summary>Encodes one level and validates the encoder's output shape.</summary>
-    /// <param name="level">The straight-alpha RGBA8 level.</param>
-    /// <param name="format">The compressed format to encode.</param>
+    /// <summary>Encodes one level and checks the encoder's output shape.</summary>
     /// <returns>The raw block data for the level, without headers or padding.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="level"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="format"/> is not a block-compressed format.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The encoder failed or returned an unexpected shape.</exception>
     internal static byte[] Encode(TextureLevel level, TextureFormat format)
     {
         ArgumentNullException.ThrowIfNull(level);

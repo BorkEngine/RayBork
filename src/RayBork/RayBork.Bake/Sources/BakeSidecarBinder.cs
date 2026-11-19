@@ -10,13 +10,7 @@ namespace RayBork.Bake.Sources;
 /// <summary>Binds a processor's settings table from its sidecar or table-named source.</summary>
 internal static class BakeSidecarBinder
 {
-    /// <summary>Binds the sidecar for one processor source.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="source">The processor source.</param>
-    /// <param name="context">The per-source processing context, used only for a default sidecar.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="sidecar">The bound sidecar, or <see langword="null"/> for a sidecar-free processor.</param>
-    /// <returns><see langword="true"/> when the source may run.</returns>
+    /// <summary>Binds a processor's sidecar, creating its default when the policy allows.</summary>
     internal static bool TryBind(
         BakeProject project,
         BakeSource source,

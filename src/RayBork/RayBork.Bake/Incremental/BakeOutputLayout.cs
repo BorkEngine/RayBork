@@ -7,20 +7,13 @@ namespace RayBork.Bake.Incremental;
 internal static class BakeOutputLayout
 {
     /// <summary>Resolves an output root to an absolute path.</summary>
-    /// <param name="outputRoot">The root path.</param>
-    /// <returns>The absolute root.</returns>
-    /// <exception cref="ArgumentException">The path is empty or invalid.</exception>
     internal static string ResolveRoot(string outputRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
         return Path.GetFullPath(outputRoot);
     }
 
-    /// <summary>Resolves one pack path under the output root.</summary>
-    /// <param name="outputRoot">The absolute output root.</param>
-    /// <param name="packPath">The safe relative pack path.</param>
-    /// <returns>The absolute pack target.</returns>
-    /// <exception cref="ArgumentException">The path escapes the output root.</exception>
+    /// <summary>Resolves one pack under the output root, rejecting escapes.</summary>
     internal static string ResolvePackPath(string outputRoot, string packPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
@@ -46,9 +39,6 @@ internal static class BakeOutputLayout
     }
 
     /// <summary>Resolves every configured pack output.</summary>
-    /// <param name="project">The project.</param>
-    /// <param name="outputRoot">The absolute output root.</param>
-    /// <returns>The pack outputs in configuration order.</returns>
     internal static IReadOnlyList<BakePackOutput> Resolve(BakeProject project, string outputRoot)
     {
         ArgumentNullException.ThrowIfNull(project);
@@ -65,6 +55,4 @@ internal static class BakeOutputLayout
 }
 
 /// <summary>One configured pack and its absolute output path.</summary>
-/// <param name="Pack">The configured pack.</param>
-/// <param name="Path">The absolute pack path.</param>
 internal sealed record BakePackOutput(BakePack Pack, string Path);

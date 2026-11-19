@@ -2,34 +2,18 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The CPU projection, viewport, and validation math shared by <see cref="CameraService"/> and
-/// <see cref="Camera"/>.
-/// </summary>
+/// <summary>Projection, viewport, and validation math shared by the camera types.</summary>
 /// <remarks>
-/// <para>
-/// The engine is right-handed and Y-up and the camera looks down local <c>-Z</c>. Matrices use
-/// System.Numerics' row-vector convention, so a view-space position transforms as
-/// <c>Vector4.Transform(position, projection)</c> and the view-projection matrix is
-/// <c>View * Projection</c>.
-/// </para>
-/// <para>
-/// Depth is Vulkan's <c>[0, 1]</c> reverse-Z: the near plane maps to <c>1</c> and the far plane maps
-/// to <c>0</c>. The projection also negates the Y row so world <c>+Y</c> maps to the top of the
-/// screen, which is Vulkan's negative NDC Y. The conventional column-vector form of each projection is
-/// documented in the API reference; the matrices built here are its row-vector transpose.
-/// </para>
+/// Right-handed, Y-up, looking down local -Z; row-vector matrices compose as
+/// <c>View * Projection</c>. Depth is reverse-Z <c>[0, 1]</c>: near maps to <c>1</c>, far to
+/// <c>0</c>, and the projections negate Y so world <c>+Y</c> is the Vulkan top.
 /// </remarks>
 internal static class CameraMath
 {
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
     private const float MAXIMUM_FIELD_OF_VIEW = 180f;
 
-    /// <summary>
-    /// Creates the world-to-view matrix from a camera transform.
-    /// </summary>
-    /// <param name="transform">The world-space camera transform.</param>
-    /// <returns>The inverse of the transform matrix.</returns>
+    /// <summary>Inverts the transform into the world-to-view matrix.</summary>
     /// <exception cref="InvalidOperationException">The transform matrix is singular.</exception>
     internal static Matrix4x4 CreateViewMatrix(Transform transform)
     {
@@ -44,14 +28,11 @@ internal static class CameraMath
         return view;
     }
 
-    /// <summary>
-    /// Creates a reverse-Z perspective projection with the Vulkan Y-flip.
-    /// </summary>
-    /// <param name="fieldOfView">The vertical field of view in degrees.</param>
+    /// <summary>Builds a reverse-Z perspective projection with the Vulkan Y-flip.</summary>
+    /// <param name="fieldOfView">The vertical field of view in degrees, inside (0, 180).</param>
     /// <param name="aspectRatio">The viewport width divided by its height.</param>
     /// <param name="near">The positive finite near distance.</param>
-    /// <param name="far">The far distance; <see cref="float.PositiveInfinity"/> is allowed.</param>
-    /// <returns>The row-vector projection matrix.</returns>
+    /// <param name="far">The far distance, finite or <see cref="float.PositiveInfinity"/>.</param>
     internal static Matrix4x4 CreatePerspectiveProjection(
         float fieldOfView,
         float aspectRatio,
@@ -83,14 +64,11 @@ internal static class CameraMath
         );
     }
 
-    /// <summary>
-    /// Creates a reverse-Z orthographic projection with the Vulkan Y-flip.
-    /// </summary>
+    /// <summary>Builds a reverse-Z orthographic projection with the Vulkan Y-flip.</summary>
     /// <param name="height">The visible world-space height.</param>
     /// <param name="aspectRatio">The viewport width divided by its height.</param>
     /// <param name="near">The positive finite near distance.</param>
     /// <param name="far">The finite far distance, greater than <paramref name="near"/>.</param>
-    /// <returns>The row-vector projection matrix.</returns>
     internal static Matrix4x4 CreateOrthographicProjection(
         float height,
         float aspectRatio,
@@ -121,22 +99,10 @@ internal static class CameraMath
         );
     }
 
-    /// <summary>
-    /// Validates the parameters of a camera projection: exactly the size argument selected by the
-    /// projection is used, and the other size argument must be left at zero.
-    /// </summary>
-    /// <param name="projection">The projection kind.</param>
-    /// <param name="fieldOfView">The perspective vertical field of view in degrees.</param>
-    /// <param name="orthographicHeight">The orthographic visible world-space height.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The far clip distance.</param>
-    /// <exception cref="ArgumentException">
-    /// The size argument that does not belong to <paramref name="projection"/> is nonzero.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="projection"/> is not a defined value, or a selected parameter is outside its
-    /// documented range.
-    /// </exception>
+    /// <summary>Validates the projection and rejects a nonzero unused size argument.</summary>
+    /// <exception cref="ArgumentException">The unused size argument is nonzero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The projection is undefined or a selected
+    /// parameter is out of range.</exception>
     internal static void ValidateProjection(
         CameraProjection projection,
         float fieldOfView,
@@ -178,13 +144,7 @@ internal static class CameraMath
         }
     }
 
-    /// <summary>
-    /// Validates the perspective camera parameters.
-    /// </summary>
-    /// <param name="fieldOfView">The vertical field of view in degrees.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The far clip distance.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A parameter is outside its documented range.</exception>
+    /// <summary>Validates a finite field of view in (0, 180) and the clip planes.</summary>
     internal static void ValidatePerspective(float fieldOfView, float near, float far)
     {
         if (
@@ -203,13 +163,7 @@ internal static class CameraMath
         ValidateClipPlanes(near, far, allowInfiniteFar: true);
     }
 
-    /// <summary>
-    /// Validates the orthographic camera parameters.
-    /// </summary>
-    /// <param name="orthographicHeight">The visible world-space height.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The far clip distance.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A parameter is outside its documented range.</exception>
+    /// <summary>Validates a finite positive height and the finite clip planes.</summary>
     internal static void ValidateOrthographic(float orthographicHeight, float near, float far)
     {
         if (!float.IsFinite(orthographicHeight) || orthographicHeight <= 0f)
@@ -224,19 +178,13 @@ internal static class CameraMath
         ValidateClipPlanes(near, far, allowInfiniteFar: false);
     }
 
-    /// <summary>
-    /// Resolves a requested viewport against the target render size and returns the clamped pixel
-    /// rectangle.
-    /// </summary>
-    /// <param name="viewport">The requested viewport, or <see langword="null"/> for the full target.</param>
+    /// <summary>Resolves the viewport to a target-clamped, positive pixel rectangle.</summary>
+    /// <param name="viewport">Requested viewport, or <see langword="null"/> for the full target.</param>
     /// <param name="targetWidth">The target render width in pixels.</param>
     /// <param name="targetHeight">The target render height in pixels.</param>
     /// <param name="parameterName">The public parameter name used by thrown exceptions.</param>
-    /// <returns>The finite, positive, target-clamped viewport.</returns>
-    /// <exception cref="ArgumentException">
-    /// The target or the requested viewport is empty, has a non-finite component, or clamps to an empty
-    /// rectangle.
-    /// </exception>
+    /// <exception cref="ArgumentException">The target or viewport is empty, non-finite, or
+    /// clamps to nothing.</exception>
     internal static Rect ResolveViewport(
         Rect? viewport,
         int targetWidth,
@@ -297,13 +245,7 @@ internal static class CameraMath
         return new Rect(left, top, right - left, bottom - top);
     }
 
-    /// <summary>
-    /// Resolves the camera clear color: <see langword="null"/> means linear opaque black and every
-    /// finite HDR value is accepted.
-    /// </summary>
-    /// <param name="clearColor">The requested color, or <see langword="null"/> for opaque black.</param>
-    /// <param name="parameterName">The public parameter name used by the thrown exception.</param>
-    /// <returns>The linear clear color.</returns>
+    /// <summary>Resolves the linear clear color, or opaque black for <see langword="null"/>.</summary>
     /// <exception cref="ArgumentException">A component is not finite.</exception>
     internal static Color ResolveClearColor(Color? clearColor, string parameterName)
     {

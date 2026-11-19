@@ -3,60 +3,13 @@ using Microsoft.Extensions.Logging;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The per-font glyph pipeline: layout metrics without a texture, a hard-bounded cache of generated
-/// MSDF glyph textures, and the bridge to the app-lifetime <see cref="GlyphGenerationService"/>.
+/// The per-font glyph pipeline: MSDF layout metrics, a bounded texture cache, and the bridge to the
+/// app-lifetime <see cref="GlyphGenerationService"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The <c>Font</c> asset owns one pipeline per parsed face. The tick thread calls only
-/// <see cref="BeginFrame"/>, <see cref="Acquire"/>, and <see cref="GetMetrics"/>; the font thread of the
-/// generation service is the only thread that inserts and evicts textures. It resolves outlines,
-/// generates MSDF bitmaps, and inserts finished textures. The tick thread updates the use stamps, the
-/// glyph states, the waiters, and the frame index while it calls the three methods. One
-/// <see cref="Lock"/> guards both caches and all of that state, and it is never held across an
-/// <c>await</c> or a blocking wait.
-/// </para>
-/// <para>
-/// <see cref="BeginFrame"/> records the frame index supplied by
-/// <see cref="RenderFramePacket.FrameIndex"/> once per camera; the pipeline keeps the highest value, so
-/// a repeated or stale call never moves the cache clock backwards. <see cref="Acquire"/> is the draw
-/// path: a miss marks the glyph pending, records a waiter, and enqueues exactly one generation request;
-/// a pending glyph draws nothing this call and appears on a later frame. A hit returns the cached
-/// texture and adds its frame hold to the caller's <see cref="FrameAssetRetention"/> while the cache
-/// lock is held, so eviction cannot release the owner reference between the lookup and the hold.
-/// Acquire adds the hold and never releases it; the recorder owns the retention set and the frame ring
-/// releases it after the frame completes.
-/// </para>
-/// <para>
-/// The texture cache is hard-capped at <see cref="MAX_CACHED_TEXTURES"/>. Every insert that would
-/// exceed the budget evicts the least-recently-used textures in one batch, regardless of the frame that
-/// used them, and disposes their owner references outside the cache lock. Eviction can dispose a
-/// texture wrapper in the same frame that acquired it; the already-recorded frame hold keeps the GPU
-/// resource behind <see cref="Texture.Lifetime"/> alive until the frame ring releases it. Eviction and
-/// disposal release only the owner reference; they never add or release a frame hold.
-/// </para>
-/// <para>
-/// Failure is terminal per glyph for the font's lifetime: a failed generation or upload marks the
-/// glyph failed and is never retried. An empty glyph (such as a space) becomes ready without a texture.
-/// Metrics fall back to the face advance with a zero quad when an outline cannot be resolved or its
-/// texture would exceed the generator's texel budget; the font-data failure is logged once and cached,
-/// and the generation service does not log the same terminal glyph again.
-/// </para>
-/// <para>
-/// Lock order: <see cref="GlyphGenerationService.Enqueue"/> takes the service lock and then the
-/// pipeline's disposed flag; no path takes the pipeline lock while taking the service lock.
-/// <see cref="Acquire"/> may hold the pipeline lock while adding a frame hold, so that order is
-/// pipeline, then <see cref="FrameAssetRetention"/>, then the asset's own lock. No path takes the
-/// pipeline lock while holding either of those.
-/// </para>
-/// <para>
-/// A pipeline may be disposed while the service is still running, for example when a game disposes a
-/// font before shutdown. <see cref="Dispose"/> unregisters the pipeline, so queued requests for it are
-/// dropped and their waiters settle as failed; a request that was already generating finishes and its
-/// late texture reaches <see cref="Insert"/>, which disposes that texture instead of caching it. After
-/// disposal the service never enqueues new work for the pipeline. Disposal is idempotent, disposes
-/// every cached texture exactly once, and settles every pending waiter.
-/// </para>
+/// The tick thread records frames, acquires textures, and reads metrics; only the service's font
+/// thread inserts and evicts textures. One <see cref="Lock"/> guards the glyph state, and the cache
+/// is hard-capped at <see cref="MAX_CACHED_TEXTURES"/>.
 /// </remarks>
 internal sealed class FontGlyphPipeline : IDisposable
 {
@@ -80,17 +33,9 @@ internal sealed class FontGlyphPipeline : IDisposable
     private bool _loggedStoppingRejection;
 
     /// <summary>
-    /// Initializes a pipeline with the production texture budget.
+    /// Creates a pipeline with the production texture budget; the face's units per em must match the
+    /// settings.
     /// </summary>
-    /// <param name="face">The parsed face; its <c>unitsPerEm</c> must match the settings.</param>
-    /// <param name="settings">The face's validated MSDF parameters.</param>
-    /// <param name="textureFactory">The factory that uploads a generated bitmap.</param>
-    /// <param name="service">The app-lifetime generation service that runs the requests.</param>
-    /// <param name="logger">The font logger; it receives the per-glyph diagnostics.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="settings"/> declares a different <c>unitsPerEm</c> than <paramref name="face"/>.
-    /// </exception>
     internal FontGlyphPipeline(
         SfntFace face,
         FontGlyphSettings settings,
@@ -101,20 +46,9 @@ internal sealed class FontGlyphPipeline : IDisposable
         : this(face, settings, textureFactory, service, MAX_CACHED_TEXTURES, logger) { }
 
     /// <summary>
-    /// Initializes a pipeline with an explicit texture budget. Tests use a small budget; production
-    /// code uses <see cref="MAX_CACHED_TEXTURES"/>.
+    /// Creates a pipeline with an explicit texture budget for tests; the budget must be positive and
+    /// the face's units per em must match the settings.
     /// </summary>
-    /// <param name="face">The parsed face; its <c>unitsPerEm</c> must match the settings.</param>
-    /// <param name="settings">The face's validated MSDF parameters.</param>
-    /// <param name="textureFactory">The factory that uploads a generated bitmap.</param>
-    /// <param name="service">The app-lifetime generation service that runs the requests.</param>
-    /// <param name="textureBudget">The maximum number of cached textures; it must be positive.</param>
-    /// <param name="logger">The font logger; it receives the per-glyph diagnostics.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="textureBudget"/> is not positive.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="settings"/> declares a different <c>unitsPerEm</c> than <paramref name="face"/>.
-    /// </exception>
     internal FontGlyphPipeline(
         SfntFace face,
         FontGlyphSettings settings,
@@ -146,20 +80,16 @@ internal sealed class FontGlyphPipeline : IDisposable
         _logger = logger;
     }
 
-    /// <summary>Gets the parsed face. The generation service reads it on the font thread.</summary>
+    /// <summary>Gets the parsed face.</summary>
     internal SfntFace Face => _face;
 
-    /// <summary>Gets the face's MSDF settings. The generation service reads them on the font thread.</summary>
+    /// <summary>Gets the face's validated MSDF settings.</summary>
     internal FontGlyphSettings Settings => _settings;
 
-    /// <summary>
-    /// Gets the texture factory. The generation service calls it on the font thread after it generated
-    /// a bitmap.
-    /// </summary>
+    /// <summary>Gets the factory that uploads generated bitmaps.</summary>
     internal IGlyphTextureFactory TextureFactory => _textureFactory;
 
-    /// <summary>Gets the number of cached textures. Diagnostic, for tests.</summary>
-    /// <remarks>It is zero after disposal.</remarks>
+    /// <summary>Gets the cached texture count; zero after disposal. Diagnostic, for tests.</summary>
     internal int CachedGlyphCount
     {
         get
@@ -171,7 +101,7 @@ internal sealed class FontGlyphPipeline : IDisposable
         }
     }
 
-    /// <summary>Gets whether the pipeline is disposed. The generation service reads it before enqueueing.</summary>
+    /// <summary>Gets whether the pipeline is disposed.</summary>
     internal bool IsDisposed
     {
         get
@@ -183,19 +113,12 @@ internal sealed class FontGlyphPipeline : IDisposable
         }
     }
 
-    /// <summary>
-    /// Records the frame that the following <see cref="Acquire"/> calls belong to.
-    /// </summary>
-    /// <param name="frameIndex">
-    /// The tick frame index from <see cref="RenderFramePacket.FrameIndex"/>; it is non-negative.
-    /// </param>
+    /// <summary>Records the frame index for the following <see cref="Acquire"/> calls.</summary>
+    /// <param name="frameIndex">The non-negative tick frame index.</param>
     /// <remarks>
-    /// Single owner: only the tick thread calls this method, once per camera, before it records that
-    /// camera's text. The pipeline keeps the highest value, so every camera in one tick may pass the
-    /// same index and a stale index is ignored. The font thread never calls it. After disposal it is a
-    /// no-op.
+    /// Only the tick thread calls it, once per camera; the pipeline keeps the highest index, so a stale
+    /// call is ignored.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="frameIndex"/> is negative.</exception>
     internal void BeginFrame(long frameIndex)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(frameIndex);
@@ -214,22 +137,15 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Gets the layout metrics of one glyph, in em units, without generating a texture.
+    /// Gets one glyph's layout metrics in em units without generating a texture.
     /// </summary>
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>
-    /// The glyph's advance from the face and its padded quad from the MSDF layout. An empty glyph has
-    /// the advance only, with a zero bearing and size.
+    /// The face advance and padded quad; an empty glyph has the advance only and a zero quad.
     /// </returns>
     /// <remarks>
-    /// The result is cached per glyph. A glyph whose stored box is inverted, whose outline cannot be
-    /// resolved, or whose layout would exceed the generator's texel budget logs one warning for that
-    /// font-data failure and falls back to the face advance with a zero bearing and size, so it draws
-    /// nothing but still advances the pen; the generation service does not log the same terminal glyph
-    /// again. The method is thread-safe, never touches the GPU, and never uses the cache clock.
+    /// A font-data failure falls back to the advance and a zero quad and is logged once per glyph.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    /// <exception cref="ObjectDisposedException">The pipeline is disposed.</exception>
     internal TextGlyphMetrics GetMetrics(int glyphId)
     {
         ValidateGlyphId(glyphId);
@@ -276,29 +192,20 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Acquires the cached texture of one glyph for the current frame, or enqueues its generation.
+    /// Acquires one glyph's cached texture for the current frame, or enqueues its generation.
     /// </summary>
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <param name="retention">
-    /// The frame's retention set. When the glyph's texture is cached, the pipeline adds the texture's
-    /// frame hold to this set before returning, so eviction cannot strand the recorder.
+    /// The frame's retention set, which receives the texture's frame hold before the call returns.
     /// </param>
     /// <returns>
-    /// The cached texture when the glyph is ready, or <see langword="null"/> when it is pending, empty,
-    /// failed, absent, or the pipeline is disposed. A miss enqueues one generation request and never
-    /// blocks.
+    /// The cached texture when ready; <see langword="null"/> when pending, empty, failed, absent, or
+    /// disposed. A miss enqueues one request and never blocks.
     /// </returns>
     /// <remarks>
-    /// Single owner: only the tick thread calls this method, after <see cref="BeginFrame"/>. Pass the
-    /// retention set of the frame being recorded; a set that was already released ignores the hold, so
-    /// a stale set cannot resurrect a texture. The added frame hold is idempotent per distinct texture
-    /// for the lifetime of the set, so acquiring the same glyph twice in one frame does not double-add
-    /// it. The recorder owns and releases the retention set; the pipeline never releases the hold. A
-    /// stopped generation service rejects the request, the glyph settles as failed, and one warning per
-    /// rejection reason is logged for the pipeline.
+    /// Only the tick thread calls it; the recorder owns and releases the retention set. The added hold
+    /// is idempotent per texture for the lifetime of the set.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="retention"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     internal Texture? Acquire(int glyphId, FrameAssetRetention retention)
     {
         ValidateGlyphId(glyphId);
@@ -335,16 +242,10 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Peeks at the cached texture of one glyph without recording a use or adding a frame hold.
+    /// Peeks at one glyph's cached texture without recording a use or adding a frame hold.
     /// </summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
-    /// <param name="texture">The cached texture, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when a texture is cached for the glyph.</returns>
-    /// <remarks>
-    /// This is a diagnostic and test peek. It does not add a frame hold, so a recorder must use
-    /// <see cref="Acquire"/> instead. After disposal it returns <see langword="false"/>.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
+    /// <remarks>Diagnostic and test peek; recording callers must use <see cref="Acquire"/>.</remarks>
     internal bool TryGetTexture(int glyphId, out Texture? texture)
     {
         ValidateGlyphId(glyphId);
@@ -367,13 +268,9 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Gets whether one glyph finished generation. An empty glyph is ready even though it has no
-    /// texture, because nothing will ever be drawn for it.
+    /// Gets whether one glyph finished generation; an empty glyph counts as ready without a texture.
     /// </summary>
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
-    /// <returns><see langword="true"/> for a ready empty or textured glyph; otherwise <see langword="false"/>.</returns>
-    /// <remarks>After disposal it returns <see langword="false"/>.</remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     internal bool IsGlyphReady(int glyphId)
     {
         ValidateGlyphId(glyphId);
@@ -391,15 +288,8 @@ internal sealed class FontGlyphPipeline : IDisposable
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>
     /// The pending settlement task, or a completed task when the glyph is already terminal or absent.
-    /// Inspect <see cref="IsGlyphReady"/> after the task completes to distinguish ready from failed.
     /// </returns>
-    /// <remarks>
-    /// Test hook. Call <see cref="Acquire"/> first when the glyph is not generated yet; an absent glyph
-    /// has no pending request, so its task is already complete. An evicted glyph returns to absent, so
-    /// its task completes and a later <see cref="Acquire"/> enqueues a fresh generation. After disposal
-    /// it returns a completed task.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
+    /// <remarks>Test hook; call <see cref="Acquire"/> first for an ungenerated glyph.</remarks>
     internal Task WhenGlyphSettledAsync(int glyphId)
     {
         ValidateGlyphId(glyphId);
@@ -420,19 +310,11 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Inserts one generated texture. The generation service calls it on the font thread.
+    /// Inserts one generated texture on the font thread, taking ownership of its one owner reference.
     /// </summary>
-    /// <param name="glyphId">The glyph identifier.</param>
-    /// <param name="texture">
-    /// The uploaded texture. The pipeline takes ownership of its one owner reference.
-    /// </param>
     /// <remarks>
-    /// The cache is hard-capped: the method evicts the least-recently-used textures in one batch until
-    /// the new entry fits, regardless of the frame that last used them. At capacity it copies and sorts
-    /// at most <c>budget + 1</c> cached entries under the lock; the cost is proportional to the cache
-    /// size, not to the face's glyph count. A redundant or late texture for an already terminal or
-    /// disposed pipeline is disposed instead of leaked. Evicted textures are disposed outside the cache
-    /// lock, and the glyph waiter is settled even when a disposal throws.
+    /// The cache is hard-capped; the least-recently-used textures are evicted until the new entry fits
+    /// and are disposed outside the lock. A redundant or late texture is disposed instead of cached.
     /// </remarks>
     internal void Insert(int glyphId, Texture texture)
     {
@@ -489,10 +371,8 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Marks one generated glyph ready without a texture. The generation service calls it on the font
-    /// thread for an empty glyph such as a space.
+    /// Marks one generated glyph ready without a texture, for an empty glyph such as a space.
     /// </summary>
-    /// <param name="glyphId">The glyph identifier.</param>
     internal void CompleteEmpty(int glyphId)
     {
         TaskCompletionSource? waiter;
@@ -518,20 +398,13 @@ internal sealed class FontGlyphPipeline : IDisposable
     }
 
     /// <summary>
-    /// Marks one pending glyph failed for the font's lifetime. The generation service calls it for a
-    /// generation or upload failure, for a stop cancellation, and for a rejected request; the caller
-    /// owns the diagnostic, so this method itself never logs. Later draws do not retry the glyph.
+    /// Marks one pending glyph failed for the font's lifetime; later draws never retry it.
     /// </summary>
-    /// <param name="glyphId">The glyph identifier.</param>
     internal void MarkGlyphFailed(int glyphId) => CompleteGlyph(glyphId, GlyphState.Failed);
 
     /// <summary>
-    /// Gets whether the metrics path already logged a font-data failure for one glyph. The generation
-    /// service suppresses its own warning for that glyph, so one font-data failure is reported once and
-    /// a later generation failure of the same terminal glyph is not logged again.
+    /// Gets whether the metrics path already logged a font-data failure for one glyph.
     /// </summary>
-    /// <param name="glyphId">The glyph identifier.</param>
-    /// <returns><see langword="true"/> when a metrics fallback warning was already logged.</returns>
     internal bool HasLoggedMetricsFailure(int glyphId)
     {
         lock (_gate)
@@ -543,9 +416,8 @@ internal sealed class FontGlyphPipeline : IDisposable
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Idempotent. Unregisters the pipeline from the generation service, disposes every cached texture
-    /// exactly once, and settles every pending waiter even when a texture disposal throws. The service
-    /// must be stopped first.
+    /// Idempotent; requires the service to be stopped first. Unregisters the pipeline, disposes every
+    /// cached texture once, and settles every pending waiter.
     /// </remarks>
     public void Dispose()
     {

@@ -1,28 +1,18 @@
 namespace RayBork;
 
-/// <summary>
-/// The presentation strategy the renderer uses for the swapchain.
-/// </summary>
+/// <summary>The presentation strategy for the swapchain.</summary>
 /// <remarks>
-/// <see cref="Mailbox"/> is requested by default. A surface does not support every mode, so the
-/// effective mode after fallback is reported by <see cref="EngineInfo.PresentMode"/>.
+/// The engine requests <see cref="Mailbox"/> by default; the effective mode after fallback is
+/// reported by <see cref="EngineInfo.PresentMode"/>.
 /// </remarks>
 public enum PresentMode
 {
-    /// <summary>
-    /// Presents the newest completed image and replaces a queued image, so the render thread does
-    /// not block on the display and tearing is avoided. The default.
-    /// </summary>
+    /// <summary>Presents the newest image without blocking or tearing; the default.</summary>
     Mailbox,
 
-    /// <summary>
-    /// Presents through a first-in, first-out queue and throttles to the display refresh rate. The
-    /// fallback when <see cref="Mailbox"/> is unavailable.
-    /// </summary>
+    /// <summary>A display-throttled queue; the fallback for <see cref="Mailbox"/>.</summary>
     Fifo,
 
-    /// <summary>
-    /// Presents immediately with no queueing, which may tear. Used only when explicitly selected.
-    /// </summary>
+    /// <summary>Presents immediately and may tear.</summary>
     Immediate,
 }

@@ -1,21 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The engine-owned SSAO shader programs and blue-noise texture loaded from the built-in pack before
-/// <c>IGame.Setup</c>.
-/// </summary>
+/// <summary>The engine-owned SSAO shader programs and 128x128 RGBA8 blue-noise texture.</summary>
 /// <remarks>
-/// <para>
-/// The app owns one instance for its lifetime and attaches it to <see cref="CameraService"/> so a
-/// camera can snapshot an <see cref="SsaoEffect"/> without loading an asset on the render thread. The
-/// seven shader programs are the three AO variants, the three denoise variants, and the single
-/// composite shader; the texture is the N8AO 2.1.0 128x128 RGBA8 blue-noise image.
-/// </para>
-/// <para>
-/// <see cref="Dispose"/> releases the owner reference for every loaded asset. A snapshot that retained
-/// a program or the texture keeps its own frame hold, so disposal after the tick thread stopped does not
-/// invalidate a recorded frame.
-/// </para>
+/// Seven programs (three AO, three denoise, one composite) and the texture load before
+/// <c>IGame.Setup</c>, one owner reference each. Disposal does not invalidate a retained snapshot.
 /// </remarks>
 internal sealed class SsaoAssets : IDisposable
 {
@@ -53,14 +41,9 @@ internal sealed class SsaoAssets : IDisposable
     /// <summary>Gets whether the engine released the SSAO assets.</summary>
     internal bool IsDisposed => _disposed;
 
-    /// <summary>
-    /// Loads and validates every SSAO built-in asset from the started catalog.
-    /// </summary>
-    /// <param name="assets">The started asset catalog.</param>
-    /// <returns>The loaded assets, which own one owner reference per shader program and the texture.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <summary>Loads and validates every SSAO built-in asset from the started catalog.</summary>
     /// <exception cref="AssetLoadException">
-    /// A built-in SSAO asset is missing, has the wrong shader ABI contract, or cannot upload.
+    /// A built-in SSAO asset is missing, invalid, or cannot upload.
     /// </exception>
     internal static async Task<SsaoAssets> LoadAsync(IAssetCatalog assets)
     {
@@ -183,11 +166,8 @@ internal sealed class SsaoAssets : IDisposable
         }
     }
 
-    /// <summary>Gets the AO program for a quality variant.</summary>
-    /// <param name="quality">The defined quality variant.</param>
-    /// <returns>The loaded AO program.</returns>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="quality"/> is not defined.</exception>
+    /// <summary>Selects the AO program: 8, 16, or 64 samples by quality.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Undefined <paramref name="quality"/>.</exception>
     internal ShaderProgram AoProgram(SsaoQuality quality)
     {
         ThrowIfDisposed();
@@ -204,11 +184,8 @@ internal sealed class SsaoAssets : IDisposable
         };
     }
 
-    /// <summary>Gets the denoise program for a quality variant.</summary>
-    /// <param name="quality">The defined quality variant.</param>
-    /// <returns>The loaded denoise program.</returns>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="quality"/> is not defined.</exception>
+    /// <summary>Selects the denoise program: 4, 8, or 16 samples by quality.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Undefined <paramref name="quality"/>.</exception>
     internal ShaderProgram DenoiseProgram(SsaoQuality quality)
     {
         ThrowIfDisposed();
@@ -226,7 +203,6 @@ internal sealed class SsaoAssets : IDisposable
     }
 
     /// <summary>Gets the single composite program.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal ShaderProgram CompositeProgram
     {
         get
@@ -237,7 +213,6 @@ internal sealed class SsaoAssets : IDisposable
     }
 
     /// <summary>Gets the 128x128 RGBA8 blue-noise texture.</summary>
-    /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
     internal Texture BlueNoise
     {
         get

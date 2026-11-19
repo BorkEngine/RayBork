@@ -2,9 +2,7 @@ using RayBork.Bake.Diagnostics;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The immutable extension-to-processor registry and raw fallback selected by the builder.
-/// </summary>
+/// <summary>The immutable extension-to-processor registry and raw fallback.</summary>
 internal sealed class BakeProcessorRegistry
 {
     private const string FALLBACK_EXTENSION = "*";
@@ -37,11 +35,8 @@ internal sealed class BakeProcessorRegistry
     /// <summary>Gets the registrations in builder order.</summary>
     internal IReadOnlyList<BakeProcessorRegistration> Processors => _processors;
 
-    /// <summary>Validates the processor declarations and builds the registry.</summary>
-    /// <param name="processors">The processors in builder order.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="registry">The registry when every declaration is valid.</param>
-    /// <returns><see langword="true"/> when the registry is valid.</returns>
+    /// <summary>Validates the processor declarations and builds the registry, which is
+    /// <see langword="null"/> on failure.</summary>
     internal static bool TryCreate(
         IReadOnlyList<IAssetProcessor> processors,
         BakeDiagnostics diagnostics,
@@ -216,9 +211,6 @@ internal sealed class BakeProcessorRegistry
     }
 
     /// <summary>Finds the processor for a non-TOML source by its longest registered suffix.</summary>
-    /// <param name="relativePath">The pack-root-relative path.</param>
-    /// <param name="match">The matched processor and normalized extension.</param>
-    /// <returns><see langword="true"/> when a registered extension matches.</returns>
     internal bool TryMatch(string relativePath, out BakeProcessorMatch match)
     {
         if (!string.IsNullOrEmpty(relativePath))

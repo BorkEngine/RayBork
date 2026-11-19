@@ -7,17 +7,11 @@ using RayBork.Bake.Sources;
 namespace RayBork.Bake.Baking;
 
 /// <summary>
-/// The complete multi-pack bake pipeline: incremental reuse, data binding, processor execution,
-/// validation, pack composition, atomic publication, and manifest recording.
+/// The multi-pack bake pipeline: reuse, binding, processing, validation, publication, manifest.
 /// </summary>
 internal static class BakePipeline
 {
     /// <summary>Runs one bake or check.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="options">The invocation options.</param>
-    /// <param name="sources">The discovered sources.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <returns>The invocation result.</returns>
     internal static BakeResult Run(
         BakeProject project,
         BakeOptions options,

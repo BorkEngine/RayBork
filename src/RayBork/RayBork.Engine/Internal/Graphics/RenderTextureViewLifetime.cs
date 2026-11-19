@@ -1,26 +1,11 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The lifetime of one render target view: the public <see cref="Texture"/> wrapper's owner and
-/// retention state for the resolved color or depth image.
+/// The owner and frame-hold state of one render target view: the resolved color or depth image.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The <see cref="RenderTexture"/> owns exactly one reference. A <see cref="Shader"/> binding acquires an
-/// owner reference exactly like it does for an asset texture, and the recorded frame adds a frame hold,
-/// which this lifetime forwards to the target so the target images stay alive. The view itself has an
-/// empty <see cref="Path"/> because it is not a pack asset.
-/// </para>
-/// <para>
-/// The owning <see cref="RenderTexture"/> retires the view when it is disposed, so every later access
-/// throws <see cref="ObjectDisposedException"/> even when a shader still holds a reference. Disposing the
-/// public <see cref="Texture"/> directly is invalid and is rejected by <see cref="Texture.Dispose"/>.
-/// This type never creates or destroys GPU objects: the target resource owns the image view and the
-/// bindless slot. It does own the view's current dimensions: a resize updates them together with the
-/// target description on the render thread before it completes the request, and the public
-/// <see cref="Texture.Width"/>/<see cref="Texture.Height"/> read them, so the view and the target never
-/// report a split state.
-/// </para>
+/// Disposal retires the view, so later access throws <see cref="ObjectDisposedException"/>. Frame
+/// holds forward to the target, and a resize updates the dimensions before the request completes.
 /// </remarks>
 internal sealed class RenderTextureViewLifetime : ITextureOwner
 {
@@ -32,15 +17,7 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner
     private int _height;
     private bool _retired;
 
-    /// <summary>
-    /// Initializes the view lifetime with one owner reference, owned by the <see cref="RenderTexture"/>.
-    /// </summary>
-    /// <param name="target">The target lifetime that owns the image view and the bindless slot.</param>
-    /// <param name="resource">The bindless view resource, or <see langword="null"/> before allocation.</param>
-    /// <param name="width">The initial view width in pixels.</param>
-    /// <param name="height">The initial view height in pixels.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
+    /// <summary>Initializes the view with one owner reference and an optional resource.</summary>
     internal RenderTextureViewLifetime(
         RenderTextureTargetLifetime target,
         ITextureBindingResource? resource,
@@ -58,7 +35,7 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner
         _height = height;
     }
 
-    /// <summary>Gets the target id; <c>0</c> for a texture that is not a render target view.</summary>
+    /// <summary>Gets the owning target id.</summary>
     internal long TargetId => _target.TargetId;
 
     /// <summary>Gets the current view width in pixels.</summary>
@@ -67,14 +44,7 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner
     /// <summary>Gets the current view height in pixels.</summary>
     internal int Height => Volatile.Read(ref _height);
 
-    /// <summary>
-    /// Replaces the view dimensions after the renderer recreated the target's image at a new size.
-    /// Render-thread only; the resize completes its request only after this update, so a tick thread that
-    /// observes the completed resize sees the new dimensions.
-    /// </summary>
-    /// <param name="width">The new width in pixels.</param>
-    /// <param name="height">The new height in pixels.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
+    /// <summary>Replaces the view dimensions after a resize; render-thread only.</summary>
     internal void SetDimensions(int width, int height)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -104,20 +74,14 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner
     /// <inheritdoc/>
     public ITextureBindingResource? BindingResource => Volatile.Read(ref _resource);
 
-    /// <summary>
-    /// Replaces the bindless view resource after a device recreation. Render-thread only.
-    /// </summary>
-    /// <param name="resource">The recreated view resource.</param>
+    /// <summary>Replaces the view resource after device recreation; render-thread only.</summary>
     internal void SetBindingResource(ITextureBindingResource resource)
     {
         ArgumentNullException.ThrowIfNull(resource);
         Volatile.Write(ref _resource, resource);
     }
 
-    /// <summary>
-    /// Retires the view when the owning <see cref="RenderTexture"/> is disposed. Every later access
-    /// throws <see cref="ObjectDisposedException"/>. Idempotent.
-    /// </summary>
+    /// <summary>Retires the view when its owner is disposed; idempotent.</summary>
     internal void Retire()
     {
         lock (_gate)

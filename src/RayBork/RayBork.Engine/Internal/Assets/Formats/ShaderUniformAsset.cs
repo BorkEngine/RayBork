@@ -2,12 +2,9 @@ using PolyType;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// One reflected shader uniform with its baked default value.
-/// </summary>
+/// <summary>One reflected shader uniform with its baked default value.</summary>
 /// <remarks>
-/// <see cref="Default"/> stores the default in component order; an empty array means a zero value.
-/// Comparison uniforms do not use this type.
+/// <see cref="Default"/> stores values in component order; an empty array means zero.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class ShaderUniformAsset

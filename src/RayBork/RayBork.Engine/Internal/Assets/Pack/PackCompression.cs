@@ -3,26 +3,17 @@ using System.IO.Hashing;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The Zstandard codec and XXH hash helpers shared by the pack reader and writer.
-/// </summary>
+/// <summary>Zstandard codec and XXH hash helpers shared by the pack reader and writer.</summary>
 /// <remarks>
-/// Compressed payloads use maximum-quality Zstandard with no trailing checksum; integrity comes from
-/// the XXH3-64 hash in the index. No Zstandard type appears in a public signature.
+/// Compressed payloads use maximum-quality Zstandard with no checksum; integrity comes from the
+/// XXH3-64 hash in the index.
 /// </remarks>
 internal static class PackCompression
 {
-    /// <summary>
-    /// The initial decompression buffer size. It grows only as decompressed bytes actually arrive,
-    /// so a corrupt declared size cannot force a large up-front allocation.
-    /// </summary>
+    /// <summary>The initial decompression buffer size, grown as bytes arrive.</summary>
     private const int INITIAL_DECOMPRESSION_BUFFER_LENGTH = 64 * 1024;
 
-    /// <summary>
-    /// Compresses a payload with maximum-quality Zstandard and no checksum.
-    /// </summary>
-    /// <param name="payload">The uncompressed bytes.</param>
-    /// <returns>The compressed bytes.</returns>
+    /// <summary>Compresses a payload with maximum-quality Zstandard and no checksum.</summary>
     internal static byte[] Compress(ReadOnlySpan<byte> payload)
     {
         using var output = new MemoryStream();
@@ -44,44 +35,24 @@ internal static class PackCompression
         return output.ToArray();
     }
 
-    /// <summary>
-    /// Wraps a bounded stored-payload stream in a Zstandard decompressor.
-    /// </summary>
-    /// <param name="source">The stored bytes; the returned stream owns it.</param>
-    /// <returns>A decompressing stream that owns <paramref name="source"/>.</returns>
+    /// <summary>Wraps a bounded stored stream in a decompressor that owns it.</summary>
     internal static Stream OpenDecompressionStream(Stream source) =>
         new ZstandardStream(source, CompressionMode.Decompress, leaveOpen: false);
 
-    /// <summary>
-    /// Computes the XXH32 hash (seed <c>0</c>) of the index bytes.
-    /// </summary>
-    /// <param name="index">The serialized index.</param>
-    /// <returns>The 32-bit index hash.</returns>
+    /// <summary>Computes the XXH32 hash (seed 0) of the index bytes.</summary>
     internal static uint ComputeIndexHash(ReadOnlySpan<byte> index) =>
         XxHash32.HashToUInt32(index, 0);
 
-    /// <summary>
-    /// Computes the XXH3-64 hash (seed <c>0</c>) of the stored payload bytes.
-    /// </summary>
-    /// <param name="storedPayload">The bytes as stored in the pack.</param>
-    /// <returns>The 64-bit payload hash.</returns>
+    /// <summary>Computes the XXH3-64 hash (seed 0) of the stored payload bytes.</summary>
     internal static ulong ComputePayloadHash(ReadOnlySpan<byte> storedPayload) =>
         XxHash3.HashToUInt64(storedPayload, 0);
 
-    /// <summary>
-    /// Decompresses a stored payload to exactly the declared byte count.
-    /// </summary>
+    /// <summary>Decompresses a stored payload to exactly the declared byte count.</summary>
     /// <remarks>
-    /// The output buffer grows only as bytes arrive and never exceeds the declared size, so a
-    /// corrupt size cannot force an unbounded allocation. A stream that ends early or yields one
-    /// byte more than declared is corruption.
+    /// The output buffer grows only as bytes arrive and never exceeds the declared size. A stream that
+    /// ends early or yields one byte more than declared is corruption.
     /// </remarks>
-    /// <param name="storedPayload">The stored Zstandard bytes.</param>
-    /// <param name="expectedSize">The declared decompressed byte count.</param>
-    /// <returns>The decompressed bytes.</returns>
-    /// <exception cref="InvalidDataException">
-    /// The stored bytes are not valid Zstandard, or the decompressed size differs.
-    /// </exception>
+    /// <exception cref="InvalidDataException">The data is invalid or the size differs.</exception>
     internal static byte[] DecompressExactly(byte[] storedPayload, int expectedSize)
     {
         using var source = new MemoryStream(storedPayload, writable: false);

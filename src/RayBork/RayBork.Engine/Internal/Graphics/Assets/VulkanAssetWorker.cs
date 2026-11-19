@@ -7,47 +7,13 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The Vulkan <see cref="IAssetGpuWorker"/>: it creates, recreates, and destroys the GPU objects behind
-/// packed textures, meshes, and shaders.
+/// The Vulkan <see cref="IAssetGpuWorker"/> that creates, recreates, and destroys the GPU objects
+/// behind textures, meshes, and shaders.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Every member runs on the render thread. The worker does not capture a <see
-/// cref="VulkanDevice"/>: the backend hands it an accessor and it resolves the current device on every
-/// call. The render loop creates one worker after the backend initializes and keeps it across a device
-/// recovery, so <see cref="Restore"/> creates its objects on the recreated device without a new
-/// worker. A resource records the logical-device generation that owns its handles; a destruction of a
-/// resource from an older generation is skipped because the destroyed device already released the
-/// objects.
-/// </para>
-/// <para>
-/// A texture upload parses the packed KTX2 payload or the raw levels of a procedural texture,
-/// validates the format against the device, creates a mip-mapped sampled image, stages it, records
-/// and submits the copy and barriers, and returns an operation without waiting. A mesh upload stages
-/// the fixed-layout vertex stream and 32-bit indices into device-local buffers that share one
-/// allocation in the same way. A shader upload creates the vertex and fragment shader modules
-/// immediately; pipelines are M4 work and are never created here.
-/// Each upload uses a one-shot command pool, command buffer, and fence, so it cannot collide with a
-/// frame. <see cref="TryComplete"/> polls the fence without blocking; the render loop keeps submitting
-/// frames while the copy runs. Only <see cref="Restore"/> and <see cref="Cancel"/> wait for a fence,
-/// and both run when a device recovery, a cancellation, or shutdown makes the wait acceptable.
-/// </para>
-/// <para>
-/// <see cref="Destroy"/> destroys each native object exactly once and never throws: a failure while
-/// the backend is tearing down is logged and ignored. The worker tracks its live resources and its
-/// pending operations, so <see cref="DestroyAllResources"/> can cancel the pending uploads, destroy
-/// the live resources, and release the sampler cache before the backend destroys the logical device;
-/// Vulkan requires every child object to be gone first, and the bridge recreates the resources from
-/// their retained uploads after the recovery. A payload that cannot be decoded is <c>RB1008</c>; a
-/// resource the device cannot create or support, or a full bindless texture table, is <c>RB1010</c>.
-/// </para>
-/// <para>
-/// A texture upload that finishes reserves a bindless slot from the current table and writes the
-/// image view and cached sampler into every frame descriptor set; the slot is released when the
-/// texture resource is destroyed, which only happens once every frame that could reference it has
-/// completed. The worker resolves the bindless table through an accessor because the backend replaces
-/// it when the logical device is recreated.
-/// </para>
+/// Every member runs on the render thread and resolves the current <see cref="VulkanDevice"/>, so a
+/// resource from an older logical-device generation is never destroyed. Only <see cref="Restore"/>
+/// and <see cref="Cancel"/> wait for a fence, and a bindless slot is released after its last frame.
 /// </remarks>
 internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
 {
@@ -61,21 +27,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
     private readonly HashSet<VulkanAssetResource> _resources = [];
     private readonly HashSet<VulkanAssetUploadOperation> _pending = [];
 
-    /// <summary>
-    /// Initializes the worker for one backend.
-    /// </summary>
-    /// <param name="deviceAccessor">Returns the backend's current logical device.</param>
-    /// <param name="deviceGenerationAccessor">Returns the backend's current device generation.</param>
-    /// <param name="bindlessTextureTableAccessor">Returns the backend's current bindless texture table.</param>
-    /// <param name="frameResourcesIdleAccessor">
-    /// Returns whether every submitted frame has completed and can no longer reference a GPU resource.
-    /// </param>
-    /// <param name="waitForFrameResourcesIdle">
-    /// Blocks until every submitted frame has completed. Used only before the bridge destroys live
-    /// resources at shutdown.
-    /// </param>
-    /// <param name="logger">The renderer logger for best-effort destruction diagnostics.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes the worker for one backend.</summary>
     internal VulkanAssetWorker(
         Func<VulkanDevice> deviceAccessor,
         Func<int> deviceGenerationAccessor,
@@ -102,30 +54,19 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
     }
 
     /// <inheritdoc />
-    /// <remarks>Render-thread only; the property polls the backend's frame fences.</remarks>
     public bool AreFrameResourcesIdle => _frameResourcesIdleAccessor();
 
     /// <inheritdoc />
-    /// <remarks>Render-thread only; used by the render loop before it destroys live resources.</remarks>
     public void WaitForFrameResourcesIdle() => _waitForFrameResourcesIdle();
 
-    /// <summary>
-    /// Gets the number of uploads that were started and not completed or canceled yet. Diagnostic, for
-    /// tests and teardown checks.
-    /// </summary>
+    /// <summary>Gets the number of started uploads that have not finished or been canceled.</summary>
     internal int PendingOperationCount => _pending.Count;
 
-    /// <summary>
-    /// Gets the number of pending uploads that still own a staging buffer. Diagnostic, for tests; a
-    /// successful completion and a cancellation both free the staging allocation.
-    /// </summary>
+    /// <summary>Gets the number of pending uploads that still own a staging buffer.</summary>
     internal int PendingStagingBufferCount =>
         _pending.Count(operation => operation.StagingBuffer.Handle != 0);
 
-    /// <summary>
-    /// Gets the number of samplers the per-device cache owns. Diagnostic, for tests; textures with the
-    /// same filter, wrap, and anisotropy share one entry.
-    /// </summary>
+    /// <summary>Gets the number of cached samplers; matching state shares one entry.</summary>
     internal int SamplerCount => _samplers.Count;
 
     /// <inheritdoc />
@@ -248,10 +189,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
 
     /// <inheritdoc />
     /// <remarks>
-    /// The previous resource's handles belong to the destroyed device and are never touched. The
-    /// recreated resource is created with the same upload description, the previous resource adopts
-    /// its handles, and the previous instance is returned so the bridge keeps one live entry and the
-    /// public asset identity is unchanged.
+    /// The previous instance adopts the recreated handles and is returned, so the bridge keeps one live
+    /// entry and public asset identity is unchanged.
     /// </remarks>
     public GpuAssetResource Restore(AssetGpuUpload upload, GpuAssetResource previous)
     {
@@ -298,10 +237,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         return previous;
     }
 
-    /// <summary>
-    /// Starts an upload and waits for it on the render thread. Used only by <see cref="Restore"/>,
-    /// which runs after a device recovery when the device is idle and the wait is acceptable.
-    /// </summary>
+    /// <summary>Starts an upload and waits for its fence; only <see cref="Restore"/> uses it.</summary>
     private GpuAssetResource UploadAndWait(AssetGpuUpload upload)
     {
         VulkanAssetUploadOperation operation = RequireUploadOperation(BeginUpload(upload));
@@ -338,10 +274,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Adopts a finished upload: frees the staging and submission objects, reserves the texture's
-    /// bindless slot, registers the destination resource as live, and marks the operation complete.
-    /// </summary>
+    /// <summary>Adopts a finished upload: frees transients, reserves a bindless slot.</summary>
     private void CompleteUpload(VulkanAssetUploadOperation upload)
     {
         VulkanAssetResource resource = upload.Resource
@@ -361,14 +294,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         upload.MarkFinished();
     }
 
-    /// <summary>
-    /// Reserves a bindless slot for a finished texture upload and writes its descriptor into every
-    /// frame descriptor set.
-    /// </summary>
-    /// <param name="texture">The uploaded texture resource.</param>
+    /// <summary>Reserves a bindless slot and writes the texture into every frame set.</summary>
     /// <exception cref="AssetLoadException">
-    /// The table is full or the descriptor write failed. The diagnostic code is <c>RB1010</c> and the
-    /// message names the capacity and the texture path.
+    /// The table is full or the descriptor write failed (<c>RB1010</c>).
     /// </exception>
     private void AdoptBindlessSlot(VulkanTextureAssetResource texture)
     {
@@ -396,10 +324,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         texture.AssignBindlessSlot(slot);
     }
 
-    /// <summary>
-    /// Finishes a failed upload: frees its staging, submission, and partial resource, and records the
-    /// failure for the bridge to observe.
-    /// </summary>
+    /// <summary>Frees a failed upload and records the failure for the bridge to observe.</summary>
     private void FailUpload(VulkanAssetUploadOperation upload, Exception exception)
     {
         _pending.Remove(upload);
@@ -407,9 +332,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         upload.MarkFailed(exception);
     }
 
-    /// <summary>
-    /// Frees the staging buffer, command pool, and fence of an upload after its copy finished.
-    /// </summary>
+    /// <summary>Frees the staging buffer, command pool, and fence after the copy finished.</summary>
     private void DestroyUploadTransients(VulkanAssetUploadOperation upload)
     {
         DestroyStagingBuffer(
@@ -420,10 +343,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         upload.ClearTransients();
     }
 
-    /// <summary>
-    /// Frees everything a canceled or failed upload owns, including the partial destination resource.
-    /// Idempotent because the operation clears the handles after the first cleanup.
-    /// </summary>
+    /// <summary>Frees everything a canceled or failed upload owns, including partials.</summary>
     private void DestroyUploadObjects(VulkanAssetUploadOperation upload)
     {
         DestroyUploadTransients(upload);
@@ -468,16 +388,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         DestroyResource(vulkanResource);
     }
 
-    /// <summary>
-    /// Cancels every pending upload, destroys every resource the worker still tracks, and destroys the
-    /// cached samplers. The backend calls it immediately before it destroys the logical device, because
-    /// Vulkan requires every child object to be destroyed before its device and the validation layer
-    /// reports a live asset object as a leak. The bridge keeps the retained upload descriptions, so the
-    /// resources are recreated by <see cref="Restore"/> on the new device.
-    /// </summary>
+    /// <summary>Cancels uploads, destroys tracked resources, and releases samplers.</summary>
     /// <remarks>
-    /// Render-thread only, with the device idle. It never throws: a failed cancellation or destruction
-    /// is logged and the remaining objects are still released, so device recreation can proceed.
+    /// Render-thread only, before the backend destroys the logical device; it never throws, and
+    /// <see cref="Restore"/> recreates the resources from the retained uploads.
     /// </remarks>
     [SuppressMessage(
         "Design",
@@ -1019,10 +933,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
         }
     }
 
-    /// <summary>
-    /// Releases the submission, staging, and partial resource of an upload that failed while it was
-    /// being started. A submitted copy is waited out before its staging buffer is freed.
-    /// </summary>
+    /// <summary>Releases the submission, staging, and partials of a failed start.</summary>
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -1674,15 +1585,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
     private static ulong Align(ulong value, ulong alignment) =>
         ((value + alignment - 1) / alignment) * alignment;
 
-    /// <summary>
-    /// The staging buffer and memory allocated for one upload, destroyed after the upload fence
-    /// signals.
-    /// </summary>
+    /// <summary>The staging buffer and memory of one upload, freed after its fence signals.</summary>
     private readonly record struct StagingAllocation(Buffer Buffer, DeviceMemory Memory);
 
-    /// <summary>
-    /// One mip level's byte range inside the upload's retained payload. A KTX2 level offset includes
-    /// its container padding; a procedural level offset is the running offset of the packed chain.
-    /// </summary>
+    /// <summary>One mip level's byte range; KTX2 offsets include container padding.</summary>
     private readonly record struct TextureLevelRange(ulong ByteOffset, ulong ByteLength);
 }

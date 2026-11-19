@@ -17,20 +17,10 @@ internal enum BakeSourceKind
     ProcessorToml,
 }
 
-/// <summary>
-/// One discovered source, its canonical base path, and its optional sidecar document.
-/// </summary>
+/// <summary>A discovered source with its canonical paths and optional sidecar.</summary>
 internal sealed class BakeSource
 {
     /// <summary>Initializes a discovered source.</summary>
-    /// <param name="pack">The owning pack.</param>
-    /// <param name="kind">The source kind.</param>
-    /// <param name="fullPath">The absolute source path.</param>
-    /// <param name="relativePath">The pack-relative path with <c>/</c> separators.</param>
-    /// <param name="baseAssetPath">The canonical base asset path.</param>
-    /// <param name="processor">The owning processor for a processor source.</param>
-    /// <param name="matchedExtension">The matched extension, or <c>toml</c> for a table source.</param>
-    /// <param name="document">The parsed source TOML for a data or table source.</param>
     internal BakeSource(
         BakePack pack,
         BakeSourceKind kind,
@@ -72,10 +62,10 @@ internal sealed class BakeSource
     /// <summary>Gets the canonical base asset path.</summary>
     internal string BaseAssetPath { get; }
 
-    /// <summary>Gets the processor for a processor source, or <see langword="null"/> for data.</summary>
+    /// <summary>Gets the processor, or <see langword="null"/> for a data source.</summary>
     internal BakeProcessorRegistration? Processor { get; }
 
-    /// <summary>Gets the matched source extension, when applicable.</summary>
+    /// <summary>Gets the matched extension, or <c>toml</c> for a table source.</summary>
     internal string? MatchedExtension { get; }
 
     /// <summary>Gets the parsed source TOML for a data or table source.</summary>
@@ -90,10 +80,10 @@ internal sealed class BakeSource
     /// <summary>Gets or sets the parsed sidecar document, when discovered.</summary>
     internal TomlDocument? SidecarDocument { get; set; }
 
-    /// <summary>Gets the stable source identifier used by the incremental manifest.</summary>
+    /// <summary>Gets the stable source identifier for the incremental manifest.</summary>
     internal string SourceId => RelativePath;
 
-    /// <summary>Gets the processor name used for incremental identity, or <c>data</c>.</summary>
+    /// <summary>Gets the kind name used for incremental identity.</summary>
     internal string KindName =>
         Kind switch
         {
@@ -127,8 +117,6 @@ internal sealed class BakeSource
 internal sealed class BakePackSources
 {
     /// <summary>Initializes a pack source list.</summary>
-    /// <param name="pack">The configured pack.</param>
-    /// <param name="sources">The sources in deterministic order.</param>
     internal BakePackSources(BakePack pack, IReadOnlyList<BakeSource> sources)
     {
         ArgumentNullException.ThrowIfNull(pack);
@@ -148,7 +136,6 @@ internal sealed class BakePackSources
 internal sealed class BakeSourceSet
 {
     /// <summary>Initializes a source set.</summary>
-    /// <param name="packs">The per-pack source lists in configuration order.</param>
     internal BakeSourceSet(IReadOnlyList<BakePackSources> packs)
     {
         ArgumentNullException.ThrowIfNull(packs);

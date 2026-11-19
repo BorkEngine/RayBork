@@ -2,22 +2,11 @@ using RayBork.Internal;
 
 namespace RayBork;
 
-/// <summary>
-/// The app-lifetime runtime tone-mapping settings: exposure, AgX white, and AgX contrast.
-/// </summary>
+/// <summary>App-lifetime tone-mapping settings: exposure, AgX white, and AgX contrast.</summary>
 /// <remarks>
-/// <para>
-/// The settings start from the <see cref="RayBorkAppBuilder"/> values and can be changed while the app
-/// runs through <see cref="EngineContext.Tonemapping"/>. The present pass is frame-global, so every
-/// camera pass in a frame shares one tone-mapping configuration; there is no per-camera or per-draw
-/// setting.
-/// </para>
-/// <para>
-/// Every member is tick-thread only. The tick thread copies the current values into the frame packet
-/// when it seals the frame, so a write during <see cref="IGame.Tick"/> applies to the frame that tick
-/// records. A frame that was already published keeps its own snapshot. The instance lives for the app
-/// lifetime; it is not disposable and not thread-safe.
-/// </para>
+/// Every member is tick-thread only; the tick thread copies the values into the frame packet when
+/// it seals the frame, so a write during <see cref="IGame.Tick"/> applies to the frame that tick
+/// records. The present pass is frame-global, so every camera in a frame shares one configuration.
 /// </remarks>
 public sealed class TonemappingSettings
 {
@@ -25,14 +14,11 @@ public sealed class TonemappingSettings
     private float _agxWhite;
     private float _agxContrast;
 
-    /// <summary>
-    /// Initializes the settings from the builder's startup defaults. Called by the app on the main
-    /// thread before the tick thread starts.
-    /// </summary>
-    /// <param name="exposure">The exposure in stops. It must be finite.</param>
-    /// <param name="agxWhite">The AgX white in scene-linear units. It must be finite and at least <c>2</c>.</param>
-    /// <param name="agxContrast">The AgX curve contrast. It must be finite and at least <c>1</c>.</param>
-    /// <exception cref="ArgumentOutOfRangeException">A value is outside its documented range.</exception>
+    /// <summary>Initializes the settings from the builder's startup defaults.</summary>
+    /// <param name="exposure">Exposure in stops; must be finite.</param>
+    /// <param name="agxWhite">AgX white in scene-linear units; finite and at least <c>2</c>.</param>
+    /// <param name="agxContrast">AgX curve contrast; finite and at least <c>1</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A value is out of range.</exception>
     internal TonemappingSettings(float exposure, float agxWhite, float agxContrast)
     {
         ValidateExposure(exposure, nameof(Exposure));
@@ -44,16 +30,11 @@ public sealed class TonemappingSettings
         _agxContrast = agxContrast;
     }
 
-    /// <summary>
-    /// Gets or sets the exposure in stops applied before AgX. <c>0</c> is neutral and <c>+1</c>
-    /// doubles linear exposure; the renderer applies <c>2^Exposure</c>.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Gets or sets the pre-AgX exposure in stops; <c>0</c> is neutral.</summary>
     /// <remarks>
-    /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
-    /// frame that tick records.
+    /// The renderer applies <c>2^Exposure</c>, so <c>+1</c> doubles linear exposure.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
     public float Exposure
     {
         get => _exposure;
@@ -66,18 +47,12 @@ public sealed class TonemappingSettings
     }
 
     /// <summary>
-    /// Gets or sets the scene-linear white that AgX maps to the display maximum. The default is
-    /// <c>16.29</c>; on an HDR window the value is scaled by the reported display headroom before the
-    /// curve is evaluated.
+    /// Gets or sets the scene-linear white AgX maps to the display maximum; default <c>16.29</c>.
     /// </summary>
+    /// <remarks>On an HDR window the value is scaled by the display headroom.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is not finite or is less than <c>2</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    /// <remarks>
-    /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
-    /// frame that tick records.
-    /// </remarks>
     public float AgxWhite
     {
         get => _agxWhite;
@@ -89,17 +64,10 @@ public sealed class TonemappingSettings
         }
     }
 
-    /// <summary>
-    /// Gets or sets the AgX curve contrast. The default is <c>1.25</c>.
-    /// </summary>
+    /// <summary>Gets or sets the AgX curve contrast; default <c>1.25</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is not finite or is less than <c>1</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    /// <remarks>
-    /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
-    /// frame that tick records.
-    /// </remarks>
     public float AgxContrast
     {
         get => _agxContrast;
@@ -111,10 +79,7 @@ public sealed class TonemappingSettings
         }
     }
 
-    /// <summary>
-    /// Copies the values in effect now into a frame snapshot. Tick-thread only.
-    /// </summary>
-    /// <returns>The value snapshot the frame packet carries to the render thread.</returns>
+    /// <summary>Copies the current values into a frame snapshot; tick-thread only.</summary>
     internal TonemappingSnapshot Snapshot() => new(_exposure, _agxWhite, _agxContrast);
 
     private static void ValidateExposure(float exposure, string paramName)

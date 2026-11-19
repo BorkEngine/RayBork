@@ -1,8 +1,6 @@
 namespace RayBork;
 
-/// <summary>
-/// The shader stages present in a baked shader program.
-/// </summary>
+/// <summary>The shader stages present in a baked program.</summary>
 [Flags]
 public enum ShaderStageMask
 {

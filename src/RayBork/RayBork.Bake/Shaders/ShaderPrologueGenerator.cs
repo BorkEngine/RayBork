@@ -4,25 +4,11 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Shaders;
 
-/// <summary>
-/// Builds the generated GLSL prologue for one shader stage and validates the user source against the
-/// shader ABI it is about to receive.
-/// </summary>
+/// <summary>Generates the GLSL prologue for one stage and validates the user source.</summary>
 /// <remarks>
-/// <para>
-/// The prologue declares the per-pass frame block array, the fixed 2048-element bindless texture
-/// array, the push-constant pass index that selects the frame element, the per-instance record and
-/// storage buffer, the texture macros, and the stage wrapper that forwards to the user entry point.
-/// It is inserted immediately after the <c>#version</c> directive; a source without one gets
-/// <c>#version 450</c> prepended first. The shaderc entry point is always the generated <c>main</c>
-/// function, and the compiled module is renamed to <c>main_vertex</c> or <c>main_fragment</c>.
-/// </para>
-/// <para>
-/// Validation rejects a user source that declares an engine identifier, a sidecar uniform or texture
-/// name, a <c>layout(set = ...)</c> binding, or <c>location 15</c>. Comments are removed before the
-/// scan so a comment can never trigger or hide a diagnostic, and the reported line is the original
-/// source line of the offending token.
-/// </para>
+/// The prologue declares the frame block array, the 2048-element bindless texture array, the pass
+/// push constant, the instance buffer, and the stage wrapper after <c>#version</c>. Validation
+/// rejects engine identifiers, sidecar names, <c>layout(set = ...)</c>, and location 15.
 /// </remarks>
 internal static class ShaderPrologueGenerator
 {
@@ -139,18 +125,10 @@ internal static class ShaderPrologueGenerator
         "volatile",
     };
 
-    /// <summary>
-    /// Validates a user source and builds the complete wrapped stage source.
-    /// </summary>
-    /// <param name="source">The user-authored GLSL source.</param>
-    /// <param name="layout">The instance layout generated from the sidecar metadata.</param>
-    /// <param name="stage">The stage to generate: <see cref="ShaderStageMask.Vertex"/> or
-    /// <see cref="ShaderStageMask.Fragment"/>.</param>
-    /// <param name="wrappedSource">The source with the version directive and prologue inserted.</param>
-    /// <param name="message">The validation failure reason, or an empty string on success.</param>
+    /// <summary>Validates a user source and builds the complete wrapped stage source.</summary>
     /// <returns><see langword="true"/> when the source can be wrapped and compiled.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stage"/> is neither stage.</exception>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The stage is not a single stage.</exception>
     internal static bool TryBuild(
         string source,
         ShaderAbiLayout layout,
@@ -178,14 +156,8 @@ internal static class ShaderPrologueGenerator
         return true;
     }
 
-    /// <summary>
-    /// Generates the prologue text for one stage from the instance layout.
-    /// </summary>
-    /// <param name="layout">The instance layout generated from the sidecar metadata.</param>
-    /// <param name="stage">The stage to generate.</param>
+    /// <summary>Generates the prologue text for one stage from the instance layout.</summary>
     /// <returns>The complete prologue, ending with a newline.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="layout"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stage"/> is neither stage.</exception>
     internal static string Generate(ShaderAbiLayout layout, ShaderStageMask stage)
     {
         ArgumentNullException.ThrowIfNull(layout);

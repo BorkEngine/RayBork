@@ -4,10 +4,12 @@ using RayBork;
 namespace Castle;
 
 /// <summary>
-/// A small orbitable castle scene: load a model and its texture, bind the texture to the model's
-/// materials, draw the model solid with a camera that orbits a fixed point, outline and hit-test the
-/// castle under the mouse, and draw the status line from a later HUD camera.
+/// An orbitable castle model with texture binding, hover hit-testing, and a HUD status line.
 /// </summary>
+/// <remarks>
+/// Loads the castle model and its diffuse texture. Drag to orbit, the wheel zooms, O toggles
+/// projection, and A toggles SSAO.
+/// </remarks>
 internal sealed class CastleGame : IGame
 {
     private const string MODEL_PATH = "/models/obj/castle";
@@ -52,11 +54,7 @@ internal sealed class CastleGame : IGame
     private CameraProjection _projection = CameraProjection.Perspective;
     private int _frameCount;
 
-    /// <summary>
-    /// Creates the scene and starts the camera at the same position and target as the reference
-    /// scene: (50, 50, 50) looking at (0, 12, 0).
-    /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
+    /// <summary>Starts the camera at the reference scene's position and target.</summary>
     internal CastleGame(int frameLimit)
     {
         _frameLimit = frameLimit;
@@ -166,10 +164,7 @@ internal sealed class CastleGame : IGame
         }
     }
 
-    /// <summary>
-    /// Creates one camera pass with the current orbit transform and projection. Both passes share the
-    /// transform, projection, viewport, and clip planes, so the screen transform is identical.
-    /// </summary>
+    /// <summary>Creates one camera pass with the current orbit transform and projection.</summary>
     private Camera CreatePass(
         EngineContext context,
         Transform transform,
@@ -199,9 +194,7 @@ internal sealed class CastleGame : IGame
         );
     }
 
-    /// <summary>
-    /// Outlines the castle when the pointer ray hits its world bounds and marks the nearest mesh hit.
-    /// </summary>
+    /// <summary>Outlines the castle and marks the nearest mesh hit under the pointer.</summary>
     private void DrawHoverOverlay(Camera camera, EngineContext context)
     {
         // MousePosition and ScreenToWorldRay both use render pixels, so the pointer needs no unit
@@ -242,15 +235,7 @@ internal sealed class CastleGame : IGame
         }
     }
 
-    /// <summary>
-    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance statistics and the
-    /// current projection at the top-left of the view.
-    /// </summary>
-    /// <remarks>
-    /// The text is screen-aligned and drawn on a plane <see cref="OVERLAY_DISTANCE"/> world unit in
-    /// front of the HUD camera. That camera clears depth after the scene pass, so scene geometry cannot
-    /// occlude the line.
-    /// </remarks>
+    /// <summary>Draws the status statistics and the current projection at the top-left.</summary>
     private void DrawStatusOverlay(Camera camera, EngineContext context)
     {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local

@@ -4,16 +4,12 @@ using RayBork;
 namespace Text;
 
 /// <summary>
-/// A world-space text scene: two proportional faces plus the built-in mono face for the status line,
-/// one paragraph at three sizes, rotations, and alignments, the two wrapping modes, Latin and Cyrillic
-/// paragraphs, a camera-facing billboard, a lazy Greek glyph line, and a live status readout.
+/// A world-space text wall showing faces, sizes, alignments, wrapping, Latin and Cyrillic scripts,
+/// billboards, and lazy glyph generation.
 /// </summary>
 /// <remarks>
-/// The scene is one vertical text wall at the world origin. Text is drawn in the transform's local XY
-/// plane with its readable face toward local +Z, so an identity rotation on the wall faces the
-/// starting camera at +Z. The medium and small paragraph copies use a rotation each, and the billboard
-/// is the only label that follows the orbiting camera. All text shares the built-in MSDF program and
-/// render state, so the whole scene batches into one text draw regardless of face, size, or string.
+/// Text draws in the transform's local XY plane facing local +Z and batches into one MSDF text
+/// draw. Drag to orbit and the wheel zooms.
 /// </remarks>
 internal sealed class TextGame : IGame
 {
@@ -100,10 +96,7 @@ internal sealed class TextGame : IGame
     private int _frameCount;
     private int _lazyGlyphCount;
 
-    /// <summary>
-    /// Creates the scene and starts the camera square to the text wall.
-    /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
+    /// <summary>Creates the scene and starts the camera square to the text wall.</summary>
     internal TextGame(int frameLimit)
     {
         _frameLimit = frameLimit;

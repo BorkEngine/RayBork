@@ -7,8 +7,7 @@ namespace RayBork.Internal;
 /// The status of a swapchain image acquisition or presentation.
 /// </summary>
 /// <remarks>
-/// Out-of-date, surface-lost, and suboptimal results are normal presentation statuses, not failures.
-/// The caller recreates the presentation path, the surface, or both instead of unwinding.
+/// Out-of-date, surface-lost, and suboptimal are normal statuses, not failures.
 /// </remarks>
 internal enum SwapchainResult
 {
@@ -21,7 +20,7 @@ internal enum SwapchainResult
     /// <summary>The swapchain still works but the surface changed; recreate it soon.</summary>
     Suboptimal,
 
-    /// <summary>The surface is no longer usable and must be recreated through the platform.</summary>
+    /// <summary>The surface is gone and must be recreated through the platform.</summary>
     SurfaceLost,
 }
 
@@ -29,17 +28,8 @@ internal enum SwapchainResult
 /// The Vulkan swapchain, its images, and its image views owned by the render thread.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A swapchain instance is created once and then recreated in place on resize, HDR, or surface
-/// changes. <see cref="Recreate"/> passes the old handle to <c>vkCreateSwapchainKHR</c> so the driver
-/// can reuse the surface association, then destroys the old image views and handle. The caller must
-/// wait for the device to idle before recreating or disposing.
-/// </para>
-/// <para>
-/// Every member is render-thread only. Acquire and present map the out-of-date, surface-lost, and
-/// suboptimal results to <see cref="SwapchainResult"/>; every other result is fatal and becomes a
-/// <see cref="GraphicsException"/>.
-/// </para>
+/// Recreate and dispose require an idle device; unexpected results throw, while out-of-date,
+/// surface-lost, and suboptimal map to <see cref="SwapchainResult"/>.
 /// </remarks>
 internal sealed unsafe class VulkanSwapchain : IDisposable
 {
@@ -63,55 +53,27 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         _device = device;
     }
 
-    /// <summary>
-    /// Gets the Vulkan format of the swapchain images.
-    /// </summary>
+    /// <summary>Gets the Vulkan format of the swapchain images.</summary>
     internal Format Format => _format;
 
-    /// <summary>
-    /// Gets the current image extent.
-    /// </summary>
+    /// <summary>Gets the current image extent.</summary>
     internal Extent2D Extent => _extent;
 
-    /// <summary>
-    /// Gets the number of images the swapchain owns.
-    /// </summary>
+    /// <summary>Gets the number of images the swapchain owns.</summary>
     internal int ImageCount => _images.Length;
 
-    /// <summary>
-    /// Gets the image views used as present-pass color attachments, in image index order.
-    /// </summary>
+    /// <summary>Gets the present-pass color attachment views, in image index order.</summary>
     internal IReadOnlyList<ImageView> ImageViews => _imageViews;
 
-    /// <summary>
-    /// Gets whether the swapchain images were created with transfer-source usage, so a diagnostic
-    /// presented-pixel readback is possible. The frame path never reads images back.
-    /// </summary>
+    /// <summary>Gets whether diagnostic presented-pixel readback is supported.</summary>
     internal bool SupportsPresentReadback { get; private set; }
 
-    /// <summary>
-    /// Gets the swapchain images, in image index order.
-    /// </summary>
-    /// <remarks>
-    /// Diagnostics only: <see cref="VulkanReadback.ReadPresentedColorPixel"/> uses this to probe the
-    /// image a submitted frame rendered. The renderer reaches the images through
-    /// <see cref="ImageViews"/> and the present pipeline's framebuffers.
-    /// </remarks>
+    /// <summary>Gets the swapchain images, in image index order; diagnostics only.</summary>
     internal IReadOnlyList<Image> Images => _images;
 
     /// <summary>
-    /// Creates a swapchain and its image views.
+    /// Creates a swapchain and its image views for a non-zero image count and extent.
     /// </summary>
-    /// <param name="device">The device that owns the swapchain.</param>
-    /// <param name="surface">The window surface the swapchain targets.</param>
-    /// <param name="format">The selected surface format and color space.</param>
-    /// <param name="presentMode">The selected present mode.</param>
-    /// <param name="imageCount">The number of images to request.</param>
-    /// <param name="extent">The positive image extent.</param>
-    /// <returns>The created swapchain.</returns>
-    /// <exception cref="GraphicsException">
-    /// The swapchain or an image view could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static VulkanSwapchain Create(
         VulkanDevice device,
         SurfaceKHR surface,
@@ -147,19 +109,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     /// <summary>
     /// Recreates the swapchain in place, reusing the surface association of the old swapchain.
     /// </summary>
-    /// <remarks>
-    /// The caller must wait for the device to idle before calling this method. On failure the old
-    /// swapchain remains intact and the exception propagates.
-    /// </remarks>
-    /// <param name="device">The device that owns the swapchain.</param>
-    /// <param name="surface">The window surface the swapchain targets.</param>
-    /// <param name="format">The selected surface format and color space.</param>
-    /// <param name="presentMode">The selected present mode.</param>
-    /// <param name="imageCount">The number of images to request.</param>
-    /// <param name="extent">The positive image extent.</param>
-    /// <exception cref="GraphicsException">
-    /// The swapchain or an image view could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <remarks>Requires an idle device; on failure the old swapchain stays intact.</remarks>
     internal void Recreate(
         VulkanDevice device,
         SurfaceKHR surface,
@@ -192,16 +142,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     }
 
     /// <summary>
-    /// Acquires the next presentation image.
+    /// Acquires the next presentation image and signals the image-available semaphore.
     /// </summary>
-    /// <param name="frameSlot">The frame slot that owns the image-available semaphore, for diagnostics.</param>
-    /// <param name="imageAvailable">The semaphore the acquire signals when the image is available.</param>
-    /// <param name="imageIndex">The acquired image index.</param>
-    /// <returns>The acquisition status.</returns>
-    /// <exception cref="GraphicsException">
-    /// The acquire failed with a result that is not a presentation status. The diagnostic code is
-    /// <c>RB3003</c>.
-    /// </exception>
     internal SwapchainResult Acquire(uint frameSlot, Semaphore imageAvailable, out uint imageIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -227,17 +169,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         };
     }
 
-    /// <summary>
-    /// Queues a presentation of an acquired image.
-    /// </summary>
-    /// <param name="queue">The presentation queue.</param>
-    /// <param name="renderFinished">The semaphore that signals when rendering the image finished.</param>
-    /// <param name="imageIndex">The acquired image index.</param>
-    /// <returns>The presentation status.</returns>
-    /// <exception cref="GraphicsException">
-    /// The present failed with a result that is not a presentation status. The diagnostic code is
-    /// <c>RB3003</c>.
-    /// </exception>
+    /// <summary>Queues a presentation of an acquired image.</summary>
     internal SwapchainResult Present(Queue queue, Semaphore renderFinished, uint imageIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -266,9 +198,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         };
     }
 
-    /// <summary>
-    /// Destroys the image views and the swapchain. The call is idempotent.
-    /// </summary>
+    /// <summary>Destroys the image views and the swapchain; the call is idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)

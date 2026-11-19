@@ -7,14 +7,12 @@ namespace RayBork.Internal;
 /// mesh upload and CPU geometry.
 /// </summary>
 /// <remarks>
-/// The format is stateless, so one shared instance serves every mesh load on the loader thread. It
-/// mirrors the bake layout exactly and never parses a source model format.
+/// The format is stateless and runs on the loader thread. It mirrors the bake layout and never
+/// parses a source model format.
 /// </remarks>
 internal sealed class MeshAssetFormat : IEngineAssetFormat<Mesh>
 {
-    /// <summary>
-    /// The shared format instance.
-    /// </summary>
+    /// <summary>The shared format instance.</summary>
     internal static readonly MeshAssetFormat Instance = new();
 
     private MeshAssetFormat() { }

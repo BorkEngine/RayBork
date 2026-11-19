@@ -1,29 +1,16 @@
 namespace RayBork;
 
-/// <summary>
-/// Thrown when a game callback throws. The <see cref="Exception.InnerException"/> is the game's
-/// exception.
-/// </summary>
+/// <summary>Thrown when a game callback throws; the inner exception is the game's.</summary>
 public sealed class GameException : RayBorkException
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GameException"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="GameException"/>.</summary>
     public GameException() { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GameException"/> class with a message.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
+    /// <summary>Initializes a new instance of <see cref="GameException"/>.</summary>
     public GameException(string message)
         : base(message) { }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GameException"/> class with a message and an inner
-    /// exception.
-    /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="innerException">The exception that caused this exception.</param>
+    /// <summary>Initializes a new instance of <see cref="GameException"/>.</summary>
     public GameException(string message, Exception? innerException)
         : base(message, innerException) { }
 

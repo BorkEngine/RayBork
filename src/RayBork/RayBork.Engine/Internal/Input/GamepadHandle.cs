@@ -1,14 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The subset of the platform used by <see cref="GamepadHandle"/> to queue rumble. Implemented by
-/// the platform so handles created on the tick thread never call SDL directly.
-/// </summary>
+/// <summary>The platform subset used by gamepad handles to queue rumble.</summary>
 internal interface IGamepadVibrationSink
 {
-    /// <summary>
-    /// Queues a vibration request for the stable device instance id.
-    /// </summary>
+    /// <summary>Queues a vibration request for the stable device instance id.</summary>
     void SetGamepadVibration(
         int instanceId,
         float lowFrequency,
@@ -16,15 +11,11 @@ internal interface IGamepadVibrationSink
         TimeSpan duration
     );
 
-    /// <summary>
-    /// Queues a stop request for the stable device instance id.
-    /// </summary>
+    /// <summary>Queues a stop request for the stable device instance id.</summary>
     void StopGamepadVibration(int instanceId);
 }
 
-/// <summary>
-/// The immutable per-tick state of one gamepad, captured from the main-thread raw state.
-/// </summary>
+/// <summary>The immutable per-tick state of one gamepad.</summary>
 internal sealed class GamepadSnapshot
 {
     private readonly bool[] _buttons;
@@ -64,10 +55,8 @@ internal sealed class GamepadSnapshot
     internal float GetTrigger(GamepadTrigger trigger) => _axes[InputMappings.TriggerSlot(trigger)];
 }
 
-/// <summary>
-/// A stable game-facing gamepad object for one SDL3 instance id. The tick thread updates it during
-/// <see cref="InputState.Capture"/>; game code reads it on the tick thread only.
-/// </summary>
+/// <summary>A stable game-facing handle for one SDL3 gamepad instance id.</summary>
+/// <remarks>Updated by <see cref="InputState.Capture"/>; read on the tick thread only.</remarks>
 internal sealed class GamepadHandle : IGamepad
 {
     private readonly IGamepadVibrationSink _vibrationSink;
@@ -85,9 +74,7 @@ internal sealed class GamepadHandle : IGamepad
         _vibrationSink = vibrationSink;
     }
 
-    /// <summary>
-    /// Gets the SDL3 instance id. The public contract exposes the same bits as a signed integer.
-    /// </summary>
+    /// <summary>Gets the SDL3 instance id; the public value is the same bits signed.</summary>
     internal uint SdlInstanceId { get; }
 
     /// <inheritdoc />
@@ -174,9 +161,7 @@ internal sealed class GamepadHandle : IGamepad
         _vibrationSink.StopGamepadVibration(InstanceId);
     }
 
-    /// <summary>
-    /// Publishes the state captured for the current tick and marks the pad connected.
-    /// </summary>
+    /// <summary>Publishes the current tick's state and marks the pad connected.</summary>
     internal void Update(int index, GamepadSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -186,9 +171,7 @@ internal sealed class GamepadHandle : IGamepad
         _connected = true;
     }
 
-    /// <summary>
-    /// Marks the pad disconnected so stale levels and edges read as up.
-    /// </summary>
+    /// <summary>Marks the pad disconnected so stale state reads as up.</summary>
     internal void MarkDisconnected()
     {
         _snapshot = null;

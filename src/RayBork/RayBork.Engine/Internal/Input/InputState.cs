@@ -4,14 +4,11 @@ using System.Text;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Owns the raw input state written by the main-thread SDL event pump and read by the tick thread.
+/// Owns the raw input state that the main thread writes and the tick thread snapshots.
 /// </summary>
 /// <remarks>
-/// Every mutation and <see cref="Capture"/> is guarded by a <see cref="Lock"/>. The main thread
-/// applies events through the <c>Handle</c>, <c>Append</c>, <c>Connect</c>, and <c>Disconnect</c>
-/// methods while the tick thread calls <see cref="Capture"/>. Events that arrive while a capture is
-/// running apply to the next snapshot. Levels are retained between ticks; the per-tick edge sets,
-/// text buffer, mouse delta, and wheel accumulation are cleared by the capture.
+/// One lock guards every mutation and <see cref="Capture"/>, so an event applies to exactly one
+/// snapshot. Levels persist across ticks; edges, text, mouse delta, and wheel are per tick.
 /// </remarks>
 internal sealed class InputState
 {
@@ -39,10 +36,7 @@ internal sealed class InputState
         _vibrationSink = vibrationSink;
     }
 
-    /// <summary>
-    /// Applies a key-down event. A non-repeat event on a key that was up produces a press edge; a
-    /// repeat event only produces a repeat edge.
-    /// </summary>
+    /// <summary>Applies a key-down event, recording a press or repeat edge.</summary>
     internal void HandleKeyDown(Key key, bool repeat)
     {
         InputMappings.ValidateKey(key);
@@ -62,9 +56,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Applies a key-up event. The release edge is reported only when the key was down.
-    /// </summary>
+    /// <summary>Applies a key-up event; a release edge needs the key to be down.</summary>
     internal void HandleKeyUp(Key key)
     {
         InputMappings.ValidateKey(key);
@@ -79,9 +71,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Appends event-order UTF-16 text to the current tick buffer.
-    /// </summary>
+    /// <summary>Appends event-order UTF-16 text to the current tick buffer.</summary>
     internal void AppendText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -97,9 +87,7 @@ internal sealed class InputState
     }
 
     /// <summary>
-    /// Applies an SDL3 mouse-motion event whose values are already scaled to render pixels. The
-    /// position replaces the absolute mouse position and the delta accumulates relative motion for the
-    /// tick.
+    /// Applies mouse motion in render pixels, replacing the position and accumulating the delta.
     /// </summary>
     internal void HandleMouseMotion(float x, float y, float deltaX, float deltaY)
     {
@@ -110,9 +98,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Applies a mouse-button transition.
-    /// </summary>
+    /// <summary>Applies a mouse-button transition.</summary>
     internal void HandleMouseButton(MouseButton button, bool down)
     {
         InputMappings.ValidateMouseButton(button);
@@ -135,9 +121,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Adds the vertical wheel delta for the tick.
-    /// </summary>
+    /// <summary>Adds the vertical wheel delta for the tick.</summary>
     internal void HandleMouseWheel(float delta)
     {
         lock (_gate)
@@ -146,10 +130,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Clears keyboard and mouse levels and every pending edge, as required when the window loses
-    /// focus. Text, delta, and wheel values that already belong to the current tick are kept.
-    /// </summary>
+    /// <summary>Clears keyboard and mouse levels and edges, as on focus loss.</summary>
     internal void ResetLevels()
     {
         lock (_gate)
@@ -164,10 +145,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Registers a connected gamepad and seeds its levels from the initial poll. The initial poll
-    /// produces no pressed edges.
-    /// </summary>
+    /// <summary>Registers a connected gamepad and seeds its levels without pressed edges.</summary>
     internal void ConnectGamepad(
         uint instanceId,
         string name,
@@ -219,10 +197,8 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Removes a disconnected gamepad from the connected order. Handles for the instance id stay
-    /// alive and report <see cref="IGamepad.IsConnected"/> as false after the next capture.
-    /// </summary>
+    /// <summary>Removes a disconnected gamepad from the connected order.</summary>
+    /// <remarks>Handles stay alive and report disconnected after the next capture.</remarks>
     internal void DisconnectGamepad(uint instanceId)
     {
         lock (_gate)
@@ -235,8 +211,7 @@ internal sealed class InputState
     }
 
     /// <summary>
-    /// Applies a gamepad button transition for a connected device. Events for unknown devices are
-    /// ignored; the platform reconciles hotplug at tick boundaries.
+    /// Applies a gamepad button transition for a connected device; unknown devices are ignored.
     /// </summary>
     internal void HandleGamepadButton(uint instanceId, GamepadButton button, bool down)
     {
@@ -250,9 +225,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Applies a normalized stick axis value in the range <c>[-1, 1]</c>.
-    /// </summary>
+    /// <summary>Applies a normalized stick axis value in <c>[-1, 1]</c>.</summary>
     internal void HandleGamepadStickAxis(uint instanceId, GamepadAxis axis, float value)
     {
         InputMappings.ValidateGamepadAxis(axis);
@@ -266,9 +239,7 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Applies a normalized trigger value in the range <c>[0, 1]</c>.
-    /// </summary>
+    /// <summary>Applies a normalized trigger value in <c>[0, 1]</c>.</summary>
     internal void HandleGamepadTrigger(uint instanceId, GamepadTrigger trigger, float value)
     {
         InputMappings.ValidateGamepadTrigger(trigger);
@@ -285,10 +256,8 @@ internal sealed class InputState
         }
     }
 
-    /// <summary>
-    /// Captures the next tick snapshot on the tick thread. The copy and the clears happen under one
-    /// lock, so an event either belongs to this snapshot or to the next one.
-    /// </summary>
+    /// <summary>Captures the next tick snapshot on the tick thread.</summary>
+    /// <remarks>Copy and clears share a lock, so an event belongs to one snapshot.</remarks>
     internal InputSnapshot Capture()
     {
         bool[] keyDown;

@@ -2,9 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The kind of a queued window command. Commands of the same setter kind coalesce in place.
-/// </summary>
+/// <summary>The kind of a queued window command; same-kind setters coalesce in place.</summary>
 internal enum WindowCommandKind
 {
     SetTitle,
@@ -25,10 +23,7 @@ internal enum WindowCommandKind
     Close,
 }
 
-/// <summary>
-/// A queued main-thread window command. Setters coalesce with the last pending command of the same
-/// kind; actions keep their queue order.
-/// </summary>
+/// <summary>A queued window command; setters coalesce, actions keep queue order.</summary>
 internal abstract record WindowCommand
 {
     internal WindowCommandKind Kind =>
@@ -107,11 +102,8 @@ internal sealed record ReadClipboardCommand : WindowCommand;
 
 internal sealed record CloseCommand : WindowCommand;
 
-/// <summary>
-/// Thread-safe queue for the Any-thread <see cref="IWindow"/> setters. Validation happens on the
-/// calling thread before a command enters the queue; the main thread drains the queue in
-/// <see cref="SdlWindow.ApplyPendingCommands"/>.
-/// </summary>
+/// <summary>Thread-safe queue drained by <see cref="SdlWindow.ApplyPendingCommands"/>.</summary>
+/// <remarks>Validation runs on the calling thread before a command enters the queue.</remarks>
 internal sealed class WindowCommandQueue
 {
     private readonly Lock _gate = new();
@@ -265,9 +257,7 @@ internal sealed class WindowCommandQueue
 
     internal void EnqueueClose() => Enqueue(new CloseCommand());
 
-    /// <summary>
-    /// Takes the oldest pending command for application on the main thread.
-    /// </summary>
+    /// <summary>Takes the oldest pending command for main-thread application.</summary>
     internal bool TryTake(out WindowCommand command)
     {
         lock (_gate)
@@ -284,9 +274,7 @@ internal sealed class WindowCommandQueue
         }
     }
 
-    /// <summary>
-    /// Gets a read-only snapshot of the pending commands. Intended for diagnostics and tests.
-    /// </summary>
+    /// <summary>Gets a read-only snapshot of pending commands for diagnostics and tests.</summary>
     internal IReadOnlyList<WindowCommand> PendingCommands
     {
         get

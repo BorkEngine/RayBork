@@ -6,20 +6,10 @@ namespace RayBork.Internal;
 /// The set of engine-asset holds owned by one frame slot.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A frame slot stores at most one retention set. Recording a draw calls <see cref="Add"/>; the frame
-/// ring calls <see cref="Release"/> once when the frame is released, superseded, or abandoned. The
-/// set is thread-safe because the tick thread adds while the render thread may release the previous
-/// frame's set concurrently.
-/// </para>
-/// <para>
-/// <see cref="Add"/> is idempotent per target for the lifetime of the set: a target that is added
-/// twice receives one <see cref="IAssetRetentionTarget.AddFrameHold"/> call and exactly one matching
-/// release. Identity is reference identity, not the target's own equality. Adding after
-/// <see cref="Release"/> is ignored, so a late add cannot leak a hold. <see cref="Release"/> is
-/// idempotent and calls every target outside the set's lock, because a release may queue GPU
-/// destruction through the <see cref="GpuAssetBridge"/>.
-/// </para>
+/// The tick thread adds while the render thread may release the previous frame's set, so the
+/// set is thread-safe; holds are idempotent per target by reference identity, and a late add is
+/// ignored. Targets are released outside the lock because a release may queue GPU destruction
+/// through the <see cref="GpuAssetBridge"/>.
 /// </remarks>
 internal sealed class FrameAssetRetention
 {
@@ -28,9 +18,7 @@ internal sealed class FrameAssetRetention
 
     private bool _released;
 
-    /// <summary>
-    /// Gets the number of distinct targets currently held by the set.
-    /// </summary>
+    /// <summary>Gets the number of distinct targets currently held.</summary>
     internal int Count
     {
         get
@@ -42,9 +30,7 @@ internal sealed class FrameAssetRetention
         }
     }
 
-    /// <summary>
-    /// Gets whether <see cref="Release"/> already ran.
-    /// </summary>
+    /// <summary>Gets whether <see cref="Release"/> already ran.</summary>
     internal bool IsReleased
     {
         get
@@ -56,12 +42,8 @@ internal sealed class FrameAssetRetention
         }
     }
 
-    /// <summary>
-    /// Adds one frame hold for <paramref name="target"/>, or does nothing when the target is already
-    /// held or the set was already released.
-    /// </summary>
+    /// <summary>Adds one frame hold; a held or already released set is unchanged.</summary>
     /// <param name="target">The asset to retain for this frame.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
     internal void Add(IAssetRetentionTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -77,13 +59,10 @@ internal sealed class FrameAssetRetention
         }
     }
 
-    /// <summary>
-    /// Releases every hold exactly once. Repeated calls are no-ops.
-    /// </summary>
+    /// <summary>Releases every hold exactly once; repeated calls are no-ops.</summary>
     /// <remarks>
-    /// The target list is detached under the lock and released outside it, so a target that queues GPU
-    /// destruction from <see cref="IAssetRetentionTarget.ReleaseFrameHold"/> cannot deadlock with a
-    /// concurrent <see cref="Add"/>.
+    /// Targets are detached under the lock and released outside it, so a release that queues GPU
+    /// destruction cannot deadlock with a concurrent <see cref="Add"/>.
     /// </remarks>
     internal void Release()
     {
@@ -106,10 +85,7 @@ internal sealed class FrameAssetRetention
         }
     }
 
-    /// <summary>
-    /// Compares retention targets by reference so an asset type that overrides equality cannot merge
-    /// two distinct live objects into one hold.
-    /// </summary>
+    /// <summary>Compares targets by reference, ignoring overridden equality.</summary>
     private sealed class ReferenceComparer : IEqualityComparer<IAssetRetentionTarget>
     {
         internal static readonly ReferenceComparer Instance = new();

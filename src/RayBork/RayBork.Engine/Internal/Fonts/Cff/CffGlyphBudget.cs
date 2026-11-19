@@ -1,12 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The defensive counters shared by all charstring interpretations of one glyph resolution.
-/// </summary>
+/// <summary>The defensive counters shared by one glyph's charstring interpretations.</summary>
 /// <remarks>
-/// A glyph and its <c>seac</c> components share one budget, so component charstrings cannot multiply
-/// the per-glyph point or contour limits. The counters are checked before the outline grows, and the
-/// budget is mutable and single-resolution only; it is not shared across threads.
+/// A glyph and its <c>seac</c> components share one budget, so components cannot multiply the
+/// per-glyph point or contour limits. The counters are mutable and single-resolution only.
 /// </remarks>
 internal sealed class CffGlyphBudget
 {

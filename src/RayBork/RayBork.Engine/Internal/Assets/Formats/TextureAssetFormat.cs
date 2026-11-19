@@ -7,14 +7,12 @@ namespace RayBork.Internal;
 /// builds the texture upload.
 /// </summary>
 /// <remarks>
-/// The format is stateless, so one shared instance serves every texture load on the loader thread. The
-/// payload is a complete KTX2 2.0 file; the runtime never parses a source image format.
+/// The format is stateless and runs on the loader thread. The payload is a complete KTX2 2.0 file; no
+/// source image format is parsed.
 /// </remarks>
 internal sealed class TextureAssetFormat : IEngineAssetFormat<Texture>
 {
-    /// <summary>
-    /// The shared format instance.
-    /// </summary>
+    /// <summary>The shared format instance.</summary>
     internal static readonly TextureAssetFormat Instance = new();
 
     private TextureAssetFormat() { }

@@ -6,22 +6,10 @@ namespace RayBork.Internal;
 /// Parses and validates the narrow KTX2 2.0 profile the bake writes for packed texture assets.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The accepted profile is one 2D image with <c>pixelDepth = 0</c>, <c>layerCount = 0</c> (one
-/// layer), <c>faceCount = 1</c>, no key/value or supercompression-global-data section, no
-/// supercompression, and a complete mip chain with the base level first in the level index. The file
-/// layout is the specification order: identifier, 80-byte header, level index, data format
-/// descriptor, then the level data.
-/// </para>
-/// <para>
-/// The header's <c>vkFormat</c>, base dimensions, and level count must match the descriptor; every
-/// level must have the stored byte length the format requires, must not overlap the header, level
-/// index, or data format descriptor, and must start on an <c>lcm(texelBlockSize, 4)</c> boundary. The
-/// data format descriptor must be the single basic block of the format's color model, with the linear
-/// or sRGB transfer function the descriptor selects. A malformed, mismatched, or
-/// Basis/UASTC-supercompressed payload is an <see cref="AssetLoadException"/> with the <c>RB1008</c>
-/// diagnostic code; the reader never decompresses, transcodes, or partially accepts a payload.
-/// </para>
+/// Accepts one 2D image, one layer, one face, no key/value or supercompression data, and a complete
+/// mip chain. The layout is identifier, 80-byte header, level index, data format descriptor, then
+/// level data; the header, levels, and descriptor must match the descriptor or fail with
+/// <c>RB1008</c>.
 /// </remarks>
 internal static class Ktx2Reader
 {
@@ -72,17 +60,10 @@ internal static class Ktx2Reader
         0x0A,
     ];
 
-    /// <summary>
-    /// Parses and validates one packed KTX2 payload against its descriptor.
-    /// </summary>
-    /// <param name="payload">The complete KTX2 2.0 file bytes.</param>
-    /// <param name="descriptor">The descriptor whose format, dimensions, and mip count must match.</param>
+    /// <summary>Parses and validates one packed KTX2 payload against its descriptor.</summary>
     /// <returns>The parsed texture with its level index entries.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="descriptor"/> is <c>null</c>.</exception>
     /// <exception cref="AssetLoadException">
-    /// The payload is not the narrow KTX2 profile, a header field or level length does not match the
-    /// descriptor, or the data format descriptor is malformed or uses the wrong transfer function.
-    /// The diagnostic code is <c>RB1008</c>.
+    /// The payload is invalid or mismatched (<c>RB1008</c>).
     /// </exception>
     internal static Ktx2Texture Read(ReadOnlySpan<byte> payload, TextureAssetDescriptor descriptor)
     {
@@ -278,9 +259,7 @@ internal static class Ktx2Reader
         return new Ktx2Texture(descriptor.Format, descriptor.IsSrgb, width, height, levels);
     }
 
-    /// <summary>
-    /// Validates the data format descriptor location in the header and returns its absolute offset.
-    /// </summary>
+    /// <summary>Validates the data format descriptor location and returns its offset.</summary>
     private static int ReadDfd(
         ReadOnlySpan<byte> payload,
         TextureAssetDescriptor descriptor,
@@ -312,9 +291,7 @@ internal static class Ktx2Reader
         return (int)dfdByteOffset;
     }
 
-    /// <summary>
-    /// Validates the single basic data format descriptor block of the payload.
-    /// </summary>
+    /// <summary>Validates the single basic data format descriptor block.</summary>
     private static void ValidateDfd(
         ReadOnlySpan<byte> payload,
         TextureAssetDescriptor descriptor,

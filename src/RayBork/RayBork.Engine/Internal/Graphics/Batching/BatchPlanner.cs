@@ -2,49 +2,22 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Builds deterministic per-pass batch plans from a sealed <see cref="RenderFramePacket"/>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The batch key is
-/// <c>(pass, mesh, internal shader program, effective render state, topology, wireframe)</c>.
-/// Uniform values and texture bindings are per-instance material data and never split a batch, so two
-/// materials over the same program always batch together. The wireframe flag is part of the key
-/// because it selects a different geometry pipeline for the same mesh, program, and render state.
-/// Within one camera pass every
-/// instance is frustum-culled against the pass view-projection using the mesh-space bounds transformed
-/// to a world-space AABB; a draw whose record was recorded with a model part transform already carries
-/// the combined world matrix, so the same test covers every draw kind.
-/// </para>
-/// <para>
-/// Submission order is stable. Opaque batches keep the order in which their first instance was
-/// recorded. Alpha, additive, and multiply batches are ordered back-to-front by their nearest instance
-/// depth, and the instances inside them are sorted back-to-front; equal depths keep their recording
-/// order. A pass never reorders into another pass, so cameras stay sequential. A batch that exceeds
+/// <summary>Builds deterministic per-pass batch plans from a sealed
+/// <see cref="RenderFramePacket"/>.</summary>
+/// <remarks>Batches key on mesh, program, render state, topology, and wireframe; opaque order is stable
+/// while transparent batches sort back-to-front. Splits at
 /// <see cref="BatchPlanningOptions.MaxInstancesPerBatch"/> or
-/// <see cref="BatchPlanningOptions.MaxInstanceBytesPerBatch"/> is split into several batches that
-/// preserve the instance order and count as separate draw calls.
-/// </para>
-/// <para>
-/// The planner allocates per-frame lists; it does not allocate or box per instance. The plan references
-/// the packet's pooled records, so it is valid only while the render thread holds the frame slot.
-/// </para>
-/// </remarks>
+/// <see cref="BatchPlanningOptions.MaxInstanceBytesPerBatch"/> preserve instance order.</remarks>
 internal sealed class BatchPlanner
 {
     private readonly BatchPlanningOptions _options;
 
-    /// <summary>
-    /// Initializes a planner with the default split limits.
-    /// </summary>
+    /// <summary>Initializes a planner with the default split limits.</summary>
     internal BatchPlanner()
         : this(BatchPlanningOptions.Default) { }
 
-    /// <summary>
-    /// Initializes a planner with custom split limits.
-    /// </summary>
-    /// <param name="options">The split limits. The planner keeps the instance.</param>
+    /// <summary>Initializes a planner with custom split limits.</summary>
+    /// <param name="options">The split limits; the planner keeps the instance.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
     internal BatchPlanner(BatchPlanningOptions options)
     {
@@ -55,9 +28,7 @@ internal sealed class BatchPlanner
     /// <summary>Gets the split limits used by the planner.</summary>
     internal BatchPlanningOptions Options => _options;
 
-    /// <summary>
-    /// Plans one sealed frame.
-    /// </summary>
+    /// <summary>Plans one sealed frame.</summary>
     /// <param name="frame">The sealed frame packet.</param>
     /// <returns>The per-pass plans and submission statistics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <c>null</c>.</exception>

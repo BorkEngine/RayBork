@@ -5,16 +5,11 @@ using Silk.NET.Vulkan;
 namespace RayBork.Tests;
 
 /// <summary>
-/// GPU tests for the M4 Vulkan draw path: bindless textures, instanced batches, the shader ABI frame
-/// and instance blocks, reverse-Z depth, pipeline recreation, and frame-safe bindless slot release.
+/// GPU tests for the Vulkan draw path: bindless textures, instancing, shader ABI, and depth.
 /// </summary>
 /// <remarks>
-/// Every test uploads real meshes, textures, and shaders through the production GPU asset worker,
-/// builds sealed <see cref="RenderFramePacket"/> values with the internal packet recording API, and
-/// submits them through <see cref="Vulkan12Backend"/>. Assertions use validation-layer cleanliness,
-/// render statistics, and single-pixel readback with explicit tolerances; there are no golden images
-/// and no sleeps. GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the
-/// process-global SDL and Vulkan loader setup.
+/// Tests submit sealed packets through <see cref="Vulkan12Backend"/>; <see cref="SdlPlatform"/>
+/// serializes the process-global SDL and Vulkan loader setup.
 /// </remarks>
 public sealed class VulkanDrawTests
 {

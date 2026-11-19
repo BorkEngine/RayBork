@@ -6,11 +6,6 @@ namespace RayBork.Bake.Baking;
 internal sealed class BakedEntry
 {
     /// <summary>Initializes a baked entry.</summary>
-    /// <param name="path">The canonical asset path.</param>
-    /// <param name="type">The pack entry type.</param>
-    /// <param name="payload">The uncompressed payload bytes.</param>
-    /// <param name="alignment">The required payload alignment.</param>
-    /// <param name="sourceId">The producing source identifier.</param>
     internal BakedEntry(
         string path,
         AssetEntryType type,
@@ -57,9 +52,7 @@ internal static class BakeEntryTypes
         [typeof(FontAssetDescriptor)] = AssetEntryType.Font,
     };
 
-    /// <summary>Maps an engine descriptor type to its pack type; every other shapeable type is data.</summary>
-    /// <param name="shapeType">The shaped output's CLR type.</param>
-    /// <returns>The pack entry type.</returns>
+    /// <summary>Maps engine descriptors to pack types; all other shapeables are data.</summary>
     internal static AssetEntryType FromShapeType(Type shapeType)
     {
         ArgumentNullException.ThrowIfNull(shapeType);
@@ -69,8 +62,6 @@ internal static class BakeEntryTypes
             : AssetEntryType.Data;
     }
 
-    /// <summary>Gets whether an alignment is one the RAYBORKP v1 writer accepts.</summary>
-    /// <param name="alignment">The alignment.</param>
-    /// <returns><see langword="true"/> for 1, 16, 64, or 256.</returns>
+    /// <summary>Gets whether an alignment is 1, 16, 64, or 256.</summary>
     internal static bool IsValidAlignment(uint alignment) => alignment is 1 or 16 or 64 or 256;
 }

@@ -2,18 +2,11 @@ using System.Numerics;
 
 namespace RayBork.Bake.Models;
 
-/// <summary>
-/// Applies the sidecar's scale and front-axis correction to source geometry, and flattens a node
-/// transform that cannot be represented as TRS.
-/// </summary>
+/// <summary>Applies sidecar scale and orientation, and flattens non-TRS transforms.</summary>
 internal static class ModelGeometryTransform
 {
     /// <summary>Applies the uniform scale and orientation correction to every vertex.</summary>
-    /// <param name="mesh">The source mesh; it is not modified.</param>
-    /// <param name="rotation">The correction rotation.</param>
-    /// <param name="scale">The positive uniform scale.</param>
     /// <returns>The corrected mesh.</returns>
-    /// <exception cref="ModelReadException">A corrected position or attribute is not finite.</exception>
     internal static MeshData ApplyAuthoring(MeshData mesh, Quaternion rotation, float scale)
     {
         ArgumentNullException.ThrowIfNull(mesh);
@@ -65,9 +58,7 @@ internal static class ModelGeometryTransform
     }
 
     /// <summary>Tries to represent a transform as position, rotation, and scale floats.</summary>
-    /// <param name="transform">The source-space transform.</param>
-    /// <param name="localTransform">The ten floats when the transform decomposes.</param>
-    /// <returns><see langword="true"/> when the transform is a decomposition-friendly TRS.</returns>
+    /// <returns><see langword="true"/> when the transform decomposes to TRS.</returns>
     internal static bool TryDecompose(Matrix4x4 transform, out float[] localTransform)
     {
         if (
@@ -104,16 +95,10 @@ internal static class ModelGeometryTransform
     }
 
     /// <summary>Gets the ten-float identity transform.</summary>
-    /// <returns>Position zero, identity rotation, and unit scale.</returns>
     internal static float[] IdentityTransform() => [0f, 0f, 0f, 0f, 0f, 0f, 1f, 1f, 1f, 1f];
 
-    /// <summary>
-    /// Flattens a non-TRS node transform into the mesh, leaving an identity part transform.
-    /// </summary>
-    /// <param name="mesh">The corrected mesh; it is not modified.</param>
-    /// <param name="transform">The source-space node-chain transform.</param>
+    /// <summary>Flattens a non-TRS node transform into the mesh.</summary>
     /// <returns>The model-space mesh.</returns>
-    /// <exception cref="ModelReadException">The transform is singular or produces non-finite values.</exception>
     internal static MeshData ApplyToModelSpace(MeshData mesh, Matrix4x4 transform)
     {
         ArgumentNullException.ThrowIfNull(mesh);

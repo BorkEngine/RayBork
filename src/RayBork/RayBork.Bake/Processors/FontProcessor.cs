@@ -3,25 +3,12 @@ using RayBork.Internal;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The built-in font processor: validates the sfnt container and emits a
-/// <see cref="FontAssetDescriptor"/> plus the original face bytes.
-/// </summary>
+/// <summary>The built-in font processor: validates the sfnt face and emits a
+/// <see cref="FontAssetDescriptor"/> plus a <c>-face</c> payload.</summary>
 /// <remarks>
-/// <para>
-/// The optional <c>[font]</c> sidecar supplies the MSDF settings <c>msdf_pixel_size</c>,
-/// <c>msdf_range</c>, and <c>msdf_padding</c>. Their defaults are <c>32</c>, <c>4</c>, and <c>2</c>.
-/// The whole face is packed: there is no preload range and no <c>ranges</c> key, and the runtime
-/// generates glyph textures on demand for any mapped glyph.
-/// </para>
-/// <para>
-/// The container must be a single sfnt face: <c>0x00010000</c> or <c>true</c> for TTF, and
-/// <c>OTTO</c> for OTF with CFF or CFF2 outlines. A TrueType Collection is rejected, and a CFF2 face
-/// is rejected because the runtime resolves TrueType <c>glyf</c> and CFF 1.0 outlines only. Every
-/// table directory record must lie inside the file. The processor mirrors the runtime's MSDF
-/// constraints: the pixel size must be greater than twice the padding. An invalid container, outline
-/// source, or setting is <c>RB4010</c> and emits no outputs.
-/// </para>
+/// The optional <c>[font]</c> sidecar sets <c>msdf_pixel_size</c> (32), <c>msdf_range</c> (4), and
+/// <c>msdf_padding</c> (2); the pixel size must exceed twice the padding. An invalid container,
+/// CFF2 outline, or setting is <c>RB4010</c> and emits no outputs.
 /// </remarks>
 internal sealed class FontProcessor : AssetProcessor<FontSidecar>
 {

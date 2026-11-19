@@ -4,74 +4,32 @@ using System.Text;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Lays out a UTF-16 text block on the CPU from font metrics.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The engine is pure: it never touches the GPU, the asset catalog, a glyph texture, or tick-affine
-/// state, and it is safe to call from any thread. It reads metrics through <see cref="ITextMetrics"/>,
-/// which the runtime <c>Font</c> supplies, so it does not depend on a font parser.
-/// </para>
-/// <para>
-/// Text is decoded with <see cref="Rune"/>; an unpaired surrogate decodes to U+FFFD. <c>'\n'</c>
-/// always starts a new line and <c>'\r'</c> is ignored. Every other mapped rune advances the pen by its
-/// glyph advance; a rune without a glyph produces no record and no advance, and kerning still bridges it
-/// to the next mapped glyph. All metrics are in em units, and the local layout space is in world units
-/// at the requested size with +X to the right and +Y up.
-/// </para>
-/// <para>
-/// The origin is the top-left of the layout box. The first baseline is at <c>-Ascent * size</c> and
-/// line <c>i</c>'s baseline is at <c>-(Ascent + i * LineHeight) * size</c>. The box is
-/// <c>maxWidth</c> wide when that is positive and as wide as the widest line otherwise; alignment
-/// shifts each line inside the box. The block bounds are the union of the box
-/// <c>[0, boxWidth] x [-lineCount * LineHeight * size, 0]</c> and every glyph quad, so the ascent and
-/// line boxes of every line are included. Empty text has no lines and <see cref="Vector2.Zero"/> bounds.
-/// </para>
-/// <para>
-/// <see cref="Arrange"/> allocates nothing once the caller's <see cref="TextLayoutBuffer"/> has grown
-/// enough. The buffer is caller-owned and not thread-safe; the engine itself holds no state.
-/// </para>
-/// <para>
-/// <see cref="TextWrapping.Word"/> breaks only before a whitespace run that follows a word. The run at
-/// the break is dropped and does not indent the next line; leading and trailing whitespace of a
-/// paragraph stays on its line. A word wider than the box overflows on a line of its own.
-/// <see cref="TextWrapping.Character"/> breaks between any two glyphs and never drops a rune, so
-/// whitespace can start a line. Kerning never spans a line break.
-/// </para>
-/// </remarks>
+/// <summary>Lays out a UTF-16 text block on the CPU from font metrics.</summary>
+/// <remarks>Metrics are em units; layout is world units at the requested size, origin top-left, with
+/// baseline <c>i</c> at <c>-(Ascent + i * LineHeight) * size</c>. <c>'\n'</c> breaks lines, <c>'\r'</c>
+/// is ignored, unmapped runes produce no glyph or advance, word wrapping drops the whitespace run at a
+/// break, and character wrapping never drops a rune; kerning never spans a line break.</remarks>
 internal static class TextLayoutEngine
 {
     private const char CARRIAGE_RETURN = '\r';
     private const int NO_GLYPH = int.MinValue;
 
-    /// <summary>
-    /// Lays out one text block and writes its glyph records into <paramref name="buffer"/>.
-    /// </summary>
-    /// <param name="metrics">The font metrics. All values are in em units.</param>
+    /// <summary>Lays out one text block and writes its glyph records into
+    /// <paramref name="buffer"/>.</summary>
+    /// <param name="metrics">The em-unit font metrics.</param>
     /// <param name="text">The UTF-16 text to lay out.</param>
-    /// <param name="size">The em height in world units. It must be finite and positive.</param>
-    /// <param name="alignment">How each line is aligned inside the layout box.</param>
-    /// <param name="wrapping">
-    /// Where lines may break. <see cref="TextWrapping.Word"/> and <see cref="TextWrapping.Character"/>
-    /// require a positive <paramref name="maxWidth"/>.
-    /// </param>
-    /// <param name="maxWidth">
-    /// The layout box width in world units at <paramref name="size"/>, or <c>0</c> for no box limit.
-    /// </param>
-    /// <param name="buffer">The reusable output buffer that receives the glyph records.</param>
-    /// <param name="result">Receives the line count and the block bounds.</param>
-    /// <returns>
-    /// The number of glyph records written, which is also <see cref="TextLayoutBuffer.Count"/>.
-    /// </returns>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="metrics"/> or <paramref name="buffer"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="size"/> is not finite and positive; <paramref name="maxWidth"/> is negative or
-    /// not finite; a wrapping mode requires a positive <paramref name="maxWidth"/>; or an alignment or
-    /// wrapping value is not defined.
-    /// </exception>
+    /// <param name="size">The em height in world units; finite and positive.</param>
+    /// <param name="alignment">The line alignment inside the layout box.</param>
+    /// <param name="wrapping">The line-break mode; word and character need a positive
+    /// <paramref name="maxWidth"/>.</param>
+    /// <param name="maxWidth">The box width in world units, or <c>0</c> for no limit.</param>
+    /// <param name="buffer">The reusable output buffer.</param>
+    /// <param name="result">Receives the line count and block bounds.</param>
+    /// <returns>The glyph-record count, also <see cref="TextLayoutBuffer.Count"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="metrics"/> or <paramref name="buffer"/>
+    /// is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size, width, alignment, or wrapping value is
+    /// invalid.</exception>
     internal static int Arrange(
         ITextMetrics metrics,
         ReadOnlySpan<char> text,
@@ -115,21 +73,14 @@ internal static class TextLayoutEngine
         return glyphCount;
     }
 
-    /// <summary>
-    /// Measures one text block. Measurement ignores wrapping and a width limit and always uses
-    /// <see cref="TextWrapping.None"/>.
-    /// </summary>
-    /// <param name="metrics">The font metrics. All values are in em units.</param>
+    /// <summary>Measures one block without wrapping or a width limit.</summary>
+    /// <param name="metrics">The em-unit font metrics.</param>
     /// <param name="text">The UTF-16 text to measure.</param>
-    /// <param name="size">The em height in world units. It must be finite and positive.</param>
-    /// <returns>
-    /// The widest line advance including kerning and <c>lineCount * LineHeight * size</c>. Empty text
-    /// measures <see cref="Vector2.Zero"/>; every other text has at least one line.
-    /// </returns>
-    /// <exception cref="ArgumentNullException"><paramref name="metrics"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="size"/> is not finite and positive.
-    /// </exception>
+    /// <param name="size">The em height in world units; finite and positive.</param>
+    /// <returns>The widest line advance and <c>lineCount * LineHeight * size</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="metrics"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is invalid.</exception>
     internal static Vector2 Measure(ITextMetrics metrics, ReadOnlySpan<char> text, float size)
     {
         ArgumentNullException.ThrowIfNull(metrics);
@@ -330,14 +281,7 @@ internal static class TextLayoutEngine
         }
     }
 
-    /// <summary>
-    /// Applies the kerning from the previous glyph, returns the pen position the glyph is placed at, and
-    /// advances the pen past the glyph.
-    /// </summary>
-    /// <remarks>
-    /// Measurement, emission, and character wrapping share this step, so the arithmetic that decides a
-    /// line break is exactly the arithmetic that places the glyphs.
-    /// </remarks>
+    /// <summary>Applies kerning, returns the glyph origin, and advances the pen past the glyph.</summary>
     private static float PlaceGlyph(
         ref float pen,
         ITextMetrics metrics,

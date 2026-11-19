@@ -1,20 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Writes a RAYBORKP v1 pack for tooling and tests.
-/// </summary>
+/// <summary>Writes a RAYBORKP v1 pack for tooling and tests.</summary>
 /// <remarks>
-/// <para>
-/// Entries are stored in memory and sorted by ordinal canonical path when the pack is built. The
-/// builder is not thread-safe. Adding entries after a build is allowed; each build recomputes the
-/// stored payloads, so pack bytes are not stable across calls and are not deterministic across
-/// Zstandard versions.
-/// </para>
-/// <para>
-/// The builder validates every path, type, alignment, duplicate, entry-count limit, index-length
-/// limit, and offset before writing. An invalid entry is a programming error and throws an
-/// <see cref="ArgumentException"/>; the reader's corruption diagnostics are separate.
-/// </para>
+/// Entries are sorted by ordinal canonical path at build time and the builder is not thread-safe.
+/// Invalid entries throw <see cref="ArgumentException"/>; pack bytes are not byte-stable.
 /// </remarks>
 internal sealed class PackBuilder
 {
@@ -23,13 +12,7 @@ internal sealed class PackBuilder
     private readonly PackCompressionPolicy _compression;
     private readonly string _displayPath;
 
-    /// <summary>
-    /// Initializes an empty builder.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="compression">The payload compression policy.</param>
-    /// <exception cref="ArgumentException"><paramref name="displayPath"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="compression"/> is not a known policy.</exception>
+    /// <summary>Initializes an empty builder.</summary>
     internal PackBuilder(string displayPath, PackCompressionPolicy compression)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayPath);
@@ -46,14 +29,7 @@ internal sealed class PackBuilder
         _compression = compression;
     }
 
-    /// <summary>
-    /// Initializes a builder with a queue of entries.
-    /// </summary>
-    /// <param name="displayPath">The pack identifier used in diagnostics.</param>
-    /// <param name="compression">The payload compression policy.</param>
-    /// <param name="entries">The entries to add, in any order.</param>
-    /// <exception cref="ArgumentException">An entry is invalid or duplicates an earlier path.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">An entry type or alignment is outside its v1 set.</exception>
+    /// <summary>Initializes a builder with queued entries.</summary>
     internal PackBuilder(
         string displayPath,
         PackCompressionPolicy compression,
@@ -77,20 +53,10 @@ internal sealed class PackBuilder
     /// <summary>Gets the queued entries in insertion order.</summary>
     internal IReadOnlyList<PackSourceEntry> Entries => _entries;
 
-    /// <summary>
-    /// Queues one payload.
-    /// </summary>
-    /// <param name="path">The canonical asset path, without a leading slash.</param>
-    /// <param name="type">The entry asset type.</param>
-    /// <param name="payload">The uncompressed payload bytes; they are copied.</param>
-    /// <param name="alignment">The required payload alignment; one of 1, 16, 64, or 256.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
-    /// <exception cref="ArgumentException">
-    /// The path is not canonical, or the path is already queued.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The type or alignment is outside its v1 set.
-    /// </exception>
+    /// <summary>Queues one payload and copies its bytes.</summary>
+    /// <remarks>
+    /// The path must be canonical without a leading slash; alignment is 1, 16, 64, or 256.
+    /// </remarks>
     internal void Add(
         string path,
         AssetEntryType type,
@@ -105,13 +71,7 @@ internal sealed class PackBuilder
         _entries.Add(new PackSourceEntry(path, type, payload, alignment));
     }
 
-    /// <summary>
-    /// Queues an existing source entry without copying its payload.
-    /// </summary>
-    /// <param name="entry">The entry to queue.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
-    /// <exception cref="ArgumentException">The entry path is invalid or already queued.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The entry type or alignment is outside its v1 set.</exception>
+    /// <summary>Queues an existing source entry without copying its payload.</summary>
     internal void Add(PackSourceEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -121,30 +81,18 @@ internal sealed class PackBuilder
         _entries.Add(entry);
     }
 
-    /// <summary>
-    /// Writes the complete pack to a stream and leaves the stream open.
-    /// </summary>
-    /// <param name="destination">The writable destination stream.</param>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> is not writable.</exception>
-    /// <exception cref="ArgumentException">A queued entry is invalid or the pack exceeds a v1 limit.</exception>
+    /// <summary>Writes the complete pack to a stream and leaves the stream open.</summary>
     internal void WriteTo(Stream destination) =>
         PackLayout.Create(_entries, _compression, _displayPath).WriteTo(destination);
 
-    /// <summary>
-    /// Builds the complete pack in one array.
-    /// </summary>
-    /// <returns>The pack bytes.</returns>
-    /// <exception cref="ArgumentException">A queued entry is invalid or the pack exceeds a v1 limit.</exception>
+    /// <summary>Builds the complete pack in one array.</summary>
     /// <exception cref="InvalidOperationException">The pack is too large for one array.</exception>
     internal byte[] Build() => PackLayout.Create(_entries, _compression, _displayPath).ToArray();
 
-    /// <summary>
-    /// Writes the complete pack to an overwritten file.
-    /// </summary>
-    /// <param name="path">The filesystem path; relative paths resolve against the process directory.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or not a valid path.</exception>
-    /// <exception cref="ArgumentException">A queued entry is invalid or the pack exceeds a v1 limit.</exception>
+    /// <summary>Writes the complete pack to an overwritten file.</summary>
+    /// <param name="path">
+    /// The filesystem path; relative paths resolve against the process directory.
+    /// </param>
     internal void Write(string path)
     {
         ArgumentNullException.ThrowIfNull(path);

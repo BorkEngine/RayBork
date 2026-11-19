@@ -9,23 +9,13 @@ using Silk.NET.Shaderc;
 namespace RayBork.Tests;
 
 /// <summary>
-/// Uploads real meshes, textures, and baked shaders through the GPU asset bridge and submits sealed
-/// draw frames to a <see cref="BackendTestHost"/>, so the M4 GPU draw tests exercise the production
-/// upload, bindless, pipeline, and recording path.
+/// Holds the production GPU upload and draw submission path for one Vulkan draw test.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The shaders are compiled at test time through the bake's own <see cref="ShaderPrologueGenerator"/>
-/// and <see cref="GlslCompiler"/> plus the same entry-point rewrite the bake uses, so the generated
-/// shader ABI is the one production shaders receive. The harness attaches the test thread as the
-/// engine tick thread for its lifetime so the public <see cref="Shader"/> cursor can be used to build
-/// per-draw uniform snapshots and the harness can detach cleanly.
-/// </para>
-/// <para>
-/// The harness owns the asset upload bridge and the public asset wrappers it creates. Disposal waits
-/// for frame idleness, closes the bridge (destroying the live GPU resources), and detaches the tick
-/// thread. It never sleeps and never polls; every upload is completed by the worker on this thread.
-/// </para>
+/// Shaders are compiled through the bake's prologue, compiler, and entry-point rewrite, and the test
+/// thread is attached as the tick thread for the harness lifetime. The harness owns the upload bridge
+/// and every public asset wrapper; disposal waits for frame idleness, closes the bridge, and
+/// detaches the tick thread.
 /// </remarks>
 internal sealed class VulkanDrawTestHarness : IDisposable
 {
@@ -64,10 +54,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
     private BloomAssets? _bloomAssets;
     private bool _disposed;
 
-    /// <summary>
-    /// Creates the harness for an initialized backend host and attaches the test thread as the tick
-    /// thread.
-    /// </summary>
+    /// <summary>Creates the harness for an initialized host and attaches the tick thread.</summary>
     /// <param name="host">The initialized backend host.</param>
     /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
     internal VulkanDrawTestHarness(BackendTestHost host)
@@ -94,12 +81,10 @@ internal sealed class VulkanDrawTestHarness : IDisposable
     /// <summary>Gets the number of cached geometry pipelines.</summary>
     internal int PipelineCount => _host.Backend.GeometryPipelines.Count;
 
-    /// <summary>
-    /// Uploads a solid-color texture through the real GPU asset worker.
-    /// </summary>
+    /// <summary>Uploads a solid-color 1x1 texture through the real GPU asset worker.</summary>
     /// <param name="path">The canonical asset path without a leading slash.</param>
-    /// <param name="color">The linear RGBA color; the channels are clamped to <c>[0, 1]</c>.</param>
-    /// <returns>The public texture wrapper over the uploaded image.</returns>
+    /// <param name="color">The linear RGBA color; channels are clamped to <c>[0, 1]</c>.</param>
+    /// <returns>The public texture wrapper.</returns>
     internal Texture CreateTexture(string path, Color color)
     {
         AssertNotDisposed();
@@ -122,13 +107,11 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return new Texture(CreateAsset(path, resource), descriptor);
     }
 
-    /// <summary>
-    /// Uploads an axis-aligned quad mesh in the fixed 88-byte vertex layout.
-    /// </summary>
+    /// <summary>Uploads an axis-aligned quad mesh in the fixed vertex layout.</summary>
     /// <param name="path">The canonical asset path without a leading slash.</param>
     /// <param name="halfWidth">The half width in mesh space.</param>
     /// <param name="halfHeight">The half height in mesh space.</param>
-    /// <returns>The public mesh wrapper over the uploaded buffers.</returns>
+    /// <returns>The public mesh wrapper.</returns>
     internal Mesh CreateQuad(
         string path = "meshes/quad",
         float halfWidth = 1f,
@@ -147,12 +130,10 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return CreateMesh(path, vertices, indices);
     }
 
-    /// <summary>
-    /// Uploads a cube mesh in the fixed 88-byte vertex layout.
-    /// </summary>
+    /// <summary>Uploads a cube mesh in the fixed vertex layout.</summary>
     /// <param name="path">The canonical asset path without a leading slash.</param>
     /// <param name="halfExtent">The half extent of the cube in mesh space.</param>
-    /// <returns>The public mesh wrapper over the uploaded buffers.</returns>
+    /// <returns>The public mesh wrapper.</returns>
     internal Mesh CreateCube(string path = "meshes/cube", float halfExtent = 0.5f)
     {
         AssertNotDisposed();
@@ -211,16 +192,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Compiles a user vertex/fragment pair through the bake's prologue and shaderc path, uploads the
-    /// two modules, and returns the public shader wrapper.
+    /// Compiles, uploads, and returns a material over a user vertex/fragment pair; the caller disposes it.
     /// </summary>
-    /// <param name="path">The canonical asset path without a leading slash.</param>
-    /// <param name="vertexSource">The user vertex GLSL source.</param>
-    /// <param name="fragmentSource">The user fragment GLSL source.</param>
-    /// <param name="uniforms">The reflected uniforms in declaration order.</param>
-    /// <param name="textures">The texture binding names in declaration order.</param>
-    /// <param name="defaultRenderState">The shader's default render state.</param>
-    /// <returns>The public shader wrapper over the uploaded modules.</returns>
     internal Shader CreateShader(
         string path,
         string vertexSource,
@@ -273,10 +246,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return material;
     }
 
-    /// <summary>
-    /// Creates another material over the same internal program as an existing material. The two
-    /// materials have independent cursors and batch together.
-    /// </summary>
+    /// <summary>Creates a second material over the same program as an existing material.</summary>
     /// <param name="shader">A material whose program is shared.</param>
     /// <returns>The new material; the caller disposes it.</returns>
     internal Shader CreateMaterial(Shader shader)
@@ -286,10 +256,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return shader.Program.CreateMaterial();
     }
 
-    /// <summary>
-    /// Builds an orthographic camera that looks down <c>-Z</c> from <c>(0, 0, 1)</c> and sees a world
-    /// height of <paramref name="height"/>.
-    /// </summary>
+    /// <summary>Creates an orthographic camera at <c>(0, 0, 1)</c> looking down <c>-Z</c>.</summary>
     /// <param name="host">The host that supplies the target extent.</param>
     /// <param name="height">The visible world-space height.</param>
     /// <returns>The camera view snapshot for <see cref="CreateFrame"/>.</returns>
@@ -310,13 +277,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         );
     }
 
-    /// <summary>
-    /// Builds a perspective camera at the origin that looks down <c>-Z</c>.
-    /// </summary>
-    /// <param name="host">The host that supplies the target extent.</param>
-    /// <param name="fieldOfView">The vertical field of view in degrees.</param>
-    /// <param name="near">The near clip distance.</param>
-    /// <param name="far">The far clip distance; positive infinity is allowed.</param>
+    /// <summary>Creates a perspective camera at the origin looking down <c>-Z</c>.</summary>
     /// <returns>The camera view snapshot for <see cref="CreateFrame"/>.</returns>
     internal static CameraView PerspectiveCamera(
         BackendTestHost host,
@@ -345,13 +306,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         );
     }
 
-    /// <summary>
-    /// Builds one sealed frame with a clearing camera pass and the requested draw records.
-    /// </summary>
-    /// <param name="frameIndex">The frame index.</param>
-    /// <param name="clearColor">The linear clear color.</param>
-    /// <param name="camera">The camera view snapshot.</param>
-    /// <param name="draws">The draw records in recording order.</param>
+    /// <summary>Builds one sealed frame with a clearing camera pass and the requested draws.</summary>
     /// <returns>The sealed packet.</returns>
     internal RenderFramePacket CreateFrame(
         long frameIndex,
@@ -376,10 +331,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         );
     }
 
-    /// <summary>
-    /// Builds one sealed frame from explicit camera passes, each with its own viewport, clear state,
-    /// and draw records.
-    /// </summary>
+    /// <summary>Builds one sealed frame from explicit camera passes.</summary>
     /// <param name="frameIndex">The frame index.</param>
     /// <param name="passes">The camera passes in recording order.</param>
     /// <returns>The sealed packet.</returns>
@@ -457,10 +409,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Submits and presents one sealed frame.
-    /// </summary>
-    /// <param name="packet">The sealed packet.</param>
+    /// <summary>Submits and presents one sealed frame.</summary>
     internal void Submit(RenderFramePacket packet)
     {
         AssertNotDisposed();
@@ -468,13 +417,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         _host.Backend.Present();
     }
 
-    /// <summary>
-    /// Builds, submits, and presents one frame.
-    /// </summary>
-    /// <param name="frameIndex">The frame index.</param>
-    /// <param name="clearColor">The linear clear color.</param>
-    /// <param name="camera">The camera view snapshot.</param>
-    /// <param name="draws">The draw records in recording order.</param>
+    /// <summary>Builds, submits, and presents one frame.</summary>
     internal void SubmitFrame(
         long frameIndex,
         Color clearColor,
@@ -485,10 +428,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         Submit(CreateFrame(frameIndex, clearColor, camera, draws));
     }
 
-    /// <summary>
-    /// Loads the engine-owned SSAO assets from the built-in pack through this harness's bridge, so a
-    /// test can build a custom-effect-plus-SSAO chain without a camera service.
-    /// </summary>
+    /// <summary>Loads the built-in SSAO assets through this harness's bridge.</summary>
     /// <returns>The loaded assets, owned by the harness.</returns>
     internal SsaoAssets LoadSsaoAssetsFromBuiltInPack()
     {
@@ -529,10 +469,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Loads the engine-owned bloom assets from the built-in pack through this harness's bridge, so a
-    /// test can build a custom-effect-plus-bloom chain without a camera service.
-    /// </summary>
+    /// <summary>Loads the built-in bloom assets through this harness's bridge.</summary>
     /// <returns>The loaded assets, owned by the harness.</returns>
     internal BloomAssets LoadBloomAssetsFromBuiltInPack()
     {
@@ -573,22 +510,14 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         }
     }
 
-    /// <summary>
-    /// Recreates every live GPU asset from its retained upload, as the render loop does after a device
-    /// recovery.
-    /// </summary>
+    /// <summary>Recreates every live GPU asset from its retained upload after device recovery.</summary>
     internal void RestoreAssets()
     {
         AssertNotDisposed();
         _uploads.Restore();
     }
 
-    /// <summary>
-    /// Reads one resolved linear color pixel from a runtime render target.
-    /// </summary>
-    /// <param name="target">The render texture to read.</param>
-    /// <param name="x">The pixel column.</param>
-    /// <param name="y">The pixel row.</param>
+    /// <summary>Reads one resolved linear color pixel from a runtime render target.</summary>
     /// <returns>The linear RGB values.</returns>
     internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y)
     {
@@ -615,9 +544,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return (r, g, b);
     }
 
-    /// <summary>
-    /// Reads one resolved linear scene color pixel.
-    /// </summary>
+    /// <summary>Reads one resolved linear scene color pixel.</summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
     /// <returns>The linear RGB values.</returns>
@@ -635,12 +562,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         return (r, g, b);
     }
 
-    /// <summary>
-    /// Reads one reverse-Z scene depth pixel from the resolved depth image. A multisampled scene target
-    /// reads its resolved depth image; a single-sample target reads its depth attachment.
-    /// </summary>
-    /// <param name="x">The pixel column.</param>
-    /// <param name="y">The pixel row.</param>
+    /// <summary>Reads one reverse-Z scene depth pixel from the resolved depth image.</summary>
     /// <returns>The stored depth.</returns>
     internal float ReadDepth(uint x, uint y)
     {
@@ -834,15 +756,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
 
     private void AssertNotDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
-    /// <summary>
-    /// A camera value snapshot used by <see cref="CreateFrame"/>.
-    /// </summary>
-    /// <param name="View">The world-to-view matrix.</param>
-    /// <param name="Projection">The reverse-Z view-to-clip matrix.</param>
-    /// <param name="ViewProjection">The combined row-vector matrix.</param>
-    /// <param name="Position">The camera position.</param>
-    /// <param name="Width">The viewport width in pixels.</param>
-    /// <param name="Height">The viewport height in pixels.</param>
+    /// <summary>A camera value snapshot used by <see cref="CreateFrame"/>.</summary>
     internal readonly record struct CameraView(
         Matrix4x4 View,
         Matrix4x4 Projection,
@@ -852,23 +766,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         int Height
     );
 
-    /// <summary>
-    /// One camera pass for <see cref="CreateFrameWithPasses"/>.
-    /// </summary>
-    /// <param name="Camera">The camera value snapshot.</param>
-    /// <param name="ViewportX">The viewport left edge in target pixels.</param>
-    /// <param name="ViewportY">The viewport top edge in target pixels.</param>
-    /// <param name="ViewportWidth">The viewport width in target pixels.</param>
-    /// <param name="ViewportHeight">The viewport height in target pixels.</param>
-    /// <param name="ClearMode">The buffers the pass clears before it draws.</param>
-    /// <param name="ClearColor">The linear color written when color is cleared.</param>
-    /// <param name="Draws">The draw records in recording order.</param>
-    /// <param name="TargetId">The runtime render target id, or <c>0</c> for the scene target.</param>
-    /// <param name="PostProcessEffects">
-    /// The already captured post-process effect snapshots to run after the pass, or <c>null</c> for no
-    /// post-processing. The harness records them in order and adds their engine-asset holds to the
-    /// frame's retention set, exactly like the camera service.
-    /// </param>
+    /// <summary>One camera pass for <see cref="CreateFrameWithPasses"/>.</summary>
     internal sealed record PassSpec(
         CameraView Camera,
         int ViewportX,
@@ -882,22 +780,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable
         PostProcessEffectSnapshot[]? PostProcessEffects = null
     );
 
-    /// <summary>
-    /// One draw record for <see cref="CreateFrame"/>.
-    /// </summary>
-    /// <param name="Mesh">The mesh asset.</param>
-    /// <param name="Shader">The shader asset.</param>
-    /// <param name="WorldMatrices">The mesh-space-to-world matrices, one per instance.</param>
-    /// <param name="RenderState">The render state override, or <c>null</c> for the shader default.</param>
-    /// <param name="Tint">The per-instance tint, or <c>null</c> for opaque white.</param>
-    /// <param name="InstanceTemplate">
-    /// The captured per-instance uniform template, or <c>null</c> for the shader cursor's current
-    /// template. The harness copies it, so a later shader cursor change cannot mutate the draw.
-    /// </param>
-    /// <param name="TextureBindings">
-    /// The texture objects in sidecar declaration order, or <c>null</c> for the cursor's current
-    /// bindings. A <c>null</c> entry resolves to the white fallback slot.
-    /// </param>
+    /// <summary>One draw record for <see cref="CreateFrame"/>.</summary>
     internal sealed record DrawSpec(
         Mesh Mesh,
         Shader Shader,
@@ -909,19 +792,12 @@ internal sealed class VulkanDrawTestHarness : IDisposable
     )
     {
         /// <summary>Creates a one-instance draw.</summary>
-        /// <param name="mesh">The mesh asset.</param>
-        /// <param name="shader">The shader asset.</param>
-        /// <param name="world">The mesh-space-to-world matrix, or <c>null</c> for identity.</param>
         /// <returns>The draw specification.</returns>
         internal static DrawSpec Single(Mesh mesh, Shader shader, Matrix4x4? world = null) =>
             new(mesh, shader, [world ?? Matrix4x4.Identity]);
     }
 
-    /// <summary>
-    /// Copies one shader cursor snapshot and texture binding list into a reusable draw specification
-    /// value.
-    /// </summary>
-    /// <param name="shader">The shader whose cursor is captured.</param>
+    /// <summary>Copies a shader cursor's instance template and texture bindings.</summary>
     /// <returns>The captured instance template and bindings.</returns>
     internal static (byte[] Template, Texture?[] Textures) SnapshotCursor(Shader shader)
     {

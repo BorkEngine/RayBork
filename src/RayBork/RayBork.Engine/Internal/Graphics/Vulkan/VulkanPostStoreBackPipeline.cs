@@ -5,14 +5,10 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The 16-byte push-constant block the store-back fragment shader reads: the normalized post-target
-/// sub-rectangle the camera viewport covers.
-/// </summary>
+/// <summary>The 16-byte push-constant block the store-back fragment shader reads.</summary>
 /// <remarks>
-/// The chain is target-sized while the store-back covers only the camera viewport, so the block maps the
-/// viewport's normalized <c>vUv</c> to the matching post-target texels: <see cref="UvRect"/> x and y are
-/// the origin and z and w the size.
+/// The chain is target-sized while the store-back covers only the camera viewport: <see cref="UvRect"/>
+/// x/y are the normalized origin and z/w the size of the covered sub-rectangle.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
 internal struct PostStoreBackPushConstants
@@ -21,25 +17,11 @@ internal struct PostStoreBackPushConstants
     public Vector4 UvRect;
 }
 
-/// <summary>
-/// The engine store-back pass for the camera post-process chain: a fullscreen triangle with one
-/// sampler that copies the final single-sample Rgba16Float post target into a camera target's color
-/// attachment and resolves it.
-/// </summary>
+/// <summary>Copies the final post target into a camera target's color attachment and resolves it.</summary>
 /// <remarks>
-/// <para>
-/// The pipeline is built against the target's color format and sample count, so a multisampled target
-/// uses a color-only render pass with a resolve attachment and a single-sample target attaches its
-/// resolved color image directly. The depth attachment is never part of the pass. The descriptor set
-/// layout, pipeline layout, sampler, and shader modules are shared; the render passes and pipelines are
-/// cached per <c>(color format, sample count)</c> and destroyed with this object on backend shutdown or
-/// device recreation.
-/// </para>
-/// <para>
-/// Each post target owns one descriptor set, allocated from its own small pool and written with the
-/// target's view and the shared sampler. Render-thread only; every member assumes the device is idle
-/// when the pipeline or render pass is created or destroyed.
-/// </para>
+/// The pipeline is built per target color format and sample count; a multisampled target resolves through
+/// a color-only render pass and a single-sample target attaches its resolved image directly. Each post
+/// target owns one descriptor set, and every member is render-thread only.
 /// </remarks>
 internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
 {
@@ -76,16 +58,7 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
     /// <summary>Gets the sampler every post target's store-back descriptor uses.</summary>
     internal Sampler Sampler => _sampler;
 
-    /// <summary>
-    /// Creates the descriptor state, sampler, shader modules, and the empty render-pass and pipeline
-    /// caches.
-    /// </summary>
-    /// <param name="device">The device that owns the pipeline.</param>
-    /// <returns>The created store-back pipeline set.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <c>null</c>.</exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates the descriptor state, sampler, shader modules, and the empty caches.</summary>
     internal static VulkanPostStoreBackPipeline Create(VulkanDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -154,14 +127,9 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
         }
     }
 
-    /// <summary>
-    /// Allocates one descriptor set for a post target and writes its image view and the shared sampler.
-    /// </summary>
-    /// <param name="view">The post target's single-sample color view.</param>
-    /// <param name="pool">The descriptor pool that owns the set; the caller destroys it with the target.</param>
-    /// <returns>The descriptor set the store-back draw binds.</returns>
-    /// <exception cref="ArgumentException"><paramref name="view"/> is the default handle.</exception>
-    /// <exception cref="GraphicsException">The pool or set could not be created.</exception>
+    /// <summary>Allocates one descriptor set for a post target and writes its view and the sampler.</summary>
+    /// <param name="view">The target's single-sample color view; must not be the default handle.</param>
+    /// <param name="pool">Owned by the caller and destroyed with the target.</param>
     internal DescriptorSet CreateDescriptorSet(ImageView view, out DescriptorPool pool)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -231,14 +199,7 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
         return descriptorSet;
     }
 
-    /// <summary>
-    /// Gets or creates the color-only render pass for a target format and sample count.
-    /// </summary>
-    /// <param name="format">The target's color attachment format.</param>
-    /// <param name="sampleCount">The target's effective sample count.</param>
-    /// <returns>The cached render pass.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sampleCount"/> is not a supported count.</exception>
-    /// <exception cref="GraphicsException">The render pass could not be created.</exception>
+    /// <summary>Gets or creates the color-only render pass for a target format and sample count.</summary>
     internal RenderPass GetOrCreateRenderPass(Format format, int sampleCount)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -253,13 +214,7 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
         return renderPass;
     }
 
-    /// <summary>
-    /// Gets or creates the store-back pipeline for a target format and sample count.
-    /// </summary>
-    /// <param name="format">The target's color attachment format.</param>
-    /// <param name="sampleCount">The target's effective sample count.</param>
-    /// <returns>The cached pipeline.</returns>
-    /// <exception cref="GraphicsException">The pipeline could not be created.</exception>
+    /// <summary>Gets or creates the store-back pipeline for a target format and sample count.</summary>
     internal Pipeline GetOrCreatePipeline(Format format, int sampleCount)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -275,20 +230,8 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
         return pipeline;
     }
 
-    /// <summary>
-    /// Records the store-back draw for one camera viewport.
-    /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
-    /// <param name="renderPass">The target's store-back render pass.</param>
-    /// <param name="framebuffer">The target's store-back framebuffer.</param>
-    /// <param name="pipeline">The store-back pipeline for the target format and sample count.</param>
-    /// <param name="sourceSet">The final post target's descriptor set.</param>
-    /// <param name="renderArea">The camera viewport rectangle.</param>
-    /// <param name="uvRect">
-    /// The normalized post-target sub-rectangle the camera viewport covers: origin in x/y and size in
-    /// z/w.
-    /// </param>
+    /// <summary>Records the store-back draw for one camera viewport.</summary>
+    /// <remarks>The push-constant UV rectangle holds the normalized origin in x/y and size in z/w.</remarks>
     internal void Record(
         Vk vulkan,
         CommandBuffer commandBuffer,
@@ -346,10 +289,8 @@ internal sealed unsafe class VulkanPostStoreBackPipeline : IDisposable
         vulkan.CmdEndRenderPass(commandBuffer);
     }
 
-    /// <summary>
-    /// Destroys every cached pipeline, render pass, and the shared state. The call is idempotent and
-    /// must run before the device is destroyed.
-    /// </summary>
+    /// <summary>Destroys every cached pipeline, render pass, and the shared state.</summary>
+    /// <remarks>Idempotent; must run before the device is destroyed.</remarks>
     public void Dispose()
     {
         if (_disposed)

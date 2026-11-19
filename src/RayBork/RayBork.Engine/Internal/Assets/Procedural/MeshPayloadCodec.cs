@@ -7,16 +7,8 @@ namespace RayBork.Internal;
 /// 32-bit little-endian indices.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The bake writes this layout with a <see cref="BinaryWriter"/> and the runtime reads it here, so the
-/// byte order is explicit and does not depend on the platform. Each vertex is written in the field
-/// order of <see cref="Vertex"/>: position, normal, uv, uv1, uv2, uv3, color, and tangent. There is no
-/// alignment padding inside or between vertices.
-/// </para>
-/// <para>
-/// The loaded and procedural paths share the codec, so a procedural mesh payload and a baked mesh
-/// payload are byte-identical for the same vertex data. The caller owns every returned array.
-/// </para>
+/// Vertices use the field order of <see cref="Vertex"/> with no padding between fields or vertices.
+/// The bake and procedural paths share this codec, so equal vertex data produces identical bytes.
 /// </remarks>
 internal static class MeshPayloadCodec
 {
@@ -26,9 +18,6 @@ internal static class MeshPayloadCodec
     internal const int VERTEX_STRIDE = MeshAssetDescriptor.VERTEX_STRIDE;
 
     /// <summary>Encodes vertices and indices as one mesh payload.</summary>
-    /// <param name="vertices">The vertices in the fixed layout.</param>
-    /// <param name="indices">The 32-bit indices.</param>
-    /// <returns>The vertex stream followed by the index stream.</returns>
     internal static byte[] Encode(ReadOnlySpan<Vertex> vertices, ReadOnlySpan<uint> indices)
     {
         int byteCount = checked(
@@ -52,12 +41,6 @@ internal static class MeshPayloadCodec
     }
 
     /// <summary>Decodes the vertex stream of one mesh payload.</summary>
-    /// <param name="payload">The complete payload, vertices first.</param>
-    /// <param name="vertexCount">The number of vertices the descriptor declares.</param>
-    /// <returns>The decoded vertices.</returns>
-    /// <exception cref="ArgumentException">
-    /// The payload is shorter than <paramref name="vertexCount"/> vertices.
-    /// </exception>
     internal static Vertex[] DecodeVertices(ReadOnlySpan<byte> payload, int vertexCount)
     {
         if (payload.Length < (long)vertexCount * VERTEX_STRIDE)
@@ -80,13 +63,6 @@ internal static class MeshPayloadCodec
     }
 
     /// <summary>Decodes the index stream of one mesh payload.</summary>
-    /// <param name="payload">The complete payload, vertices first.</param>
-    /// <param name="vertexCount">The number of vertices that precede the indices.</param>
-    /// <param name="indexCount">The number of indices the descriptor declares.</param>
-    /// <returns>The decoded 32-bit indices.</returns>
-    /// <exception cref="ArgumentException">
-    /// The payload is shorter than the declared vertices and indices.
-    /// </exception>
     internal static uint[] DecodeIndices(
         ReadOnlySpan<byte> payload,
         int vertexCount,

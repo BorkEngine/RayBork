@@ -2,31 +2,10 @@ using RayBork.Internal;
 
 namespace RayBork;
 
-/// <summary>
-/// A built-in screen-space ambient-occlusion effect derived from N8AO 2.1.0's full-resolution SSAO path.
-/// </summary>
+/// <summary>A built-in SSAO effect that requires a depth-attached camera target.</summary>
 /// <remarks>
-/// <para>
-/// The effect reconstructs view-space normals from the camera target's reverse-Z depth, samples a
-/// golden-angle hemisphere kernel with blue-noise rotation, runs two bilateral denoise iterations, and
-/// composites the resulting AO over its chain input. The input is the original scene color only when
-/// SSAO is the first enabled effect; otherwise it is the previous effect's output. It supports
-/// perspective and orthographic cameras, world-space or screen-space radius, distance falloff, bias,
-/// and an AO tint. The public
-/// <see cref="PostProcessEffect.Enabled"/> value and every setting are snapshotted when a camera is
-/// created; later changes apply to later cameras only.
-/// </para>
-/// <para>
-/// The seven shader variants and the 128x128 blue-noise texture are engine-owned built-in assets. The
-/// app preloads them before <c>IGame.Setup</c>; the effect never compiles a shader or loads an asset on
-/// the render thread. The AO and denoise shaders are baked with compile-time sample counts selected by
-/// <see cref="Quality"/>. The effect requires a camera target with a depth attachment; a depth-less
-/// <see cref="RenderTexture"/> target is rejected when the camera is created.
-/// </para>
-/// <para>
-/// The effect is tick-thread only, like the stack and every other effect. It owns no engine asset and
-/// is not disposable.
-/// </para>
+/// Composites over the chain input: the scene color when first, else the previous effect's output.
+/// Tick-thread only; settings snapshot per camera, so later changes apply to later cameras only.
 /// </remarks>
 public sealed class SsaoEffect : PostProcessEffect
 {
@@ -47,15 +26,10 @@ public sealed class SsaoEffect : PostProcessEffect
     private float _biasOffset;
     private float _biasMultiplier = DEFAULT_BIAS_MULTIPLIER;
 
-    /// <summary>Initializes an SSAO effect with the approved defaults.</summary>
+    /// <summary>Initializes an SSAO effect with the default settings.</summary>
     public SsaoEffect() { }
 
-    /// <summary>
-    /// Initializes an effect over an explicit asset set. Used by tests; the app path resolves the
-    /// assets from <see cref="CameraService"/> instead.
-    /// </summary>
-    /// <param name="assets">The loaded engine-owned SSAO assets.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <see langword="null"/>.</exception>
+    /// <summary>Initializes an effect over an explicit asset set; tests only.</summary>
     internal SsaoEffect(SsaoAssets assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
@@ -63,11 +37,9 @@ public sealed class SsaoEffect : PostProcessEffect
     }
 
     /// <summary>
-    /// Gets or sets the baked quality variant. The default is <see cref="SsaoQuality.Medium"/>.
+    /// Gets or sets the baked quality variant; default <see cref="SsaoQuality.Medium"/>.
     /// </summary>
-    /// <remarks>The setter is tick-thread only.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not a defined quality.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public SsaoQuality Quality
     {
         get => _quality;
@@ -87,15 +59,8 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the AO radius. The default is <c>1.5</c>.
-    /// </summary>
-    /// <remarks>
-    /// The value is world units when <see cref="ScreenSpaceRadius"/> is <see langword="false"/>, or
-    /// pixels when it is <see langword="true"/>. The setter is tick-thread only.
-    /// </remarks>
+    /// <summary>Gets or sets the AO radius in world units or screen pixels; default <c>1.5</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is not positive.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public float Radius
     {
         get => _radius;
@@ -115,12 +80,8 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets how quickly AO fades with distance relative to the radius. The default is <c>1</c>.
-    /// </summary>
-    /// <remarks>The setter is tick-thread only.</remarks>
+    /// <summary>Gets or sets the distance falloff relative to the radius; default <c>1</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is not positive.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public float DistanceFalloff
     {
         get => _distanceFalloff;
@@ -140,15 +101,9 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the composite intensity. The default is <c>2</c>.
-    /// </summary>
-    /// <remarks>
-    /// The composite raises the AO term to this power, so <c>0</c> leaves the scene unchanged and
-    /// larger values darken occluded pixels more strongly. The setter is tick-thread only.
-    /// </remarks>
+    /// <summary>Gets or sets the composite intensity; default <c>2</c>.</summary>
+    /// <remarks><c>0</c> leaves the scene unchanged; larger values darken occlusion more.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public float Intensity
     {
         get => _intensity;
@@ -168,16 +123,9 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the AO color. The default is <see cref="Color.Black"/>.
-    /// </summary>
-    /// <remarks>
-    /// The color multiplies the scene color in occluded pixels, so black produces normal ambient
-    /// occlusion and a dark tint approximates colored bounce light. Every component must be finite.
-    /// The setter is tick-thread only.
-    /// </remarks>
+    /// <summary>Gets or sets the AO tint; default <see cref="Color.Black"/>.</summary>
+    /// <remarks>Multiplied into occluded pixels; a black tint is neutral AO.</remarks>
     /// <exception cref="ArgumentException">A color component is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public Color Color
     {
         get => _color;
@@ -201,15 +149,9 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the denoise radius in screen pixels. The default is <c>12</c>.
-    /// </summary>
-    /// <remarks>
-    /// The radius is independent of <see cref="Quality"/>; both denoise iterations use this value.
-    /// <c>0</c> keeps each denoise pass at the center pixel. The setter is tick-thread only.
-    /// </remarks>
+    /// <summary>Gets or sets the denoise radius in screen pixels; default <c>12</c>.</summary>
+    /// <remarks><c>0</c> keeps the center pixel; independent of <see cref="Quality"/>.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public int DenoiseRadius
     {
         get => _denoiseRadius;
@@ -229,16 +171,8 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets whether <see cref="Radius"/> is measured in screen pixels instead of world units.
-    /// The default is <see langword="false"/>.
-    /// </summary>
-    /// <remarks>
-    /// In screen-space mode, a world radius is reconstructed at <see cref="Radius"/> pixels from the
-    /// center depth, and <see cref="DistanceFalloff"/> is a ratio of that radius. The setter is
-    /// tick-thread only.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
+    /// <summary>Gets or sets whether <see cref="Radius"/> is in screen pixels.</summary>
+    /// <remarks>Default <c>false</c>; a pixel radius is reconstructed from center depth.</remarks>
     public bool ScreenSpaceRadius
     {
         get => _screenSpaceRadius;
@@ -249,12 +183,8 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the constant bias added to the depth comparison. The default is <c>0</c>.
-    /// </summary>
-    /// <remarks>The setter is tick-thread only.</remarks>
+    /// <summary>Gets or sets the constant depth-comparison bias; default <c>0</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public float BiasOffset
     {
         get => _biasOffset;
@@ -274,13 +204,8 @@ public sealed class SsaoEffect : PostProcessEffect
         }
     }
 
-    /// <summary>
-    /// Gets or sets the multiplier applied to the derivative-based bias heuristic. The default is
-    /// <c>1</c>.
-    /// </summary>
-    /// <remarks>The setter is tick-thread only.</remarks>
+    /// <summary>Gets or sets the derivative-bias multiplier; default <c>1</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
     public float BiasMultiplier
     {
         get => _biasMultiplier;
@@ -336,18 +261,7 @@ public sealed class SsaoEffect : PostProcessEffect
     }
 }
 
-/// <summary>
-/// The immutable SSAO settings frozen into one camera's effect snapshot.
-/// </summary>
-/// <param name="Quality">The baked quality variant.</param>
-/// <param name="Radius">The AO radius in world units or pixels.</param>
-/// <param name="DistanceFalloff">The distance falloff ratio.</param>
-/// <param name="Intensity">The composite intensity.</param>
-/// <param name="Color">The AO tint.</param>
-/// <param name="DenoiseRadius">The denoise radius in pixels.</param>
-/// <param name="ScreenSpaceRadius">Whether the radius is in screen pixels.</param>
-/// <param name="BiasOffset">The constant depth bias.</param>
-/// <param name="BiasMultiplier">The derivative-bias multiplier.</param>
+/// <summary>The immutable SSAO settings frozen into one camera's effect snapshot.</summary>
 internal readonly record struct SsaoSettings(
     SsaoQuality Quality,
     float Radius,

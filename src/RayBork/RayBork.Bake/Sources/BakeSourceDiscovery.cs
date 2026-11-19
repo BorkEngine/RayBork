@@ -7,36 +7,18 @@ using Tomlyn.Model;
 
 namespace RayBork.Bake.Sources;
 
-/// <summary>
-/// Discovers and classifies every file under every configured pack root.
-/// </summary>
+/// <summary>Discovers and classifies every file under every configured pack root.</summary>
 /// <remarks>
-/// <para>
-/// Files are walked in ordinal pack-relative path order; reparse points are skipped. A non-TOML file
-/// is owned by the processor whose registered extension is the longest matching suffix. A TOML file
-/// with a root <c>[raybork]</c> table is a custom-data source. A TOML file next to a processor source
-/// with the same base path is that source's sidecar. A TOML file whose root table names a processor
-/// and which has no sibling processor source is a table-named processor source. Everything else is an
-/// error.
-/// </para>
-/// <para>
-/// A string value inside a table-named processor source that resolves to an existing file under the
-/// pack root marks that file as a tracked input for discovery purposes. Such a file is not a source
-/// itself; this is how a shader TOML's <c>vertex</c> and <c>fragment</c> GLSL files stay dependencies
-/// rather than assets. The processor still registers them through
-/// <see cref="AssetProcessorContext.AddInput"/>.
-/// </para>
-/// <para>
-/// Sidecars are only associated with processors that declare a sidecar policy. A sidecar is never
-/// created or rewritten. Duplicate canonical paths are reported immediately and fail the pack.
-/// </para>
+/// Files are walked in ordinal pack-relative path order with reparse points skipped, and a
+/// non-TOML file belongs to its longest matching processor extension.
+/// Root <c>[raybork]</c> TOML is data, a sibling TOML is a sidecar only for a processor that
+/// declares a sidecar policy and is never created or rewritten, a root table naming one processor
+/// is a table-named source, and anything else is an orphan error; existing files string-named in
+/// a table-named source are tracked inputs, and duplicate canonical paths fail the pack.
 /// </remarks>
 internal static class BakeSourceDiscovery
 {
     /// <summary>Discovers the sources of every configured pack.</summary>
-    /// <param name="project">The validated project.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <returns>The source lists.</returns>
     internal static BakeSourceSet Discover(BakeProject project, BakeDiagnostics diagnostics)
     {
         ArgumentNullException.ThrowIfNull(project);

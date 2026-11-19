@@ -5,21 +5,11 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Holds the debug-utils callback, the resulting validation error queue, and the callback's
-/// lifetime handle for one Vulkan instance.
-/// </summary>
+/// <summary>Holds the debug-utils callback, error queue, and callback lifetime.</summary>
 /// <remarks>
-/// <para>
-/// The validation layer invokes the callback on whichever thread produced the message. The error
-/// queue and its <see cref="Lock"/> therefore make <see cref="ConsumeErrors"/> and the private
-/// record path safe on any thread, including the render thread that reads them.
-/// </para>
-/// <para>
-/// The callback is a static method because Silk.NET allocates the unmanaged function pointer from a
-/// delegate. The instance is recovered through <c>pUserData</c>, a <see cref="GCHandle"/> kept
-/// alive for the instance lifetime; the delegate field keeps the callback itself rooted.
-/// </para>
+/// The callback runs on the producing thread; <see cref="Lock"/> serializes the record path and
+/// <see cref="ConsumeErrors"/>. A <see cref="GCHandle"/> in <c>pUserData</c> recovers the
+/// instance, and the static delegate keeps the callback rooted.
 /// </remarks>
 internal sealed unsafe class VulkanValidation : IDisposable
 {
@@ -45,10 +35,8 @@ internal sealed unsafe class VulkanValidation : IDisposable
     private GCHandle _selfHandle;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VulkanValidation"/> class.
-    /// </summary>
-    /// <param name="logger">The renderer logger that receives validation warnings and errors.</param>
+    /// <summary>Initializes a validation holder for one instance.</summary>
+    /// <param name="logger">The renderer logger that receives validation messages.</param>
     internal VulkanValidation(ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -56,15 +44,10 @@ internal sealed unsafe class VulkanValidation : IDisposable
         _selfHandle = GCHandle.Alloc(this);
     }
 
-    /// <summary>
-    /// Gets the name of the Khronos validation layer.
-    /// </summary>
+    /// <summary>Gets the Khronos validation layer name.</summary>
     internal static string LayerName => VALIDATION_LAYER_NAME;
 
-    /// <summary>
-    /// Creates the debug-utils messenger configuration for this validation holder.
-    /// </summary>
-    /// <returns>The messenger create info with the instance callback and user data set.</returns>
+    /// <summary>Creates the messenger create info for this holder.</summary>
     internal DebugUtilsMessengerCreateInfoEXT CreateMessengerCreateInfo() =>
         new()
         {
@@ -75,10 +58,7 @@ internal sealed unsafe class VulkanValidation : IDisposable
             PUserData = (void*)GCHandle.ToIntPtr(_selfHandle),
         };
 
-    /// <summary>
-    /// Returns and clears the validation errors recorded since the previous call.
-    /// </summary>
-    /// <returns>The recorded error messages in arrival order.</returns>
+    /// <summary>Returns and clears the recorded validation errors in arrival order.</summary>
     internal IReadOnlyList<string> ConsumeErrors()
     {
         lock (_gate)
@@ -94,13 +74,9 @@ internal sealed unsafe class VulkanValidation : IDisposable
         }
     }
 
-    /// <summary>
-    /// Throws when validation errors were recorded since the previous call.
-    /// </summary>
-    /// <param name="operation">The operation that was in progress, for the diagnostic message.</param>
+    /// <summary>Throws when a validation error was recorded since the previous call.</summary>
     /// <exception cref="GraphicsException">
-    /// At least one validation error was recorded. The message lists every error and the diagnostic
-    /// code is <c>RB3001</c>.
+    /// At least one error was recorded; the message lists them and the code is <c>RB3001</c>.
     /// </exception>
     internal void ThrowIfErrors(string operation)
     {

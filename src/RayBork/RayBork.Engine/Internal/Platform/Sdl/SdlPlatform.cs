@@ -5,18 +5,11 @@ using SDL3;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The SDL3 platform backend. <see cref="Initialize(PlatformOptions, Action)"/>, <see cref="Pump"/>, and window command
-/// application run on the process main thread; <see cref="CaptureInput"/> runs on the tick thread.
-/// Vibration calls run on the tick thread and only enqueue work for the main thread, so SDL is never
-/// touched from the tick thread.
-/// </summary>
+/// <summary>The SDL3 platform backend.</summary>
 /// <remarks>
-/// SDL's video subsystem, event queue, video-driver hint, and Vulkan loader are process global.
-/// Initialization, disposal, pumping, and Vulkan surface calls are serialized by a process-wide
-/// gate, and the SDL and Vulkan-loader lifetimes are reference counted. Production creates one
-/// platform on the process main thread; the test host creates independent platforms on test threads
-/// and routes window-scoped events back to the owning platform.
+/// <see cref="Initialize(PlatformOptions, Action)"/>, <see cref="Pump"/>, and window command
+/// application run on the main thread; <see cref="CaptureInput"/> and vibration run on the tick
+/// thread, where vibration queues work to the main thread.
 /// </remarks>
 internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
 {
@@ -92,19 +85,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
     private bool _initialized;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a new platform. The optional flags are test-host controls; production uses the
-    /// defaults.
-    /// </summary>
-    /// <param name="loggerFactory">The logger factory for window and input logs.</param>
-    /// <param name="initializeGamepads">
-    /// Whether to initialize SDL's gamepad subsystem. Tests disable it because SDL spends about
-    /// 150 ms enumerating devices even when no controller is connected.
-    /// </param>
-    /// <param name="minimalTestMode">
-    /// Whether to skip monitor enumeration, text input, and window HDR refresh for a hidden GPU test
-    /// window. The window still reports its size and focus state.
-    /// </param>
+    /// <summary>Initializes a platform; the optional flags are test-host controls.</summary>
     internal SdlPlatform(
         ILoggerFactory loggerFactory,
         bool initializeGamepads = true,
@@ -135,28 +116,21 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
         }
     }
 
-    /// <summary>
-    /// Gets the number of platforms that currently hold the SDL video subsystem. Diagnostic for tests.
-    /// </summary>
+    /// <summary>Gets the number of platforms holding the SDL video subsystem.</summary>
     internal static int SdlUserCountForTests => _sdlUsers;
 
-    /// <summary>
-    /// Gets the number of platforms that currently hold the SDL Vulkan loader. Diagnostic for tests.
-    /// </summary>
+    /// <summary>Gets the number of platforms holding the SDL Vulkan loader.</summary>
     internal static int VulkanLoaderUserCountForTests => _vulkanUsers;
 
     /// <inheritdoc />
     public void Initialize(PlatformOptions options, Action onExitRequested) =>
         Initialize(options, onExitRequested, videoDriverHint: null);
 
-    /// <summary>
-    /// Initializes the test host with an optional process-global video-driver hint. The hint is set
-    /// and the platform initialized under one gate so no other platform can observe a half-applied
-    /// hint. A failed initialization disposes the partial platform and releases the SDL refcount.
-    /// </summary>
-    /// <param name="options">The platform options.</param>
-    /// <param name="onExitRequested">Invoked when the platform requests a graceful exit.</param>
-    /// <param name="videoDriverHint">The SDL video driver, or <see langword="null"/> for the default.</param>
+    /// <summary>Initializes with an optional process-global video-driver hint.</summary>
+    /// <remarks>
+    /// The hint and initialization share one gate; a failed initialization disposes the partial
+    /// platform.
+    /// </remarks>
     internal void Initialize(
         PlatformOptions options,
         Action onExitRequested,
@@ -509,11 +483,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
         return _input.Capture();
     }
 
-    /// <summary>
-    /// Gets the render-to-window pixel ratio from the current window snapshot. SDL reports mouse
-    /// motion in window coordinates, so <see cref="SdlInput"/> scales it by this ratio to expose
-    /// render pixels.
-    /// </summary>
+    /// <summary>Gets the render-to-window pixel ratio from the current window snapshot.</summary>
     private Vector2 GetMousePixelScale()
     {
         SdlWindow? window = _window;
@@ -788,10 +758,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             _ => sdlEvent.Window.WindowID,
         };
 
-    /// <summary>
-    /// Starts text input on the main thread and tracks that it is active. A failure is logged and
-    /// never throws into the event pump.
-    /// </summary>
+    /// <summary>Starts text input on the main thread; failures are logged, not thrown.</summary>
     private void StartTextInput()
     {
         if (_minimalTestMode || _windowHandle == IntPtr.Zero)
@@ -809,10 +776,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
         _windowLogger.LogDebug("Text input started.");
     }
 
-    /// <summary>
-    /// Stops text input on the main thread when it is active. A failure is logged and never throws
-    /// into the event pump.
-    /// </summary>
+    /// <summary>Stops text input on the main thread; failures are logged, not thrown.</summary>
     private void StopTextInput()
     {
         if (_minimalTestMode || !_textInputStarted || _windowHandle == IntPtr.Zero)
@@ -830,10 +794,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
         _windowLogger.LogDebug("Text input stopped.");
     }
 
-    /// <summary>
-    /// Restarts text input after the window becomes available again, but only when it is focused and
-    /// neither minimized nor hidden. Runs on the main thread.
-    /// </summary>
+    /// <summary>Restarts text input when the window is focused and visible.</summary>
     private void TryStartTextInput()
     {
         if (_minimalTestMode || _textInputStarted)

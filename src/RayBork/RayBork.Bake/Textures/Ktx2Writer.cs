@@ -3,23 +3,10 @@ using System.Text;
 
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// Writes the narrow KTX2 2.0 profile the bake produces.
-/// </summary>
+/// <summary>Writes the narrow KTX2 2.0 profile the bake produces.</summary>
 /// <remarks>
-/// <para>
-/// One file is one 2D image with <c>layerCount = 0</c> (one layer), <c>faceCount = 1</c>, no
-/// supercompression, empty key/value and supercompression-global-data sections, and a complete mip
-/// chain. The file layout follows the specification order: identifier, header, level index, Data
-/// Format Descriptor, then the mip level data from the smallest level to the base level. Each level
-/// starts on an <c>lcm(texelBlockSize, 4)</c> boundary with zero-filled padding, and the level index
-/// lists the base level first and points at each level's actual offset.
-/// </para>
-/// <para>
-/// The Data Format Descriptor describes the format's color model, transfer function (linear or
-/// sRGB), BT.709 primaries, straight alpha, texel block extent, and 8-bit or block samples with the
-/// bounds the Khronos Data Format specification uses. All integers are little-endian.
-/// </para>
+/// One 2D image, one layer and face, no supercompression, and a complete mip chain. Levels start on
+/// an <c>lcm(texelBlockSize, 4)</c> boundary and all integers are little-endian.
 /// </remarks>
 internal static class Ktx2Writer
 {
@@ -48,20 +35,8 @@ internal static class Ktx2Writer
         0x0A,
     ];
 
-    /// <summary>Writes a complete KTX2 payload.</summary>
-    /// <param name="format">The metadata of the stored format.</param>
-    /// <param name="width">The base-level pixel width.</param>
-    /// <param name="height">The base-level pixel height.</param>
-    /// <param name="levels">
-    /// The stored bytes of every mip level, base level first. Each level must already be in its final
-    /// stored layout and exactly the length the format requires.
-    /// </param>
+    /// <summary>Writes a complete KTX2 payload and validates every level length.</summary>
     /// <returns>The complete KTX2 file bytes.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A base dimension is not supported.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The level count is not the full chain or a level has the wrong stored length.
-    /// </exception>
     internal static byte[] Write(
         TextureFormatInfo format,
         int width,

@@ -3,100 +3,32 @@ using RayBork.Internal;
 
 namespace RayBork.Bake;
 
-/// <summary>
-/// Builds a complete KTX2 2.0 texture payload from straight-alpha RGBA8 pixels.
-/// </summary>
+/// <summary>Builds a complete KTX2 2.0 texture payload from straight-alpha RGBA8 pixels.</summary>
 /// <remarks>
-/// <para>
-/// The helper is the one KTX2 producer for the bake: the built-in texture processor calls it for
-/// decoded image sources, and a custom processor (for example one that generates a texture) calls it
-/// directly so it never hand-writes KTX2 headers or block data. It generates the full mip chain with
-/// a deterministic box filter, block-encodes every level when compression is requested, and returns
-/// the payload together with the descriptor format and mip count.
-/// </para>
-/// <para>
-/// Input pixels are straight-alpha RGBA8, row-major with a top-left origin. The helper applies no
-/// gamma conversion, premultiplication, ICC handling, flipping, or resampling beyond the mip box
-/// filter. <see cref="TextureChannelType.Rgb"/> forces alpha to <c>255</c>;
-/// <see cref="TextureChannelType.Rg"/> and <see cref="TextureChannelType.R"/> keep only the channels
-/// they name.
-/// </para>
-/// <para>
-/// <see cref="TextureChannelType.Rgba"/> is authored color and is stored in the sRGB transfer
-/// function by <see cref="Bake(ReadOnlySpan{byte}, int, int, TextureChannelType, TextureCompression)"/>;
-/// the other channel types are linear. The built-in texture processor selects the transfer function
-/// explicitly from its sidecar.
-/// </para>
+/// Input is straight-alpha RGBA8, row-major with a top-left origin, and the only resampling is the
+/// deterministic mip box filter. <see cref="TextureChannelType.Rgba"/> is stored as sRGB; the other
+/// channel types are linear.
 /// </remarks>
 public static class TextureBaker
 {
     private const TextureFilter DEFAULT_FILTER = TextureFilter.Linear;
     private const TextureWrap DEFAULT_WRAP = TextureWrap.Repeat;
 
-    /// <summary>
-    /// Bakes one texture and emits its <c>Texture</c> descriptor and KTX2 payload through a processor
-    /// context.
-    /// </summary>
+    /// <summary>Bakes one texture and emits its descriptor and KTX2 payload.</summary>
     /// <remarks>
-    /// <para>
-    /// This is the convenience entry point for a custom processor that generates pixels. It is the
-    /// same KTX2 producer as <see cref="Bake(ReadOnlySpan{byte}, int, int, TextureChannelType, TextureCompression)"/>:
-    /// it generates the full mip chain, encodes every level, and writes one complete KTX2 2.0 file.
-    /// The descriptor is emitted at <see cref="AssetProcessorContext.BaseAssetPath"/> and the payload
-    /// at <c>&lt;base&gt;-ktx2</c>, matching the built-in texture processor's entry layout. A
-    /// processor therefore never touches MessagePack or pack bytes directly.
-    /// </para>
-    /// <para>
-    /// A <see langword="null"/> <paramref name="filter"/> or <paramref name="wrap"/> selects the
-    /// bake's baseline sampler defaults, <see cref="TextureFilter.Linear"/> and
-    /// <see cref="TextureWrap.Repeat"/>. The per-source context does not expose a customized
-    /// <c>WithTextureDefaults</c> setting, so a processor that needs a non-default sampler passes one
-    /// explicitly.
-    /// </para>
-    /// <para>
-    /// <paramref name="srgb"/> applies only to <see cref="TextureChannelType.Rgba"/>; the linear
-    /// channel types ignore it. A null value stores <see cref="TextureChannelType.Rgba"/> as sRGB and
-    /// every linear channel type as linear, matching the public <see cref="Bake(ReadOnlySpan{byte}, int, int, TextureChannelType, TextureCompression)"/>
-    /// helper.
-    /// </para>
+    /// The descriptor is written at the context's base asset path and the payload at
+    /// <c>&lt;base&gt;-ktx2</c>. Null filter or wrap means Linear or Repeat.
+    /// <paramref name="srgb"/> applies only to RGBA; null stores RGBA as sRGB.
     /// </remarks>
-    /// <param name="context">The per-source processing context.</param>
-    /// <param name="rgba8Pixels">
-    /// The base-level straight-alpha RGBA8 pixels, exactly <c>width × height × 4</c> bytes.
-    /// </param>
-    /// <param name="width">The base-level pixel width; must be positive.</param>
-    /// <param name="height">The base-level pixel height; must be positive.</param>
-    /// <param name="channelType">The semantic channel type.</param>
-    /// <param name="compression">The compression mode.</param>
-    /// <param name="filter">
-    /// The sampler filter, or <see langword="null"/> for <see cref="DEFAULT_FILTER"/>.
-    /// </param>
-    /// <param name="wrap">
-    /// The sampler address mode, or <see langword="null"/> for <see cref="DEFAULT_WRAP"/>.
-    /// </param>
-    /// <param name="srgb">
-    /// Whether an <see cref="TextureChannelType.Rgba"/> payload uses the sRGB transfer function, or
-    /// <see langword="null"/> to derive it from <paramref name="channelType"/>.
-    /// </param>
-    /// <param name="maxAnisotropy">
-    /// The requested maximum anisotropy; a positive finite number, usually <c>1</c>.
-    /// </param>
-    /// <param name="alignment">
-    /// The payload alignment: <c>1</c>, <c>16</c>, <c>64</c>, or <c>256</c>. GPU payloads use
-    /// <c>16</c> or greater.
-    /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException">The context is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds the bake's limit, an enum value is undefined,
-    /// <paramref name="maxAnisotropy"/> is not positive and finite, or
-    /// <paramref name="alignment"/> is not a supported alignment.
+    /// A dimension is invalid, an enum value is undefined, anisotropy is not positive and finite,
+    /// or the alignment is not 1, 16, 64, or 256.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// The pixel buffer length is not <c>width × height × 4</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Block encoding or KTX2 container writing failed.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">Encoding or writing failed.</exception>
     public static void AddTo(
         AssetProcessorContext context,
         ReadOnlySpan<byte> rgba8Pixels,
@@ -182,25 +114,14 @@ public static class TextureBaker
     }
 
     /// <summary>Bakes one texture into a complete KTX2 payload.</summary>
-    /// <param name="rgba8Pixels">
-    /// The base-level straight-alpha RGBA8 pixels, exactly <c>width × height × 4</c> bytes.
-    /// </param>
-    /// <param name="width">The base-level pixel width; must be positive.</param>
-    /// <param name="height">The base-level pixel height; must be positive.</param>
-    /// <param name="channelType">The semantic channel type.</param>
-    /// <param name="compression">The compression mode.</param>
-    /// <returns>
-    /// The KTX2 payload and the descriptor format and mip count that describe it.
-    /// </returns>
+    /// <returns>The KTX2 payload with its descriptor format and mip count.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds the bake's limit, or an enum value is undefined.
+    /// A dimension is invalid or an enum value is undefined.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// The pixel buffer length is not <c>width × height × 4</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Block encoding or KTX2 container writing failed.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">Encoding or writing failed.</exception>
     public static BakedTexture Bake(
         ReadOnlySpan<byte> rgba8Pixels,
         int width,
@@ -217,30 +138,16 @@ public static class TextureBaker
             isSrgb: channelType == TextureChannelType.Rgba
         );
 
-    /// <summary>
-    /// Bakes one texture with an explicit transfer function for <see cref="TextureChannelType.Rgba"/>.
-    /// </summary>
-    /// <remarks>
-    /// The built-in texture processor uses this overload so a sidecar's <c>srgb</c> key selects the
-    /// transfer function; the public helper always stores <see cref="TextureChannelType.Rgba"/> as
-    /// sRGB. The flag is ignored for the linear channel types.
-    /// </remarks>
-    /// <param name="rgba8Pixels">The base-level straight-alpha RGBA8 pixels.</param>
-    /// <param name="width">The base-level pixel width; must be positive.</param>
-    /// <param name="height">The base-level pixel height; must be positive.</param>
-    /// <param name="channelType">The semantic channel type.</param>
-    /// <param name="compression">The compression mode.</param>
-    /// <param name="isSrgb">Whether an RGBA payload uses the sRGB transfer function.</param>
-    /// <returns>The KTX2 payload and the descriptor format and mip count that describe it.</returns>
+    /// <summary>Bakes one texture with an explicit transfer function for RGBA.</summary>
+    /// <remarks>The flag is ignored for the linear channel types.</remarks>
+    /// <returns>The KTX2 payload with its descriptor format and mip count.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or exceeds the bake's limit, or an enum value is undefined.
+    /// A dimension is invalid or an enum value is undefined.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// The pixel buffer length is not <c>width × height × 4</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Block encoding or KTX2 container writing failed.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">Encoding or writing failed.</exception>
     internal static BakedTexture Bake(
         ReadOnlySpan<byte> rgba8Pixels,
         int width,

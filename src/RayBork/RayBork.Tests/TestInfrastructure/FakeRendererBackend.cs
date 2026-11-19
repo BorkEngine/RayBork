@@ -4,15 +4,13 @@ using RayBork.Tests.Assets.Gpu;
 namespace RayBork.Tests;
 
 /// <summary>
-/// A fake <see cref="IRendererBackend"/> that records lifecycle calls and exercises the real
-/// render-thread-to-main-thread surface handshake without a GPU.
+/// A fake <see cref="IRendererBackend"/> that records lifecycle calls and drives the real
+/// render-thread surface handshake without a GPU.
 /// </summary>
 /// <remarks>
-/// <see cref="Initialize"/> creates the native surface through the configured provider exactly like
-/// the Vulkan backend, so app tests drive <c>MainThreadSurfaceChannel</c>. <see cref="Dispose"/>
-/// destroys that surface first, then enqueues <see cref="TeardownAction"/> on the options' main-thread
-/// teardown queue, and is idempotent. Every recorded value except the configured properties is
-/// guarded by a lock, so a test may read it after <see cref="RayBorkApp.Run"/> returns.
+/// <see cref="Initialize"/> creates the native surface through the configured provider, and
+/// <see cref="Dispose"/> destroys it before enqueuing <see cref="TeardownAction"/>; dispose is
+/// idempotent. Every recorded value except configured properties is lock-guarded.
 /// </remarks>
 internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerProvider
 {
@@ -53,79 +51,44 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <inheritdoc />
     public int DeviceGeneration => Volatile.Read(ref _deviceGeneration);
 
-    /// <summary>
-    /// Simulates a logical-device recreation for the render loop's asset-restoration tests. The fake
-    /// backend has no device, so the test drives the generation the backend would publish.
-    /// </summary>
+    /// <summary>Advances the published generation as a device recreation would.</summary>
     internal void SimulateDeviceRecreationForTests() =>
         Interlocked.Increment(ref _deviceGeneration);
 
-    /// <summary>
-    /// Gets or sets the exception that <see cref="Initialize"/> throws after it created the surface.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="Initialize"/> throws.</summary>
     internal Exception? InitializeException { get; set; }
 
-    /// <summary>
-    /// Gets or sets the exception that <see cref="Submit"/> throws.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="Submit"/> throws.</summary>
     internal Exception? SubmitException { get; set; }
 
-    /// <summary>
-    /// Gets or sets the exception that <see cref="Present"/> throws.
-    /// </summary>
+    /// <summary>Gets or sets the exception <see cref="Present"/> throws.</summary>
     internal Exception? PresentException { get; set; }
 
-    /// <summary>
-    /// Gets or sets the result of <see cref="Recover"/>. The default is <see langword="true"/>.
-    /// </summary>
+    /// <summary>Gets or sets the result of <see cref="Recover"/>.</summary>
     internal bool RecoverResult { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets whether <see cref="Submit"/> publishes a frame <see cref="RenderStats"/> snapshot.
-    /// </summary>
-    /// <remarks>
-    /// App lifecycle tests that overwrite <see cref="RenderStatus"/> directly disable this so the
-    /// render thread does not replace the value under test.
-    /// </remarks>
+    /// <summary>Gets or sets whether <see cref="Submit"/> publishes frame stats.</summary>
     internal bool PublishFrameStats { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets whether <see cref="Submit"/> returns without recording or publishing a frame,
-    /// which models a frame dropped on a minimized surface or during a device recreation.
-    /// </summary>
+    /// <summary>Gets or sets whether <see cref="Submit"/> models a dropped frame.</summary>
     internal bool SkipSubmitForTests { get; set; }
 
-    /// <summary>
-    /// Gets or sets an optional hook invoked at the end of <see cref="Submit"/>.
-    /// </summary>
+    /// <summary>Gets or sets a hook invoked at the end of <see cref="Submit"/>.</summary>
     internal Action<RenderFramePacket>? OnSubmit { get; set; }
 
-    /// <summary>
-    /// Gets or sets the exception that a queued readback request publishes. The default is
-    /// <see langword="null"/>, which returns a deterministic fake image.
-    /// </summary>
+    /// <summary>Gets or sets the exception a readback request publishes.</summary>
     internal Exception? ReadbackException { get; set; }
 
-    /// <summary>
-    /// Gets or sets an optional hook invoked at the end of <see cref="Present"/>.
-    /// </summary>
+    /// <summary>Gets or sets a hook invoked at the end of <see cref="Present"/>.</summary>
     internal Action? OnPresent { get; set; }
 
-    /// <summary>
-    /// Gets or sets the action <see cref="Dispose"/> enqueues on the options' main-thread teardown
-    /// queue. The action runs on whichever thread drains the queue, not on the render thread.
-    /// </summary>
+    /// <summary>Gets or sets the action <see cref="Dispose"/> enqueues at shutdown.</summary>
     internal Action? TeardownAction { get; set; }
 
-    /// <summary>
-    /// Gets or sets the GPU asset worker the fake backend hands to the render loop. A test replaces it
-    /// with a recording fake when it drives uploads through the bridge.
-    /// </summary>
+    /// <summary>Gets or sets the GPU asset worker the fake hands to the render loop.</summary>
     internal IAssetGpuWorker AssetGpuWorker { get; set; } = new FakeAssetGpuWorker();
 
-    /// <summary>
-    /// Gets the options passed to <see cref="Initialize"/>, or <see langword="null"/> before it ran.
-    /// </summary>
+    /// <summary>Gets the options passed to <see cref="Initialize"/>, if it ran.</summary>
     internal RendererBackendOptions? Options
     {
         get
@@ -137,9 +100,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the number of <see cref="Initialize"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="Initialize"/> calls.</summary>
     internal int InitializeCallCount
     {
         get
@@ -151,10 +112,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the native surface handle created during <see cref="Initialize"/>, or
-    /// <see cref="IntPtr.Zero"/> when no surface was created.
-    /// </summary>
+    /// <summary>Gets the native surface handle, or <see cref="IntPtr.Zero"/> when unset.</summary>
     internal IntPtr SurfaceHandle
     {
         get
@@ -166,9 +124,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets whether <see cref="Dispose"/> destroyed the native surface.
-    /// </summary>
+    /// <summary>Gets whether <see cref="Dispose"/> destroyed the native surface.</summary>
     internal bool SurfaceDestroyed
     {
         get
@@ -180,9 +136,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the frame indices passed to <see cref="Submit"/>, in call order.
-    /// </summary>
+    /// <summary>Gets the frame indices passed to <see cref="Submit"/>, in call order.</summary>
     internal IReadOnlyList<long> SubmitFrames
     {
         get
@@ -194,9 +148,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the number of <see cref="Present"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="Present"/> calls.</summary>
     internal int PresentCount
     {
         get
@@ -208,9 +160,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the number of <see cref="Recover"/> calls.
-    /// </summary>
+    /// <summary>Gets the number of <see cref="Recover"/> calls.</summary>
     internal int RecoverCalls
     {
         get
@@ -222,9 +172,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the number of effective <see cref="Dispose"/> calls. Repeated calls are no-ops.
-    /// </summary>
+    /// <summary>Gets the effective <see cref="Dispose"/> call count.</summary>
     internal int DisposeCallCount
     {
         get
@@ -236,9 +184,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets the window surface snapshot observed most recently on the render thread.
-    /// </summary>
+    /// <summary>Gets the window surface snapshot last observed on the render thread.</summary>
     internal WindowSurfaceState LastWindowState
     {
         get
@@ -335,7 +281,6 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     }
 
     /// <inheritdoc />
-    /// <remarks>The fake has no swapchain to recreate, so a resize only records the window snapshot.</remarks>
     public void Resize(int renderWidth, int renderHeight) => UpdateWindowState();
 
     /// <inheritdoc />
@@ -352,9 +297,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <inheritdoc />
     public IAssetGpuWorker CreateAssetGpuWorker() => AssetGpuWorker;
 
-    /// <summary>
-    /// Gets the number of live fake render textures. Diagnostic, for app and service tests.
-    /// </summary>
+    /// <summary>Gets the number of live fake render textures.</summary>
     internal int LiveRenderTextureCount
     {
         get
@@ -366,11 +309,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// Gets whether a target id is still live in the fake registry. Diagnostic, for service tests.
-    /// </summary>
-    /// <param name="targetId">The target id to check.</param>
-    /// <returns><see langword="true"/> when a target with the id is registered.</returns>
+    /// <summary>Gets whether a target id is still live in the fake registry.</summary>
     internal bool IsRenderTargetLive(long targetId)
     {
         lock (_gate)
@@ -381,9 +320,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     /// <inheritdoc />
     /// <remarks>
-    /// The fake has no GPU, so it completes each request with a public <see cref="RenderTexture"/> over
-    /// fake lifetimes and destroys the target entry when the request's lifetime is released. The public
-    /// API, the request handoff, and the shutdown behavior are exercised without a device.
+    /// Completes each request with a public <see cref="RenderTexture"/> over fake lifetimes.
     /// </remarks>
     public void ProcessRenderTextureRequests(RenderTextureService service)
     {
@@ -701,12 +638,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
-    /// <summary>
-    /// One fake render target: the lifetime and the view lifetimes whose dimensions follow a resize.
-    /// </summary>
-    /// <param name="Lifetime">The target lifetime.</param>
-    /// <param name="ColorView">The color view lifetime.</param>
-    /// <param name="DepthView">The depth view lifetime, or <see langword="null"/> for a depthless target.</param>
+    /// <summary>A fake render target with the view lifetimes a resize updates.</summary>
     private sealed record FakeRenderTarget(
         RenderTextureTargetLifetime Lifetime,
         RenderTextureViewLifetime ColorView,

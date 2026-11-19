@@ -3,9 +3,7 @@ using RayBork.Bake.Toml;
 
 namespace RayBork.Bake.Baking;
 
-/// <summary>
-/// One registered data type: its compiled shape binding, serialization delegate, and validators.
-/// </summary>
+/// <summary>One registered data type: shape binding, serializer, and validators.</summary>
 internal sealed class BakeAssetTypeRegistration
 {
     private readonly Func<BakeBindContext, object?> _bind;
@@ -35,25 +33,17 @@ internal sealed class BakeAssetTypeRegistration
     internal IReadOnlyList<IBakeAssetValidator> Validators => _validators;
 
     /// <summary>Binds a parsed document into the registered type.</summary>
-    /// <param name="context">The binding context.</param>
-    /// <returns>The bound value, or a default value when a diagnostic was reported.</returns>
     internal object? Bind(BakeBindContext context) => _bind(context);
 
     /// <summary>Serializes a bound value to MessagePack bytes.</summary>
-    /// <param name="value">The bound value.</param>
-    /// <returns>The payload bytes.</returns>
     internal byte[] Serialize(object value) => _serialize(value);
 
     /// <summary>Appends one semantic validator.</summary>
-    /// <typeparam name="T">The data type.</typeparam>
-    /// <param name="validator">The validator.</param>
     internal void AddValidator<T>(IAssetValidator<T> validator)
         where T : IShapeable<T> =>
         _validators.Add(new BakeAssetValidatorRegistration<T>(validator));
 
     /// <summary>Creates the registration for a compiled-shape type.</summary>
-    /// <typeparam name="T">The shapeable type.</typeparam>
-    /// <returns>The registration.</returns>
     internal static BakeAssetTypeRegistration Create<T>()
         where T : IShapeable<T>
     {
@@ -78,21 +68,16 @@ internal interface IBakeAssetValidator
     Type ValidatorType { get; }
 
     /// <summary>Validates a bound value.</summary>
-    /// <param name="assetPath">The canonical asset path.</param>
-    /// <param name="asset">The bound value.</param>
-    /// <param name="diagnostics">The diagnostic sink.</param>
     void Validate(string assetPath, object asset, IAssetProcessorDiagnostics diagnostics);
 }
 
 /// <summary>The typed registration over one public validator.</summary>
-/// <typeparam name="T">The validated data type.</typeparam>
 internal sealed class BakeAssetValidatorRegistration<T> : IBakeAssetValidator
     where T : IShapeable<T>
 {
     private readonly IAssetValidator<T> _validator;
 
     /// <summary>Initializes the validator registration.</summary>
-    /// <param name="validator">The public validator.</param>
     internal BakeAssetValidatorRegistration(IAssetValidator<T> validator)
     {
         ArgumentNullException.ThrowIfNull(validator);

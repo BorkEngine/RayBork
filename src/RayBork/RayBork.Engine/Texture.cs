@@ -3,25 +3,14 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// One texture: an immutable GPU image with its size, format, and sampler state.
+/// One immutable GPU image with its size, format, and sampler state.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A texture is either a packed texture loaded from a pack or one procedural texture built by a
-/// <see cref="TextureBuilder"/>. A packed image is created from the KTX2 payload during the load; a
-/// procedural image is created from the builder's raw uncompressed mip levels. Format selection,
-/// sRGB, and sampler settings are fixed at bake or build time and cannot be changed at run time. The
-/// GPU image keeps its bindless slot alive until every frame that references it completes.
-/// </para>
-/// <para>
-/// The texture does not expose CPU pixels: a loaded texture never retained them, and a procedural
-/// texture's pixels stay owned by its builder. <see cref="Path"/> and <see cref="IsDisposed"/> stay
-/// readable after disposal. Every other member throws <see cref="ObjectDisposedException"/> once the
-/// asset is disposed. A <see cref="RenderTexture"/>'s color and depth views are the exception to
-/// immutability: resizing the target recreates the GPU image and updates the same view's
-/// <see cref="Width"/> and <see cref="Height"/> in place. Format, sampler, path, and owner stay fixed,
-/// and directly disposing the view still throws.
-/// </para>
+/// A texture is either loaded from a pack or built by a <see cref="TextureBuilder"/>, with format,
+/// sRGB, and sampler fixed at creation; after disposal <see cref="Path"/> and
+/// <see cref="IsDisposed"/> stay readable while other members throw
+/// <see cref="ObjectDisposedException"/>. Render target views resize in place and cannot be
+/// disposed directly.
 /// </remarks>
 public sealed class Texture : IAsset
 {
@@ -35,13 +24,7 @@ public sealed class Texture : IAsset
     private readonly bool _isProcedural;
     private readonly bool _isRenderTargetView;
 
-    /// <summary>
-    /// Initializes a texture from its uploaded lifetime state and descriptor.
-    /// </summary>
-    /// <param name="asset">The shared lifetime state acquired by the catalog or the builder.</param>
-    /// <param name="descriptor">The packed or synthetic texture descriptor.</param>
-    /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes a texture from its uploaded lifetime state and descriptor.</summary>
     internal Texture(
         EngineAsset asset,
         TextureAssetDescriptor descriptor,
@@ -49,17 +32,7 @@ public sealed class Texture : IAsset
     )
         : this((ITextureOwner)asset, descriptor, isProcedural, isRenderTargetView: false) { }
 
-    /// <summary>
-    /// Initializes a texture over a non-asset lifetime.
-    /// </summary>
-    /// <param name="owner">The lifetime state that owns the GPU view.</param>
-    /// <param name="descriptor">The synthetic texture descriptor.</param>
-    /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
-    /// <param name="isRenderTargetView">
-    /// Whether the texture is a render target's color or depth view, which the owning
-    /// <see cref="RenderTexture"/> creates and disposes.
-    /// </param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes a render target view over a non-asset lifetime.</summary>
     internal Texture(
         ITextureOwner owner,
         TextureAssetDescriptor descriptor,
@@ -84,12 +57,7 @@ public sealed class Texture : IAsset
     /// <inheritdoc/>
     public string Path => _owner.Path;
 
-    /// <summary>
-    /// Gets whether the texture was built by a <see cref="TextureBuilder"/> instead of loaded from a
-    /// pack. A procedural texture has a reserved synthetic <see cref="Path"/> under
-    /// <c>/_procedural/texture/</c>.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Gets whether the texture was built by a <see cref="TextureBuilder"/>.</summary>
     public bool IsProcedural
     {
         get
@@ -100,10 +68,8 @@ public sealed class Texture : IAsset
     }
 
     /// <summary>
-    /// Gets the base-level width in pixels. A render target view reports the current target width, which
-    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
+    /// Gets the base-level width in pixels; a render target view reports the live target width.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Width
     {
         get
@@ -114,10 +80,8 @@ public sealed class Texture : IAsset
     }
 
     /// <summary>
-    /// Gets the base-level height in pixels. A render target view reports the current target height, which
-    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
+    /// Gets the base-level height in pixels; a render target view reports the live target height.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Height
     {
         get
@@ -127,10 +91,7 @@ public sealed class Texture : IAsset
         }
     }
 
-    /// <summary>
-    /// Gets the number of mip levels in the uploaded image.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Gets the number of mip levels.</summary>
     public int MipLevels
     {
         get
@@ -140,10 +101,7 @@ public sealed class Texture : IAsset
         }
     }
 
-    /// <summary>
-    /// Gets the GPU format of the texture.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Gets the GPU format.</summary>
     public TextureFormat Format
     {
         get
@@ -153,11 +111,7 @@ public sealed class Texture : IAsset
         }
     }
 
-    /// <summary>
-    /// Gets whether the samples are sRGB-encoded. Data textures such as normal and mask maps are
-    /// linear and return <see langword="false"/>.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Gets whether the samples are sRGB-encoded; data textures are linear.</summary>
     public bool IsSrgb
     {
         get
@@ -167,10 +121,7 @@ public sealed class Texture : IAsset
         }
     }
 
-    /// <summary>
-    /// Gets the sampler state of the texture.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Gets the sampler state.</summary>
     public SamplerState Sampler
     {
         get
@@ -184,15 +135,11 @@ public sealed class Texture : IAsset
     public bool IsDisposed => _owner.IsDisposed;
 
     /// <summary>
-    /// Gets the retention target the draw recorder keeps alive for the frame that references this
-    /// texture, or the render target lifetime when the texture is a render target view.
+    /// Gets the retention target the draw recorder keeps alive for the frames that reference it.
     /// </summary>
     internal IAssetRetentionTarget RetentionTarget => _owner;
 
-    /// <summary>
-    /// Gets the engine-asset lifetime. Only an asset texture has one; a render target view is owned by
-    /// its <see cref="RenderTexture"/>.
-    /// </summary>
+    /// <summary>Gets the engine-asset lifetime; a render target view has none.</summary>
     /// <exception cref="InvalidOperationException">The texture is a render target view.</exception>
     internal EngineAsset Lifetime =>
         _owner.EngineAsset
@@ -201,24 +148,19 @@ public sealed class Texture : IAsset
         );
 
     /// <summary>
-    /// Gets the bindless binding resource the renderer samples, or <see langword="null"/> when the GPU
-    /// resource does not exist yet.
+    /// Gets the bindless binding resource, or <see langword="null"/> when the GPU resource does
+    /// not exist.
     /// </summary>
     internal ITextureBindingResource? BindingResource => _owner.BindingResource;
 
-    /// <summary>
-    /// Gets whether this texture is a render target's color or depth view.
-    /// </summary>
+    /// <summary>Gets whether this texture is a render target view.</summary>
     internal bool IsRenderTargetView => _isRenderTargetView;
 
-    /// <summary>
-    /// Gets the render target id when this texture is a render target view, or <c>0</c> otherwise.
-    /// </summary>
+    /// <summary>Gets the render target id for a view, or <c>0</c> otherwise.</summary>
     internal long RenderTargetId => _owner is RenderTextureViewLifetime view ? view.TargetId : 0;
 
     /// <summary>
-    /// Retires the view and releases the owner reference the render texture held on it when the
-    /// owning render texture is disposed. A non-view texture is unaffected.
+    /// Retires a render target view and releases the owner reference the render texture held on it.
     /// </summary>
     internal void RetireRenderTargetView()
     {
@@ -229,24 +171,16 @@ public sealed class Texture : IAsset
         }
     }
 
-    /// <summary>
-    /// Adds one owner reference to the texture's lifetime.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    /// <summary>Adds one owner reference to the texture's lifetime.</summary>
     internal void AddOwnerReference() => _owner.AddOwnerReference();
 
-    /// <summary>
-    /// Releases one owner reference from the texture's lifetime.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The owner count is already zero.</exception>
+    /// <summary>Releases one owner reference; the count must not already be zero.</summary>
     internal void ReleaseOwnerReference() => _owner.ReleaseOwnerReference();
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">
-    /// The texture is a render target's color or depth view; dispose the owning <see cref="RenderTexture"/>
-    /// instead.
+    /// The texture is a render target view; dispose the owning <see cref="RenderTexture"/> instead.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design",
         "CA1065",

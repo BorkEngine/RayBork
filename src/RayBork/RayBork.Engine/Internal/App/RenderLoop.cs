@@ -4,53 +4,21 @@ using Microsoft.Extensions.Logging;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Owns the render thread: it creates and initializes the renderer backend, services the GPU asset
-/// bridge, consumes the newest published frame, submits and presents it, and publishes the backend
-/// status.
+/// Owns the render thread: backend lifecycle, GPU asset and render-texture servicing, and frame
+/// presentation.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The constructor runs on the main thread, and the render thread owns the backend for the rest of
-/// its life. The loop never calls user code and never touches the platform directly: surface work is
-/// marshalled to the main thread through <see cref="RendererBackendOptions.SurfaceProvider"/>.
-/// </para>
-/// <para>
-/// The loop waits on the frame-ring ready signal, the GPU asset bridge signal, and the render texture
-/// signal together, so an upload queued during <c>Setup</c> and a render texture requested in
-/// <c>Setup</c> both start without waiting for the first tick and no loop turn busy-spins. While the
-/// bridge still has a queued or in-flight upload, or a render texture creation, resize, readback, or
-/// destruction is pending, the wait is bounded to a few milliseconds so the loop keeps servicing that
-/// work even when no frame is being published; with no pending work it waits indefinitely. The bridge
-/// and the render texture queue are serviced before each wait and after every wake. When the backend's
-/// <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the bridge to recreate the
-/// live resources before the next frame is submitted; presentation-only recoveries leave the
-/// generation unchanged and do not re-upload assets.
-/// </para>
-/// <para>
-/// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized, its
-/// <see cref="EngineInfo"/> was published, and the GPU asset worker was attached, so the main thread
-/// can start the tick thread only after <see cref="EngineContext.Info"/> is valid and no asset upload
-/// can be queued without a worker. A failure before that point is an initialization failure; a
-/// failure after it is a run-time failure. Exceptions never escape the thread: <see cref="Failure"/>
-/// holds them and the backend is disposed in every case.
-/// </para>
-/// <para>
-/// Teardown order in the loop's final block: the frame ring is already complete and drained, so the
-/// render texture service closes first (failing pending creations, resizes, and readbacks with the
-/// failure or <see cref="ObjectDisposedException"/>), then the bridge closes (completing pending uploads
-/// and destroying live resources), then the backend is disposed. <see cref="Start"/> may be called once.
-/// Read <see cref="Failure"/> after <see cref="Join"/> returned or after <see cref="IsCompleted"/>
-/// became <see langword="true"/>.
-/// </para>
+/// The constructor runs on the main thread; the render thread owns the backend afterwards and
+/// marshals surface work to the main thread through
+/// <see cref="RendererBackendOptions.SurfaceProvider"/>. Exceptions never escape the thread:
+/// <see cref="Failure"/> holds them, and the backend is disposed in every case.
 /// </remarks>
 internal sealed class RenderLoop
 {
     private const string THREAD_NAME = "RayBork.Render";
 
     /// <summary>
-    /// The bounded wait used while a GPU asset upload is queued or in flight. It is short enough that
-    /// an upload started during <c>Setup</c> completes promptly and long enough not to busy-spin the
-    /// render thread while no frame is ready.
+    /// The bounded wait, in milliseconds, used while GPU asset or render-texture work is pending.
     /// </summary>
     private const int UPLOAD_POLL_TIMEOUT_MILLISECONDS = 2;
 
@@ -69,21 +37,13 @@ internal sealed class RenderLoop
     private volatile bool _isCompleted;
     private int _started;
 
-    /// <summary>
-    /// Initializes the loop without starting the render thread.
-    /// </summary>
+    /// <summary>Initializes the loop without starting the render thread.</summary>
     /// <param name="frameRing">The consumer side of the frame handoff.</param>
     /// <param name="backendFactory">Creates the backend on the render thread.</param>
     /// <param name="options">The backend configuration and surface seams.</param>
-    /// <param name="status">The status holder the loop publishes <see cref="EngineInfo"/> and
-    /// <see cref="RenderStats"/> to.</param>
-    /// <param name="gpuAssetBridge">
-    /// The bridge that receives GPU asset uploads and destructions from any thread and is serviced by
-    /// this loop on the render thread.
-    /// </param>
-    /// <param name="renderTextures">
-    /// The render-texture request queue serviced on the render thread before each frame.
-    /// </param>
+    /// <param name="status">Publishes <see cref="EngineInfo"/> and <see cref="RenderStats"/>.</param>
+    /// <param name="gpuAssetBridge">The bridge for GPU asset uploads from any thread.</param>
+    /// <param name="renderTextures">The render-texture queue serviced before each frame.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal RenderLoop(
         FrameRing frameRing,
@@ -111,38 +71,22 @@ internal sealed class RenderLoop
         _thread = new Thread(RunThread) { IsBackground = true, Name = THREAD_NAME };
     }
 
-    /// <summary>
-    /// Gets the render thread. It is created by the constructor and runs after <see cref="Start"/>.
-    /// </summary>
+    /// <summary>Gets the render thread, which runs after <see cref="Start"/>.</summary>
     internal Thread Thread => _thread;
 
-    /// <summary>
-    /// Gets the render thread name.
-    /// </summary>
+    /// <summary>Gets the render thread name.</summary>
     internal string ThreadName => _thread.Name ?? THREAD_NAME;
 
-    /// <summary>
-    /// Gets the unexpected failure that stopped the loop, or <see langword="null"/>. It is an
-    /// initialization failure when <see cref="IsReady"/> is still <see langword="false"/>, and a
-    /// run-time failure otherwise.
-    /// </summary>
+    /// <summary>Gets the failure that stopped the loop, or <see langword="null"/>.</summary>
     internal Exception? Failure => _failure;
 
-    /// <summary>
-    /// Gets whether the backend initialized successfully, published its <see cref="EngineInfo"/>, and
-    /// attached an asset GPU worker when the backend provides one.
-    /// </summary>
+    /// <summary>Gets whether the backend initialized and the loop is ready to tick.</summary>
     internal bool IsReady => _isReady;
 
-    /// <summary>
-    /// Gets whether the render thread finished closing the bridge and disposing the backend. Read it
-    /// together with <see cref="Failure"/> after a bounded join.
-    /// </summary>
+    /// <summary>Gets whether the render thread finished teardown.</summary>
     internal bool IsCompleted => _isCompleted;
 
-    /// <summary>
-    /// Starts the render thread. The loop can be started once.
-    /// </summary>
+    /// <summary>Starts the render thread, which can run only once.</summary>
     /// <exception cref="InvalidOperationException">The loop was already started.</exception>
     internal void Start()
     {
@@ -155,8 +99,8 @@ internal sealed class RenderLoop
     }
 
     /// <summary>
-    /// Blocks until the render thread exits. Call it after the frame ring is complete, while the
-    /// caller still services <see cref="RendererBackendOptions.SurfaceProvider"/>.
+    /// Blocks until the render thread exits; call it after the frame ring completes while still
+    /// servicing <see cref="RendererBackendOptions.SurfaceProvider"/>.
     /// </summary>
     internal void Join() => _thread.Join();
 
@@ -324,11 +268,7 @@ internal sealed class RenderLoop
     /// <summary>
     /// Waits for every submitted frame to complete before the bridge destroys live resources.
     /// </summary>
-    /// <remarks>
-    /// The wait runs once, after the frame ring is complete and drained. A device that is already lost
-    /// cannot signal its fences; the worker logs and returns instead of throwing, because shutdown
-    /// must still release what it can.
-    /// </remarks>
+    /// <remarks>A lost device cannot signal its fences; shutdown logs and continues.</remarks>
     [SuppressMessage(
         "Design",
         "CA1031",

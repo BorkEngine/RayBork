@@ -8,24 +8,13 @@ namespace RayBork.Internal;
 /// The Vulkan 1.2 instance owned by the render thread.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The render thread creates the instance after the main thread has created the window and supplied
-/// the platform's required surface extensions. Creation requests Vulkan 1.2, validates the platform
-/// extensions against the loader, optionally enables the Khronos validation layer and its debug-utils
-/// messenger, and throws when validation reported an error while creating the instance.
-/// </para>
-/// <para>
-/// The instance is not thread-safe. The render thread creates and uses it, and its
-/// <see cref="Dispose"/> only completes the render-thread phase. After the render thread has stopped,
-/// the main thread calls <see cref="DisposeFromMainThread"/>, which destroys the debug messenger, the
-/// instance, the Silk.NET API, and the native loader.
-/// </para>
+/// Creation requires the platform surface extensions and optionally enables validation and
+/// swapchain color space. Disposal is split: <see cref="Dispose"/> on the render thread, then
+/// <see cref="DisposeFromMainThread"/> after that thread stops.
 /// </remarks>
 internal sealed class VulkanInstance : IDisposable
 {
-    /// <summary>
-    /// The Vulkan API version the renderer requests from the loader.
-    /// </summary>
+    /// <summary>The Vulkan API version requested from the loader.</summary>
     internal static readonly uint RequestedApiVersion = VulkanVersion.Pack(1, 2, 0);
 
     private const string ENGINE_NAME = "RayBork";
@@ -66,53 +55,27 @@ internal sealed class VulkanInstance : IDisposable
         _logger = logger;
     }
 
-    /// <summary>
-    /// Gets the loaded Vulkan API.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    /// <summary>Gets the loaded Vulkan API; reading it after disposal throws.</summary>
     internal Vk Vulkan => _vulkan ?? throw new ObjectDisposedException(nameof(VulkanInstance));
 
-    /// <summary>
-    /// Gets the native <c>VkInstance</c> handle. It is the default handle after disposal.
-    /// </summary>
+    /// <summary>Gets the native <c>VkInstance</c> handle, default after disposal.</summary>
     internal Instance Handle => _handle;
 
-    /// <summary>
-    /// Gets the packed Vulkan API version requested at creation, which is Vulkan 1.2.0.
-    /// </summary>
+    /// <summary>Gets the packed Vulkan 1.2.0 API version requested at creation.</summary>
     internal static uint ApiVersion => RequestedApiVersion;
 
-    /// <summary>
-    /// Gets whether the <c>VK_LAYER_KHRONOS_validation</c> layer is active.
-    /// </summary>
+    /// <summary>Gets whether the validation layer is active.</summary>
     internal bool ValidationLayersEnabled { get; }
 
-    /// <summary>
-    /// Gets whether the debug-utils messenger that records validation errors is active.
-    /// </summary>
+    /// <summary>Gets whether the debug-utils messenger is active.</summary>
     internal bool DebugMessengerEnabled { get; }
 
-    /// <summary>
-    /// Gets whether <c>VK_EXT_swapchain_colorspace</c> was enabled on the instance. HDR presentation
-    /// needs the extended color spaces that this extension advertises.
-    /// </summary>
+    /// <summary>Gets whether the swapchain color-space extension is enabled for HDR.</summary>
     internal bool SwapchainColorSpaceExtensionEnabled { get; }
 
     /// <summary>
-    /// Creates the Vulkan instance.
+    /// Creates the Vulkan instance, requiring the platform surface extensions.
     /// </summary>
-    /// <remarks>
-    /// Runs on the render thread. The platform surface extensions are required; the validation layer,
-    /// the debug-utils messenger, and <c>VK_EXT_swapchain_colorspace</c> are optional and degrade to
-    /// a warning when unavailable. Without the color-space extension, HDR presentation falls back to
-    /// SDR.
-    /// </remarks>
-    /// <param name="options">The instance options captured at startup.</param>
-    /// <returns>The created instance.</returns>
-    /// <exception cref="GraphicsException">
-    /// The Vulkan loader is unavailable, a required platform extension is missing, instance creation
-    /// failed, or validation reported an error. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static unsafe VulkanInstance Create(VulkanInstanceOptions options)
     {
         lock (_processGate)
@@ -254,20 +217,10 @@ internal sealed class VulkanInstance : IDisposable
         }
     }
 
-    /// <summary>
-    /// Returns and clears the validation errors recorded since the previous call.
-    /// </summary>
-    /// <returns>The recorded error messages, or an empty list when validation is inactive.</returns>
+    /// <summary>Returns and clears validation errors recorded since the previous call.</summary>
     internal IReadOnlyList<string> ConsumeValidationErrors() => _validation?.ConsumeErrors() ?? [];
 
-    /// <summary>
-    /// Throws when validation errors were recorded since the previous call.
-    /// </summary>
-    /// <param name="operation">The operation that was in progress, for the diagnostic message.</param>
-    /// <exception cref="GraphicsException">
-    /// At least one validation error was recorded. The message lists every error and the diagnostic
-    /// code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Throws when validation recorded errors since the previous call.</summary>
     internal void ThrowIfValidationError(string operation)
     {
         ArgumentException.ThrowIfNullOrEmpty(operation);
@@ -275,14 +228,10 @@ internal sealed class VulkanInstance : IDisposable
     }
 
     /// <summary>
-    /// Completes the render-thread phase of disposal. The instance and loader stay alive until the
-    /// main thread calls <see cref="DisposeFromMainThread"/>. The call is idempotent.
+    /// Completes render-thread disposal; instance teardown is deferred to the main thread.
     /// </summary>
     /// <remarks>
-    /// Runs on the render thread after every surface, device, and swapchain created from the instance
-    /// has been destroyed. It deliberately does not destroy the instance: the Vulkan loader unloads
-    /// driver libraries that registered thread-local state on the render thread, and running that
-    /// teardown on the stopping render thread crashes when the thread exits.
+    /// The loader's driver teardown must not run on the exiting render thread.
     /// </remarks>
     public void Dispose()
     {
@@ -298,14 +247,9 @@ internal sealed class VulkanInstance : IDisposable
     }
 
     /// <summary>
-    /// Destroys the debug messenger, the instance, the Silk.NET API, and the native loader. The call
-    /// is idempotent and safe after the render-thread <see cref="Dispose"/>.
+    /// Destroys the debug messenger, instance, API, and loader after the render thread stops.
     /// </summary>
-    /// <remarks>
-    /// Main-thread only. It runs after the render thread has stopped and no device, swapchain, or
-    /// surface references the instance. Destroying the instance and loader here, rather than on the
-    /// render thread, keeps driver thread-local destructors valid until that thread has exited.
-    /// </remarks>
+    /// <remarks>Idempotent, and safe after the render-thread <see cref="Dispose"/>.</remarks>
     internal unsafe void DisposeFromMainThread()
     {
         lock (_processGate)

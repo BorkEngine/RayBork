@@ -3,23 +3,13 @@ using System.Buffers.Binary;
 namespace RayBork.Internal;
 
 /// <summary>
-/// One internal GPU shader program: the vertex and fragment stage pair, its baked metadata, its default
-/// render state, and the immutable bake defaults that every material over the program starts from.
+/// One internal GPU shader program: its vertex and fragment stages, reflected metadata, default render
+/// state, and immutable bake defaults.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The public <see cref="Shader"/> type is a material instance, not a program. The catalog caches this
-/// program by <c>(canonical path, typeof(ShaderProgram))</c> and reference-counts it like any other
-/// engine asset; every <see cref="Shader"/> material acquired from it holds one owner reference and
-/// releases it on <c>Dispose</c>. Two materials over the same program share the GPU program, the
-/// metadata, and the bake defaults, while each keeps its own uniform cursor and texture bindings.
-/// </para>
-/// <para>
-/// The program is an <see cref="EngineAsset"/> owner: the catalog holds the initial reference and the
-/// GPU destruction is queued when the last material reference and every recorded frame hold are gone.
-/// The metadata collections and the bake-default arrays are immutable after construction, so any
-/// material may read them from the tick thread without locking.
-/// </para>
+/// The catalog caches and reference-counts the program; every <see cref="Shader"/> holds one owner
+/// reference. Metadata and bake defaults are immutable after construction, so materials read them
+/// from the tick thread without locking.
 /// </remarks>
 internal sealed class ShaderProgram
 {
@@ -34,16 +24,8 @@ internal sealed class ShaderProgram
     private readonly byte[] _defaultInstanceData;
     private readonly Texture?[] _defaultTextureValues;
 
-    /// <summary>
-    /// Initializes a program from its uploaded lifetime state and packed descriptor.
-    /// </summary>
-    /// <param name="asset">The shared lifetime state acquired by the catalog.</param>
-    /// <param name="descriptor">The packed shader descriptor.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">The descriptor has invalid uniform metadata.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The per-instance record exceeds the shader ABI size limit.
-    /// </exception>
+    /// <summary>Initializes the program from its lifetime state and packed descriptor.</summary>
+    /// <exception cref="ArgumentException">The descriptor metadata is invalid.</exception>
     internal ShaderProgram(EngineAsset asset, ShaderAssetDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(asset);
@@ -118,58 +100,41 @@ internal sealed class ShaderProgram
     /// <summary>Gets the default render state baked for the program.</summary>
     internal RenderState DefaultRenderState => _defaultRenderState;
 
-    /// <summary>Gets the reflected uniform declarations in sidecar declaration order.</summary>
+    /// <summary>Gets the reflected uniforms in sidecar declaration order.</summary>
     internal IReadOnlyList<ShaderUniform> Uniforms => _uniforms;
 
     /// <summary>Gets the texture bindings in bindless slot order.</summary>
     internal IReadOnlyList<ShaderTextureBinding> Textures => _textures;
 
-    /// <summary>Gets whether the program was disposed. It stays readable after disposal.</summary>
+    /// <summary>Gets whether the program is disposed; it stays readable after disposal.</summary>
     internal bool IsDisposed => _asset.IsDisposed;
 
-    /// <summary>
-    /// Gets the internal retention state the catalog owns and the draw recorder retains per frame.
-    /// </summary>
+    /// <summary>Gets the retention state the catalog owns and draws retain per frame.</summary>
     internal EngineAsset Lifetime => _asset;
 
-    /// <summary>Gets the per-instance layout derived from the sidecar declaration order.</summary>
+    /// <summary>Gets the per-instance layout derived from the sidecar order.</summary>
     internal ShaderAbiLayout Abi => _layout;
 
-    /// <summary>Gets the complete per-instance record size in bytes, including the 96-byte header.</summary>
+    /// <summary>Gets the full per-instance record size, including the 96-byte header.</summary>
     internal int InstanceDataSize => _layout.InstanceRecordSize;
 
-    /// <summary>
-    /// Gets the immutable bake-default instance template that starts at instance offset
-    /// <see cref="ShaderAbiLayout.INSTANCE_HEADER_SIZE"/>.
-    /// </summary>
+    /// <summary>Gets the immutable bake-default instance template.</summary>
     /// <remarks>
-    /// The data is stable for the program lifetime. A new material copies it into its own cursor, and a
-    /// draw that must use the baked defaults copies it directly. The texture index slots at the start
-    /// stay zero because the draw recorder resolves them from the material's texture bindings.
+    /// The template starts at the instance header and is stable for the program lifetime; texture
+    /// slots stay zero until the draw resolves them from the material bindings.
     /// </remarks>
     internal ReadOnlySpan<byte> DefaultInstanceData => _defaultInstanceData;
 
-    /// <summary>
-    /// Gets the immutable bake-default texture bindings, one <see langword="null"/> per sidecar texture.
-    /// </summary>
+    /// <summary>Gets the immutable default texture bindings, one per declared texture.</summary>
     internal ReadOnlySpan<Texture?> DefaultTextureValues => _defaultTextureValues;
 
-    /// <summary>
-    /// Gets the reflected uniforms indexed by name. The dictionary is immutable and shared by every
-    /// material over the program.
-    /// </summary>
+    /// <summary>Gets the reflected uniforms indexed by name; the dictionary is immutable.</summary>
     internal IReadOnlyDictionary<string, ShaderAbiUniform> UniformsByName => _uniformsByName;
 
-    /// <summary>
-    /// Gets the texture bindings indexed by name. The dictionary is immutable and shared by every
-    /// material over the program.
-    /// </summary>
+    /// <summary>Gets the texture bindings indexed by name; the dictionary is immutable.</summary>
     internal IReadOnlyDictionary<string, ShaderAbiTexture> TexturesByName => _texturesByName;
 
-    /// <summary>
-    /// Acquires one owner reference and returns a new independent material over this program.
-    /// </summary>
-    /// <returns>The material. The caller owns it and must dispose it exactly once.</returns>
+    /// <summary>Creates a new independent material; the caller disposes it once.</summary>
     /// <exception cref="ObjectDisposedException">The program is disposed.</exception>
     internal Shader CreateMaterial()
     {

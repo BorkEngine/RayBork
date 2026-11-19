@@ -7,35 +7,10 @@ namespace RayBork;
 /// Builds one immutable procedural <see cref="Mesh"/> from mutable vertex and index lists.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Create the builder with <see cref="EngineContext.CreateMeshBuilder"/>. Fill <see cref="Vertices"/>
-/// and <see cref="Indices"/> (or call <see cref="SetVertices"/> and <see cref="SetIndices"/>),
-/// optionally compute normals, tangents, and bounds, then call <see cref="BuildAsync"/> once. The
-/// built mesh is one-shot: changing the builder afterwards does not change the mesh, and the builder
-/// can be reused to build another mesh.
-/// </para>
-/// <para>
-/// A builder instance is not thread-safe; use one per thread. The factory, the CPU helpers, and
-/// <see cref="BuildAsync"/> do not touch tick-affine engine state, so they may be called from any
-/// thread, including a worker thread. Awaiting a build on the tick thread suspends that tick's
-/// continuation exactly like an asset load. After the app stops, every method throws
-/// <see cref="ObjectDisposedException"/>.
-/// </para>
-/// <para>
-/// <see cref="ComputeNormals"/> and <see cref="ComputeTangents"/> support only the triangle
-/// topologies. A line or point mesh is still valid for <see cref="BuildAsync"/>; it simply has no
-/// generated normals or tangents. The fixed vertex layout is documented on <see cref="Vertex"/>.
-/// </para>
-/// <para>
-/// The <c>Generate*</c> methods replace the current geometry with one named procedural primitive.
-/// They fill <see cref="Vertices"/>, <see cref="Indices"/>, outward normals, and the first UV set,
-/// and set <see cref="Topology"/> to <see cref="PrimitiveTopology.TriangleList"/>; an explicit
-/// <see cref="ComputeBounds"/> result is discarded. They are pure CPU and need no GPU, tick thread,
-/// or async path, so <see cref="BuildAsync"/> uploads the generated geometry like any other builder
-/// content. Every generated triangle winds counter-clockwise around its outward normal. The
-/// generators do not compute tangents; call <see cref="ComputeTangents"/> after generation when a
-/// tangent basis is needed.
-/// </para>
+/// Fill <see cref="Vertices"/> and <see cref="Indices"/>, then call <see cref="BuildAsync"/> once.
+/// The resulting mesh is a snapshot, the builder stays reusable, and the <c>Generate*</c> methods
+/// replace the geometry with a counter-clockwise triangle list. A builder is not thread-safe, and
+/// every member throws <see cref="ObjectDisposedException"/> once the app stops.
 /// </remarks>
 public sealed class MeshBuilder
 {
@@ -60,13 +35,9 @@ public sealed class MeshBuilder
     private bool _generateCollisions;
 
     /// <summary>
-    /// Initializes a builder. Game code uses <see cref="EngineContext.CreateMeshBuilder"/> so the
-    /// builder always has the app's GPU upload service.
+    /// Initializes a builder; game code uses <see cref="EngineContext.CreateMeshBuilder"/>.
     /// </summary>
-    /// <param name="service">The app's procedural asset service.</param>
-    /// <param name="topology">The primitive topology of the mesh.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="service"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="topology"/> is not a defined value.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The topology is not defined.</exception>
     internal MeshBuilder(ProceduralAssetService service, PrimitiveTopology topology)
     {
         ArgumentNullException.ThrowIfNull(service);
@@ -77,11 +48,9 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Gets or sets the primitive topology of the mesh. Only triangle topologies support normal and
-    /// tangent generation.
+    /// Gets or sets the primitive topology; normal and tangent generation support only triangles.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not a defined topology.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     public PrimitiveTopology Topology
     {
         get
@@ -98,8 +67,7 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Gets the mutable vertex list. Add vertices directly or replace the list contents with
-    /// <see cref="SetVertices"/>.
+    /// Gets the mutable vertex list that <see cref="BuildAsync"/> snapshots.
     /// </summary>
     public List<Vertex> Vertices
     {
@@ -111,8 +79,7 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Gets the mutable 32-bit index list. Add indices directly or replace the list contents with
-    /// <see cref="SetIndices"/>.
+    /// Gets the mutable 32-bit index list that <see cref="BuildAsync"/> snapshots.
     /// </summary>
     public List<uint> Indices
     {
@@ -124,10 +91,8 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces every vertex with the supplied span. The builder keeps a copy.
+    /// Replaces every vertex with the supplied span; the builder keeps a copy.
     /// </summary>
-    /// <param name="vertices">The new vertices.</param>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     public void SetVertices(ReadOnlySpan<Vertex> vertices)
     {
         _service.ThrowIfStopped();
@@ -137,10 +102,8 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces every index with the supplied span. The builder keeps a copy.
+    /// Replaces every index with the supplied span; the builder keeps a copy.
     /// </summary>
-    /// <param name="indices">The new 32-bit indices.</param>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     public void SetIndices(ReadOnlySpan<uint> indices)
     {
         _service.ThrowIfStopped();
@@ -152,25 +115,12 @@ public sealed class MeshBuilder
     /// <summary>
     /// Computes the vertex normals from the triangle geometry.
     /// </summary>
-    /// <param name="mode">
-    /// <see cref="MeshNormalMode.Smooth"/> for shared area-weighted normals, or
-    /// <see cref="MeshNormalMode.Flat"/> to split each triangle and give it its face normal.
-    /// </param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <param name="mode">Smooth blends shared vertices; Flat uses per-face normals.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The mode is not defined.</exception>
     /// <exception cref="NotSupportedException">The topology is not a triangle topology.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The mesh has no vertices or indices, or the index count does not describe whole triangles, or
-    /// an index is outside the vertex list.
+    /// The geometry is empty or is not whole triangles, or an index is out of range.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// Smooth normals accumulate the unnormalized face normal (the cross product, so its length is
-    /// twice the triangle area) per shared position and normalize the sum. A vertex that only belongs
-    /// to degenerate triangles keeps a zero normal. Flat normals rebuild
-    /// <see cref="Vertices"/> and <see cref="Indices"/>: every triangle gets three vertices with the
-    /// normalized face normal, and a triangle strip keeps its topology by inserting one degenerate
-    /// connecting index when the next triangle would start at an odd position.
-    /// </remarks>
     public void ComputeNormals(MeshNormalMode mode = MeshNormalMode.Smooth)
     {
         _service.ThrowIfStopped();
@@ -195,20 +145,15 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Computes the per-vertex tangents from the normals and the first UV set.
+    /// Computes per-vertex tangents from the normals and the first UV set.
     /// </summary>
     /// <exception cref="NotSupportedException">The topology is not a triangle topology.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The mesh has no vertices or indices, the index count does not describe whole triangles, an
-    /// index is outside the vertex list, a vertex normal is zero, or an attribute is not finite.
+    /// The geometry is empty or is not whole triangles, an index is out of range, a normal is zero,
+    /// or an attribute is not finite.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     /// <remarks>
-    /// Each triangle contributes its UV-space tangent and bitangent to the three vertices; the result
-    /// is orthonormalized against the vertex normal and the bitangent handedness is stored in
-    /// <see cref="Vertex.Tangent"/>.<c>W</c>. A vertex that only belongs to degenerate triangles
-    /// (zero-area geometry or a collapsed UV triangle) keeps a zero tangent, and the <c>W</c> of a
-    /// zero tangent is zero. Call <see cref="ComputeNormals"/> first.
+    /// Call <see cref="ComputeNormals"/> first; degenerate-only vertices keep a zero tangent.
     /// </remarks>
     public void ComputeTangents()
     {
@@ -274,29 +219,13 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Selects that <see cref="BuildAsync"/> builds a collision acceleration structure from the same
-    /// geometry snapshot it validates and uploads.
+    /// Makes the next <see cref="BuildAsync"/> also build a collision acceleration structure.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This is an imperative builder step like <see cref="ComputeNormals"/> and
-    /// <see cref="ComputeTangents"/>: it does not change the builder geometry. The structure is built
-    /// by the next <see cref="BuildAsync"/> from that build's snapshot and is exposed on the returned
-    /// mesh as <see cref="Mesh.HasCollisionAcceleration"/>. The selection persists for every later
-    /// build from this builder, and calling this method more than once has no additional effect.
-    /// </para>
-    /// <para>
-    /// <see cref="Collision.GetRayMesh"/> traverses the structure when the mesh has one and tests every
-    /// triangle otherwise; both paths return the same nearest hit. A snapshot with no non-degenerate
-    /// triangle builds without a structure. A failed or canceled build creates no asset, leaves the
-    /// builder reusable, and does not let a later geometry change affect the structure.
-    /// </para>
+    /// The structure is built from that build's snapshot and exposed as
+    /// <see cref="Mesh.HasCollisionAcceleration"/>; the selection persists for later builds.
     /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// The topology is not <see cref="PrimitiveTopology.TriangleList"/> or
-    /// <see cref="PrimitiveTopology.TriangleStrip"/>.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="NotSupportedException">The topology is not a triangle topology.</exception>
     public void GenerateCollisions()
     {
         _service.ThrowIfStopped();
@@ -311,22 +240,11 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a regular polygon disc in the XZ plane, the raylib
-    /// <c>GenMeshPoly</c> shape.
+    /// Replaces the geometry with a +Y-facing polygon disc in the XZ plane (raylib <c>GenMeshPoly</c>),
+    /// with one center vertex and UVs mapped into the unit square.
     /// </summary>
-    /// <param name="sides">The number of polygon sides. The minimum is 3.</param>
-    /// <param name="radius">The distance from the center to every corner. It must be positive and finite.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="sides"/> is less than 3, or <paramref name="radius"/> is not positive and finite.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The polygon is a triangle fan with one center vertex and one perimeter vertex per side. It has
-    /// <c>sides + 1</c> vertices and <c>sides * 3</c> indices, its front face is toward +Y, and every
-    /// normal is <c>(0, 1, 0)</c>. UVs map the disc into the unit square: the center is
-    /// <c>(0.5, 0.5)</c> and the first corner, on +Z, is <c>(0.5, 0)</c>, so the perimeter follows the
-    /// unit circle around the center.
-    /// </remarks>
+    /// <param name="sides">The polygon side count; the minimum is 3.</param>
+    /// <param name="radius">The center-to-corner distance; positive and finite.</param>
     public void GeneratePoly(int sides, float radius)
     {
         _service.ThrowIfStopped();
@@ -355,24 +273,13 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a subdivided plane in the XZ plane, the raylib
-    /// <c>GenMeshPlane</c> shape.
+    /// Replaces the geometry with a +Y-facing rectangle at <c>y = 0</c> (raylib <c>GenMeshPlane</c>);
+    /// UV <c>u</c> runs 0..1 from -X to +X and <c>v</c> from -Z to +Z.
     /// </summary>
-    /// <param name="width">The extent along X. It must be positive and finite.</param>
-    /// <param name="length">The extent along Z. It must be positive and finite.</param>
-    /// <param name="resX">The number of quad subdivisions along X. The minimum is 1.</param>
-    /// <param name="resZ">The number of quad subdivisions along Z. The minimum is 1.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="width"/> or <paramref name="length"/> is not positive and finite, or
-    /// <paramref name="resX"/> or <paramref name="resZ"/> is less than 1.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The plane covers <c>[-width / 2, width / 2]</c> by <c>[-length / 2, length / 2]</c> at
-    /// <c>y = 0</c>, has <c>(resX + 1) * (resZ + 1)</c> vertices and <c>resX * resZ * 6</c> indices,
-    /// and its front face is toward +Y. Every normal is <c>(0, 1, 0)</c>. UV <c>u</c> runs from 0 at
-    /// the -X edge to 1 at the +X edge; UV <c>v</c> runs from 0 at the -Z edge to 1 at the +Z edge.
-    /// </remarks>
+    /// <param name="width">The extent along X; positive and finite.</param>
+    /// <param name="length">The extent along Z; positive and finite.</param>
+    /// <param name="resX">The quad subdivisions along X; the minimum is 1.</param>
+    /// <param name="resZ">The quad subdivisions along Z; the minimum is 1.</param>
     public void GeneratePlane(float width, float length, int resX, int resZ)
     {
         _service.ThrowIfStopped();
@@ -410,22 +317,12 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a centered box, the raylib <c>GenMeshCube</c> shape.
+    /// Replaces the geometry with an origin-centered box (raylib <c>GenMeshCube</c>) whose faces keep
+    /// outward normals and 0..1 UVs from the top-left corner with V increasing downward.
     /// </summary>
-    /// <param name="width">The extent along X. It must be positive and finite.</param>
-    /// <param name="height">The extent along Y. It must be positive and finite.</param>
-    /// <param name="length">The extent along Z. It must be positive and finite.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive and finite.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The box is centered at the origin and extends <c>width / 2</c>, <c>height / 2</c>, and
-    /// <c>length / 2</c> along each axis. It has 24 vertices, one four-vertex quad per face, and 36
-    /// indices; every face keeps its outward face normal instead of a smoothed corner normal. Each
-    /// face's UVs cover 0..1 with the origin at the face's top-left corner and V increasing
-    /// downward, matching the engine's top-left UV convention.
-    /// </remarks>
+    /// <param name="width">The extent along X; positive and finite.</param>
+    /// <param name="height">The extent along Y; positive and finite.</param>
+    /// <param name="length">The extent along Z; positive and finite.</param>
     public void GenerateCube(float width, float height, float length)
     {
         _service.ThrowIfStopped();
@@ -451,24 +348,12 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a UV sphere, the raylib <c>GenMeshSphere</c> shape.
+    /// Replaces the geometry with an origin-centered UV sphere (raylib <c>GenMeshSphere</c>), with
+    /// poles on +Y and -Y, <c>u</c> turning from +Z toward +X, and <c>v</c> running 0..1 toward -Y.
     /// </summary>
-    /// <param name="radius">The sphere radius. It must be positive and finite.</param>
-    /// <param name="rings">The number of latitude bands from pole to pole. The minimum is 3.</param>
-    /// <param name="slices">The number of longitude segments. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is not positive and finite, or <paramref name="rings"/> or
-    /// <paramref name="slices"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The sphere is centered at the origin with its poles on +Y and -Y. Each pole is one vertex and
-    /// the seam duplicates the first meridian at <c>u = 1</c>, so the mesh has
-    /// <c>(rings - 1) * (slices + 1) + 2</c> vertices and <c>slices * (rings - 1) * 6</c> indices.
-    /// Smooth normals point outward and equal the position divided by <paramref name="radius"/>. UV
-    /// <c>u</c> runs 0..1 around the +Y axis starting at +Z and turning toward +X; UV <c>v</c> is 0 at
-    /// the +Y pole and 1 at the -Y pole.
-    /// </remarks>
+    /// <param name="radius">The sphere radius; positive and finite.</param>
+    /// <param name="rings">The latitude bands from pole to pole; the minimum is 3.</param>
+    /// <param name="slices">The longitude segments; the minimum is 3.</param>
     public void GenerateSphere(float radius, int rings, int slices)
     {
         _service.ThrowIfStopped();
@@ -530,26 +415,12 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with the upper half of a UV sphere, the raylib
-    /// <c>GenMeshHemiSphere</c> shape. The flat equator is open and has no bottom cap.
+    /// Replaces the geometry with the open +Y upper half of a UV sphere (raylib
+    /// <c>GenMeshHemiSphere</c>); the equator is an open boundary with no cap.
     /// </summary>
-    /// <param name="radius">The sphere radius. It must be positive and finite.</param>
-    /// <param name="rings">The number of latitude bands from the pole to the equator. The minimum is 3.</param>
-    /// <param name="slices">The number of longitude segments. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> is not positive and finite, or <paramref name="rings"/> or
-    /// <paramref name="slices"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The hemisphere covers the +Y half of the sphere from the pole at <c>(0, radius, 0)</c> down to
-    /// the equator at <c>y = 0</c> and is centered on the Y axis. It has
-    /// <c>rings * (slices + 1) + 1</c> vertices and <c>slices * (2 * rings - 1) * 3</c> indices; the
-    /// equator ring is the open boundary, so there is no cap and the underside is visible from below.
-    /// Smooth normals point outward and equal the position divided by <paramref name="radius"/>. UVs
-    /// match the full sphere: <c>u</c> runs 0..1 around +Y starting at +Z, and <c>v</c> is 0 at the
-    /// pole and 1 at the equator.
-    /// </remarks>
+    /// <param name="radius">The sphere radius; positive and finite.</param>
+    /// <param name="rings">The latitude bands from pole to equator; the minimum is 3.</param>
+    /// <param name="slices">The longitude segments; the minimum is 3.</param>
     public void GenerateHemiSphere(float radius, int rings, int slices)
     {
         _service.ThrowIfStopped();
@@ -603,26 +474,12 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a capped cylinder, the raylib <c>GenMeshCylinder</c> shape.
+    /// Replaces the geometry with a capped cylinder standing on the XZ plane around the +Y axis
+    /// (raylib <c>GenMeshCylinder</c>); side UV <c>v</c> is 0 at the top and 1 at the base.
     /// </summary>
-    /// <param name="radius">The base and top radius. It must be positive and finite.</param>
-    /// <param name="height">The height along +Y. It must be positive and finite.</param>
-    /// <param name="slices">The number of segments around the axis. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="height"/> is not positive and finite, or
-    /// <paramref name="slices"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The cylinder stands on the XZ plane: its base is at <c>y = 0</c>, its top is at
-    /// <c>y = height</c>, and its axis is +Y. It has side quads plus one cap at each end, for
-    /// <c>4 * slices + 4</c> vertices and <c>12 * slices</c> indices. Side normals are horizontal and
-    /// point away from the axis; the top cap normal is +Y and the bottom cap normal is -Y. Side UV
-    /// <c>u</c> runs 0..1 around the axis starting at +Z and turning toward +X; side UV <c>v</c> is 0
-    /// at the top and 1 at the base. Each cap uses the planar disc mapping
-    /// <c>u = 0.5 + 0.5 * sin(angle)</c>, <c>v = 0.5 - 0.5 * cos(angle)</c> centered at
-    /// <c>(0.5, 0.5)</c>.
-    /// </remarks>
+    /// <param name="radius">The base and top radius; positive and finite.</param>
+    /// <param name="height">The height along +Y; positive and finite.</param>
+    /// <param name="slices">The segments around the axis; the minimum is 3.</param>
     public void GenerateCylinder(float radius, float height, int slices)
     {
         _service.ThrowIfStopped();
@@ -660,25 +517,12 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a capped cone, the raylib <c>GenMeshCone</c> shape.
+    /// Replaces the geometry with a capped cone standing on the XZ plane with its apex on +Y (raylib
+    /// <c>GenMeshCone</c>); side UV <c>v</c> is 0 at the apex and 1 at the base.
     /// </summary>
-    /// <param name="radius">The base radius. It must be positive and finite.</param>
-    /// <param name="height">The height along +Y. It must be positive and finite.</param>
-    /// <param name="slices">The number of segments around the axis. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="height"/> is not positive and finite, or
-    /// <paramref name="slices"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The cone stands on the XZ plane: its base circle is at <c>y = 0</c>, its apex is at
-    /// <c>(0, height, 0)</c>, and its axis is +Y. It has a smooth side and one base cap, for
-    /// <c>3 * slices + 3</c> vertices and <c>6 * slices</c> indices. Side normals slant outward and
-    /// up; the base cap normal is -Y. Side UV <c>u</c> runs 0..1 around the axis starting at +Z and
-    /// turning toward +X; side UV <c>v</c> is 0 at the apex and 1 at the base. The base cap uses the
-    /// planar disc mapping <c>u = 0.5 + 0.5 * sin(angle)</c>,
-    /// <c>v = 0.5 - 0.5 * cos(angle)</c> centered at <c>(0.5, 0.5)</c>.
-    /// </remarks>
+    /// <param name="radius">The base radius; positive and finite.</param>
+    /// <param name="height">The height along +Y; positive and finite.</param>
+    /// <param name="slices">The segments around the axis; the minimum is 3.</param>
     public void GenerateCone(float radius, float height, int slices)
     {
         _service.ThrowIfStopped();
@@ -716,27 +560,13 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a torus, the raylib <c>GenMeshTorus</c> shape.
+    /// Replaces the geometry with a torus centered at the origin in the XZ plane (raylib
+    /// <c>GenMeshTorus</c>); UV <c>u</c> wraps the major ring and <c>v</c> wraps the tube.
     /// </summary>
-    /// <param name="radius">The major radius from the center to the tube center. It must be positive and finite.</param>
-    /// <param name="size">The tube (minor) radius. It must be positive and finite.</param>
-    /// <param name="radSeg">The number of segments around the major ring. The minimum is 3.</param>
-    /// <param name="sides">The number of segments around the tube. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="size"/> is not positive and finite, or
-    /// <paramref name="radSeg"/> or <paramref name="sides"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The torus is centered at the origin and lies in the XZ plane, so its hole axis is +Y.
-    /// <paramref name="radius"/> is the distance from the center to the tube center and
-    /// <paramref name="size"/> is the tube radius, which makes the outer radius
-    /// <c>radius + size</c>. The mesh has <c>(radSeg + 1) * (sides + 1)</c> vertices and
-    /// <c>radSeg * sides * 6</c> indices, with both seams duplicated so the UVs are continuous. UV
-    /// <c>u</c> runs 0..1 around the major ring starting at +Z and turning toward +X; UV <c>v</c> runs
-    /// 0..1 around the tube, starting at the outer equator and turning toward +Y. Normals point
-    /// outward from the tube center line.
-    /// </remarks>
+    /// <param name="radius">The center-to-tube-center distance; positive and finite.</param>
+    /// <param name="size">The tube radius; positive and finite.</param>
+    /// <param name="radSeg">The segments around the major ring; the minimum is 3.</param>
+    /// <param name="sides">The segments around the tube; the minimum is 3.</param>
     public void GenerateTorus(float radius, float size, int radSeg, int sides)
     {
         _service.ThrowIfStopped();
@@ -784,27 +614,13 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Replaces the builder geometry with a trefoil-knot tube, the raylib <c>GenMeshKnot</c> shape.
+    /// Replaces the geometry with a closed trefoil-knot tube centered at the origin (raylib
+    /// <c>GenMeshKnot</c>); UV <c>u</c> wraps along the curve and <c>v</c> around the tube.
     /// </summary>
-    /// <param name="radius">The winding radius of the knot center line. It must be positive and finite.</param>
-    /// <param name="size">The tube radius. It must be positive and finite.</param>
-    /// <param name="radSeg">The number of segments along the knot. The minimum is 3.</param>
-    /// <param name="sides">The number of segments around the tube. The minimum is 3.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="radius"/> or <paramref name="size"/> is not positive and finite, or
-    /// <paramref name="radSeg"/> or <paramref name="sides"/> is less than 3.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    /// <remarks>
-    /// The knot is a closed trefoil tube centered at the origin. Its loop lies in the XZ plane and
-    /// its three lobes rise along +Y and -Y; every vertex is within
-    /// <c>radius + size</c> of the origin. <paramref name="radius"/> is the winding radius (the
-    /// center line's maximum distance from the origin) and <paramref name="size"/> is the tube
-    /// radius. The mesh has <c>(radSeg + 1) * (sides + 1)</c> vertices and
-    /// <c>radSeg * sides * 6</c> indices, with both seams duplicated so the UVs are continuous. UV
-    /// <c>u</c> runs 0..1 along the closed curve; UV <c>v</c> runs 0..1 around the tube. Normals
-    /// point outward from the tube center line.
-    /// </remarks>
+    /// <param name="radius">The winding radius of the center line; positive and finite.</param>
+    /// <param name="size">The tube radius; positive and finite.</param>
+    /// <param name="radSeg">The segments along the knot; the minimum is 3.</param>
+    /// <param name="sides">The segments around the tube; the minimum is 3.</param>
     public void GenerateKnot(float radius, float size, int radSeg, int sides)
     {
         _service.ThrowIfStopped();
@@ -870,13 +686,9 @@ public sealed class MeshBuilder
     /// <summary>
     /// Computes the mesh-space bounds of the current vertices and stores them for the next build.
     /// </summary>
-    /// <returns>The bounds of every vertex position.</returns>
     /// <exception cref="InvalidOperationException">The builder has no vertices.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     /// <remarks>
-    /// <see cref="BuildAsync"/> computes the bounds when this method was not called. The stored bounds
-    /// are not recomputed when the exposed <see cref="Vertices"/> list is mutated afterwards; call
-    /// this method again after changing positions.
+    /// Direct mutations of <see cref="Vertices"/> afterwards do not update the stored bounds.
     /// </remarks>
     public BoundingBox ComputeBounds()
     {
@@ -887,25 +699,18 @@ public sealed class MeshBuilder
     }
 
     /// <summary>
-    /// Uploads the mesh on the render thread and returns the immutable asset after the GPU resource
-    /// is ready.
+    /// Uploads the mesh and returns the immutable asset once the GPU resource is ready.
     /// </summary>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>The created mesh. The caller owns one reference and must dispose it exactly once.</returns>
+    /// <returns>The mesh; the caller owns one reference and must dispose it exactly once.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The mesh has no vertices or indices, the index count does not match the topology, an index is
-    /// outside the vertex list, or an attribute is not finite.
+    /// The geometry is empty, the index count does not fit the topology, an index is out of range, or
+    /// an attribute is not finite.
     /// </exception>
-    /// <exception cref="OperationCanceledException">The token was canceled before the upload completed.</exception>
-    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="OperationCanceledException">The upload was canceled.</exception>
     /// <exception cref="AssetLoadException">The GPU upload failed.</exception>
     /// <remarks>
-    /// The builder snapshots its vertices and indices before the upload, so it is reusable whether the
-    /// build succeeds, fails, or is canceled. A failed or canceled build destroys any GPU resource it
-    /// created. The returned mesh has <see cref="Mesh.IsProcedural"/> set, a reserved synthetic
-    /// <see cref="Mesh.Path"/>, and its CPU vertices and indices exposed on the asset. When
-    /// <see cref="GenerateCollisions"/> was called, the build also creates the collision acceleration
-    /// structure from the same snapshot and exposes it through <see cref="Mesh.HasCollisionAcceleration"/>.
+    /// The builder snapshots its geometry before uploading, so it stays reusable when the build fails
+    /// or is canceled; the mesh is procedural with a synthetic <see cref="Mesh.Path"/>.
     /// </remarks>
     public async Task<Mesh> BuildAsync(CancellationToken cancellationToken = default)
     {

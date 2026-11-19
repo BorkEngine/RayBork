@@ -5,11 +5,6 @@ namespace RenderTarget;
 /// <summary>
 /// Writes display-referred RGBA8 pixels as a 24-bit uncompressed Windows BMP.
 /// </summary>
-/// <remarks>
-/// BMP stores BGR only, so the readback's opaque alpha is dropped. The header keeps a positive height,
-/// so the rows are written bottom-up, and each row is padded to a 4-byte boundary. The sample uses a
-/// BMP because it needs no image codec or package; common image viewers open it directly.
-/// </remarks>
 internal static class BmpScreenshot
 {
     private const int FILE_HEADER_SIZE = 14;
@@ -20,19 +15,9 @@ internal static class BmpScreenshot
     private const ushort PLANES = 1;
     private const int BI_RGB = 0;
 
-    /// <summary>
-    /// Writes one little-endian BITMAPFILEHEADER and BITMAPINFOHEADER followed by bottom-up BGR rows.
-    /// </summary>
-    /// <param name="path">The destination file path.</param>
-    /// <param name="width">The image width in pixels.</param>
-    /// <param name="height">The image height in pixels.</param>
-    /// <param name="rgbaPixels">Row-major RGBA8 pixels from the top-left, length at least width * height * 4.</param>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="path"/> is empty or <paramref name="rgbaPixels"/> is too short.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="width"/> or <paramref name="height"/> is not positive.
-    /// </exception>
+    /// <summary>Writes the BMP headers and the bottom-up BGR rows.</summary>
+    /// <exception cref="ArgumentException">The path is empty or the pixels too short.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
     internal static void Write(string path, int width, int height, ReadOnlySpan<byte> rgbaPixels)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

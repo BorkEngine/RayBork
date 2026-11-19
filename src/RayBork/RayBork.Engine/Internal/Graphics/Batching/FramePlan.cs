@@ -1,28 +1,20 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The deterministic batch plan for one sealed frame, with its submission statistics.
-/// </summary>
-/// <remarks>
-/// The plan is built on the render thread from a sealed <see cref="RenderFramePacket"/>. It stays valid
-/// only until the render thread releases the frame slot: its batches and instances reference the
-/// packet's pooled draw records, not copies. <see cref="DrawCalls"/> counts submissions after batch
-/// splitting; <see cref="Triangles"/> counts triangle-list and triangle-strip primitives and is <c>0</c>
-/// for line and point topologies.
-/// </remarks>
+/// <summary>The deterministic batch plan for one sealed frame, with submission statistics.</summary>
+/// <remarks>The plan references pooled draw records and is valid only while the frame slot is held.
+/// <see cref="DrawCalls"/> counts split submissions; <see cref="Triangles"/> is zero for line and point
+/// topologies.</remarks>
 internal sealed class FramePlan
 {
     private readonly List<PassPlan> _passes;
 
-    /// <summary>
-    /// Initializes a frame plan.
-    /// </summary>
+    /// <summary>Initializes a frame plan.</summary>
     /// <param name="frameIndex">The planned frame index.</param>
     /// <param name="passes">The pass plans in camera creation order.</param>
-    /// <param name="drawCalls">The number of submissions after batch splitting.</param>
-    /// <param name="instances">The number of instances submitted.</param>
-    /// <param name="triangles">The number of triangles submitted.</param>
-    /// <param name="culledInstances">The number of instances removed by frustum culling.</param>
+    /// <param name="drawCalls">The submissions after batch splitting.</param>
+    /// <param name="instances">The instances submitted after culling.</param>
+    /// <param name="triangles">The triangles submitted.</param>
+    /// <param name="culledInstances">The instances removed by frustum culling.</param>
     /// <exception cref="ArgumentNullException"><paramref name="passes"/> is <c>null</c>.</exception>
     internal FramePlan(
         long frameIndex,

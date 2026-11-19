@@ -3,29 +3,12 @@ using System.Diagnostics.CodeAnalysis;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Owns the tick thread: it runs the <see cref="IGame"/> callbacks, advances the clock, captures
-/// input, and produces frames for the <see cref="FrameRing"/>.
+/// Owns the tick thread: game callbacks, clock advances, input capture, and frame production.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The app creates one runner per run. The constructor runs on the main thread, <see cref="Start"/>
-/// starts the tick thread, and <see cref="Stop"/> may be called from any thread. The thread records
-/// failures in <see cref="Failure"/> instead of letting them escape, so an abandoned tick thread can
-/// never crash the process. Read <see cref="Failure"/> after <see cref="Join"/>.
-/// </para>
-/// <para>
-/// Presentation pacing follows the effective <see cref="PresentMode"/> read from the live
-/// <see cref="EngineContext.Info"/>: in <see cref="PresentMode.Fifo"/> mode one tick waits until the
-/// render loop finishes with the frame it published (normally its presentation), so the tick rate
-/// follows the display refresh; in <see cref="PresentMode.Mailbox"/> and
-/// <see cref="PresentMode.Immediate"/> mode the tick stays decoupled and the renderer presents the
-/// newest completed frame. A frame dropped by minimization or recovery, or a failed render attempt,
-/// also releases the wait; only <see cref="RenderStats.PresentedFrames"/> counts successful
-/// presentations. A configured tick target still adds its remaining interval after the wait. The
-/// wait uses the stop token, and the frame ring's completion also releases it. A render-thread exit
-/// is observed by the app as a render-loop failure, and the main thread's <see cref="Stop"/> request
-/// cancels the token and releases the wait; the render loop does not signal the ring on exit.
-/// </para>
+/// The constructor runs on the main thread, <see cref="Start"/> runs the tick thread, and
+/// <see cref="Stop"/> is safe from any thread. Failures are recorded in <see cref="Failure"/>
+/// instead of escaping; in <see cref="PresentMode.Fifo"/> a tick waits for its presentation.
 /// </remarks>
 internal sealed class TickRunner
 {
@@ -49,14 +32,12 @@ internal sealed class TickRunner
     private int _threadId;
     private int _started;
 
-    /// <summary>
-    /// Initializes the runner without starting the tick thread.
-    /// </summary>
+    /// <summary>Initializes the runner without starting the tick thread.</summary>
     /// <param name="platform">The initialized platform.</param>
     /// <param name="context">The app-lifetime engine context.</param>
     /// <param name="game">The game callbacks.</param>
     /// <param name="clock">The started clock.</param>
-    /// <param name="timeProvider">The time provider that measures how long each tick takes.</param>
+    /// <param name="timeProvider">Measures how long each tick takes.</param>
     /// <param name="pacer">The tick pacer.</param>
     /// <param name="frameRing">The frame ring producer side.</param>
     /// <param name="cameras">The tick-thread camera recording service.</param>
@@ -92,33 +73,20 @@ internal sealed class TickRunner
         _thread = new Thread(RunThread) { IsBackground = true, Name = THREAD_NAME };
     }
 
-    /// <summary>
-    /// Gets the tick thread. It is created by the constructor and runs after <see cref="Start"/>.
-    /// </summary>
+    /// <summary>Gets the tick thread, which runs after <see cref="Start"/>.</summary>
     internal Thread Thread => _thread;
 
-    /// <summary>
-    /// Gets whether the tick thread has finished. It becomes <see langword="true"/> after
-    /// <see cref="IGame.Shutdown"/> and the synchronization-context disposal complete.
-    /// </summary>
+    /// <summary>Gets whether the tick thread finished shutdown and cleanup.</summary>
     internal bool IsCompleted => _completed;
 
-    /// <summary>
-    /// Gets the failure that stopped the tick loop, or <see langword="null"/>. It is either a
-    /// <see cref="GameException"/> for a callback failure or another engine exception for an
-    /// unexpected failure.
-    /// </summary>
+    /// <summary>Gets the failure that stopped the tick loop, or <see langword="null"/>.</summary>
     internal Exception? Failure => _failure;
 
-    /// <summary>
-    /// Gets whether the calling thread is the tick thread.
-    /// </summary>
+    /// <summary>Gets whether the calling thread is the tick thread.</summary>
     internal bool IsOnTickThread =>
         _threadId != 0 && _threadId == Environment.CurrentManagedThreadId;
 
-    /// <summary>
-    /// Starts the tick thread. The runner can be started once.
-    /// </summary>
+    /// <summary>Starts the tick thread, which can run only once.</summary>
     /// <exception cref="InvalidOperationException">The runner was already started.</exception>
     internal void Start()
     {
@@ -131,7 +99,7 @@ internal sealed class TickRunner
     }
 
     /// <summary>
-    /// Asks the tick thread to stop after the current tick. Idempotent and safe from any thread.
+    /// Asks the tick thread to stop after the current tick; idempotent and safe from any thread.
     /// </summary>
     internal void Stop()
     {
@@ -139,9 +107,7 @@ internal sealed class TickRunner
         _stopSource.Cancel();
     }
 
-    /// <summary>
-    /// Blocks until the tick thread exits.
-    /// </summary>
+    /// <summary>Blocks until the tick thread exits.</summary>
     internal void Join() => _thread.Join();
 
     [SuppressMessage(
@@ -439,14 +405,7 @@ internal sealed class TickRunner
         }
     }
 
-    /// <summary>
-    /// Computes the remaining wait for the current tick from the time elapsed since
-    /// <paramref name="tickStartedAt"/>.
-    /// </summary>
-    /// <param name="timeProvider">The time provider used by the engine clock.</param>
-    /// <param name="tickStartedAt">The timestamp captured immediately before the tick started.</param>
-    /// <param name="pacer">The tick pacer.</param>
-    /// <param name="lowPower">Whether the window is minimized or unfocused.</param>
+    /// <summary>Computes the remaining wait for the current tick.</summary>
     /// <returns>The remaining tick interval, or zero when the tick already exceeded it.</returns>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal static TimeSpan CalculateWait(

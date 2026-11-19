@@ -4,25 +4,12 @@ using System.Numerics;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Converts the staging bytes of a render target's resolved color image to the two public readback
-/// results: raw scene-linear colors and display-referred RGBA8 pixels.
+/// Converts readback staging bytes between scene-linear colors and display-referred RGBA8 pixels.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The readback copy returns tightly packed rows in top-left origin order, which is Vulkan's texel
-/// order. <see cref="DecodeColors"/> maps that buffer to <c>[y, x]</c> with the first dimension as the
-/// height, so row zero is the top row. It preserves the stored values, including HDR components above
-/// one, and decodes an <c>R8G8B8A8_SRGB</c> image with the sRGB transfer function; alpha is linear for
-/// every supported format.
-/// </para>
-/// <para>
-/// <see cref="EncodePixels"/> is the display-referred screenshot path: it applies the same exposure and
-/// AgX transform as the present shader through <see cref="AgxToneMap.Present"/>, uses the SDR
-/// <see cref="PresentEncoding.ManualSrgb"/> encoding and <see cref="WindowHdrState.Sdr"/>, and quantizes
-/// the clamped result to RGBA8. The present shader writes opaque output, so alpha is
-/// <see cref="byte.MaxValue"/>. Every conversion is render-thread only; the caller supplies the frame's
-/// tone-mapping snapshot and the startup mode.
-/// </para>
+/// Rows are tightly packed in top-left order, and color results index <c>[y, x]</c> with the first
+/// dimension as height. Encoding applies the present shader's exposure and AgX transform and
+/// writes opaque alpha.
 /// </remarks>
 internal static class RenderTextureReadbackConverter
 {
@@ -31,19 +18,10 @@ internal static class RenderTextureReadbackConverter
     private const float BYTE_SCALE = 255f;
     private const byte OPAQUE_ALPHA = byte.MaxValue;
 
-    /// <summary>
-    /// Decodes one resolved color image to raw scene-linear colors indexed <c>[y, x]</c>.
-    /// </summary>
-    /// <param name="pixels">The tightly packed top-left staging rows.</param>
-    /// <param name="width">The image width in pixels.</param>
-    /// <param name="height">The image height in pixels.</param>
-    /// <param name="format">The target's color format.</param>
-    /// <returns>The raw scene-linear colors, alpha included and HDR values preserved.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// A dimension is not positive or the format is not a supported render target color format.
-    /// </exception>
+    /// <summary>Decodes one resolved color image to raw colors indexed <c>[y, x]</c>.</summary>
+    /// <returns>Scene-linear colors; alpha is linear and HDR values are preserved.</returns>
     /// <exception cref="ArgumentException">
-    /// <paramref name="pixels"/> does not contain exactly one tightly packed image.
+    /// The buffer is not exactly one tightly packed image of the given size and format.
     /// </exception>
     [SuppressMessage(
         "Performance",
@@ -84,14 +62,7 @@ internal static class RenderTextureReadbackConverter
         return colors;
     }
 
-    /// <summary>
-    /// Converts raw scene-linear colors to display-referred RGBA8 pixels in row-major top-left order.
-    /// </summary>
-    /// <param name="colors">The raw scene-linear colors indexed <c>[y, x]</c>.</param>
-    /// <param name="tonemapping">The tone-mapping snapshot of the frame that produced the content.</param>
-    /// <param name="tonemappingMode">The app's startup tone-mapping mode.</param>
-    /// <returns>The display-referred RGBA8 pixels, alpha opaque.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="colors"/> is <c>null</c>.</exception>
+    /// <summary>Converts scene-linear colors to display-referred RGBA8 pixels.</summary>
     [SuppressMessage(
         "Performance",
         "CA1814",
@@ -134,18 +105,11 @@ internal static class RenderTextureReadbackConverter
         return pixels;
     }
 
-    /// <summary>
-    /// Creates the defined default for a target whose resolved color image was never written.
-    /// </summary>
+    /// <summary>Creates the opaque-black result for a target that no frame wrote.</summary>
     /// <remarks>
-    /// Vulkan does not allow a layout transition back to <c>UNDEFINED</c>, and an image that no frame
-    /// wrote has no resolvable content. The backend therefore returns opaque black instead of copying
-    /// undefined GPU memory; the target's contents remain undefined for a later frame.
+    /// Vulkan cannot restore <c>UNDEFINED</c>, so the readback returns black instead of undefined
+    /// memory.
     /// </remarks>
-    /// <param name="width">The image width in pixels.</param>
-    /// <param name="height">The image height in pixels.</param>
-    /// <returns>Opaque black colors indexed <c>[y, x]</c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
     [SuppressMessage(
         "Performance",
         "CA1814",

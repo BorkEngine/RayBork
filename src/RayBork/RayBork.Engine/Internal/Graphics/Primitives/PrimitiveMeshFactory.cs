@@ -2,22 +2,9 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Deterministic CPU generation of the engine's built-in primitive meshes.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Every method returns a fresh <see cref="PrimitiveMeshData"/> with new vertex and index arrays, so
-/// the factory is pure CPU and needs no GPU, asset catalog, or app instance. The output is fully
-/// deterministic: no randomness, clocks, or environment state is involved.
-/// </para>
-/// <para>
-/// The meshes use the engine conventions: right-handed, Y-up, counter-clockwise front faces, the
-/// 88-byte <see cref="Vertex"/> layout, and opaque white vertex colors that the primitive shader
-/// multiplies by the per-instance tint. Solid shapes have flat or smooth outward normals; line meshes
-/// keep the constructor's default normal because lines are unlit.
-/// </para>
-/// </remarks>
+/// <summary>Deterministic CPU generation of the engine's built-in primitive meshes.</summary>
+/// <remarks>Every call returns fresh arrays; meshes use right-handed, Y-up, counter-clockwise-facing
+/// engine conventions with opaque white vertex colors.</remarks>
 internal static class PrimitiveMeshFactory
 {
     /// <summary>The number of longitudinal subdivisions of the unit sphere.</summary>
@@ -47,14 +34,7 @@ internal static class PrimitiveMeshFactory
         new(new Vector3(0f, 0f, -1f), new Vector3(-1f, 0f, 0f), new Vector3(0f, 1f, 0f)),
     ];
 
-    /// <summary>
-    /// Creates the unit cube: 1x1x1 centered at the origin, 24 vertices with flat outward normals, and
-    /// 36 indices.
-    /// </summary>
-    /// <remarks>
-    /// Each face is four independent vertices, so the shared cube corners keep per-face normals and
-    /// UVs. Every triangle winds counter-clockwise when viewed from outside the cube.
-    /// </remarks>
+    /// <summary>Creates the 1x1x1 cube with flat outward normals, 24 vertices, and 36 indices.</summary>
     /// <returns>The cube geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateCube()
     {
@@ -109,15 +89,7 @@ internal static class PrimitiveMeshFactory
         return CreateResult(vertices, indices, PrimitiveTopology.TriangleList);
     }
 
-    /// <summary>
-    /// Creates the unit-radius UV sphere centered at the origin: 32 slices by 16 rings with outward
-    /// normals, counter-clockwise winding, and spherical UVs.
-    /// </summary>
-    /// <remarks>
-    /// The poles are single vertices and the seam duplicates the first meridian at <c>u = 1</c>, so
-    /// every triangle has a non-zero area. UV <c>v</c> is zero at the top pole and one at the bottom
-    /// pole, matching the engine's top-left UV convention.
-    /// </remarks>
+    /// <summary>Creates the 32-slice, 16-ring unit sphere with outward normals and spherical UVs.</summary>
     /// <returns>The sphere geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateSphere()
     {
@@ -171,14 +143,7 @@ internal static class PrimitiveMeshFactory
         return CreateResult(vertices, indices, PrimitiveTopology.TriangleList);
     }
 
-    /// <summary>
-    /// Creates the unit plane: one 1x1 quad in the XZ plane centered at the origin with its front face
-    /// toward +Y.
-    /// </summary>
-    /// <remarks>
-    /// The four corners wind counter-clockwise when viewed from +Y. UVs run 0..1 over the quad, with
-    /// the origin at the -X/-Z corner and V increasing toward +Z.
-    /// </remarks>
+    /// <summary>Creates the 1x1 XZ plane centered at the origin with its front face toward +Y.</summary>
     /// <returns>The plane geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreatePlane()
     {
@@ -218,14 +183,7 @@ internal static class PrimitiveMeshFactory
         );
     }
 
-    /// <summary>
-    /// Creates the unit quad: one 1x1 quad in the XY plane centered at the origin with its front face
-    /// toward +Z.
-    /// </summary>
-    /// <remarks>
-    /// The four corners wind counter-clockwise when viewed from +Z. UV (0, 0) is the top-left corner
-    /// (<c>-X/+Y</c>), matching the engine's top-left UV convention, and V increases downward.
-    /// </remarks>
+    /// <summary>Creates the 1x1 XY quad centered at the origin with its front face toward +Z.</summary>
     /// <returns>The quad geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateQuad()
     {
@@ -265,16 +223,7 @@ internal static class PrimitiveMeshFactory
         );
     }
 
-    /// <summary>
-    /// Creates the unit disc: a filled unit-radius circle in the XY plane centered at the origin with
-    /// its front face toward +Z.
-    /// </summary>
-    /// <remarks>
-    /// The mesh has one center vertex plus one vertex per <see cref="DISC_SEGMENTS"/> rim segment, and
-    /// each segment is one triangle with the center as its first corner. Every triangle winds
-    /// counter-clockwise when viewed from +Z, and the vertices carry opaque white colors and +Z
-    /// normals.
-    /// </remarks>
+    /// <summary>Creates the 36-segment unit disc in the XY plane facing +Z.</summary>
     /// <returns>The disc geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateDisc()
     {
@@ -308,14 +257,7 @@ internal static class PrimitiveMeshFactory
         return CreateResult(vertices, indices, PrimitiveTopology.TriangleList);
     }
 
-    /// <summary>
-    /// Creates the unit right triangle (0,0,0), (1,0,0), (0,1,0) in the XY plane with its front face
-    /// toward +Z.
-    /// </summary>
-    /// <remarks>
-    /// The vertices wind counter-clockwise when viewed from +Z. UV (0, 0) is the top-left vertex
-    /// (0,1,0), matching the engine's top-left UV convention.
-    /// </remarks>
+    /// <summary>Creates the unit right triangle in the XY plane with its front face toward +Z.</summary>
     /// <returns>The triangle geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateTriangle()
     {
@@ -349,9 +291,7 @@ internal static class PrimitiveMeshFactory
         );
     }
 
-    /// <summary>
-    /// Creates one unit line segment from (0,0,0) to (1,0,0) with line-list topology.
-    /// </summary>
+    /// <summary>Creates the unit line segment along +X with line-list topology.</summary>
     /// <returns>The line geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateLine()
     {
@@ -369,14 +309,7 @@ internal static class PrimitiveMeshFactory
         );
     }
 
-    /// <summary>
-    /// Creates the unit wire cube: the 12 edges of a 1x1x1 cube centered at the origin with line-list
-    /// topology.
-    /// </summary>
-    /// <remarks>
-    /// The eight corners are shared vertices and the index list has two endpoints per edge, so the
-    /// mesh has 8 vertices and 24 indices.
-    /// </remarks>
+    /// <summary>Creates the 12-edge unit wire cube with line-list topology.</summary>
     /// <returns>The wire-cube geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateWireCube()
     {
@@ -426,14 +359,7 @@ internal static class PrimitiveMeshFactory
         );
     }
 
-    /// <summary>
-    /// Creates the unit wire sphere: three great circles (XY, XZ, and YZ) of radius 1 in one
-    /// line-list mesh, with 64 segments per circle.
-    /// </summary>
-    /// <remarks>
-    /// Each circle reuses its 64 vertices and wraps the last edge back to the first, so the mesh has
-    /// 192 vertices and 384 indices.
-    /// </remarks>
+    /// <summary>Creates the three-great-circle unit wire sphere with 64 segments per circle.</summary>
     /// <returns>The wire-sphere geometry and its bounds.</returns>
     internal static PrimitiveMeshData CreateWireSphere()
     {

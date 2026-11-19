@@ -2,24 +2,12 @@ using RayBork.Bake.Textures;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// The built-in texture processor: decodes PNG, JPEG, TGA, and BMP sources to straight-alpha RGBA8
-/// and emits a <see cref="RayBork.Internal.TextureAssetDescriptor"/> plus its KTX2 payload.
-/// </summary>
+/// <summary>The built-in texture processor: decodes PNG, JPEG, TGA, and BMP sources to
+/// straight-alpha RGBA8 and emits a <see cref="RayBork.Internal.TextureAssetDescriptor"/> plus a
+/// <c>-ktx2</c> payload.</summary>
 /// <remarks>
-/// <para>
-/// Decoding rules live in <see cref="TextureSourceReader"/>: StbImageSharp to straight-alpha RGBA8
-/// with no premultiplication, gamma, ICC, flipping, or resampling; a 16-bit PNG or a source outside
-/// the bake's size policy is rejected before the decoder allocates pixels; and every decode failure
-/// is an <c>RB4007</c> diagnostic. A failed decode, sidecar value, or bake emits no outputs.
-/// </para>
-/// <para>
-/// The decoded pixels and the sidecar's format, transfer function, and sampler settings go through
-/// <see cref="TextureBaker"/>, so the processor never writes KTX2 headers or block data itself. The
-/// descriptor is added through <see cref="IAssetOutputSink.AddAsset{T}"/> and the payload through
-/// <see cref="IAssetOutputSink.AddData"/> with the alignment the GPU upload requires. The processor
-/// keeps no per-source state and reads the latest builder sampler defaults at process time.
-/// </para>
+/// Decoding rejects 16-bit PNG sources and sources outside the size policy, and every failure is
+/// <c>RB4007</c> with no outputs. An omitted sampler setting reads the current builder default.
 /// </remarks>
 internal sealed class TextureProcessor : AssetProcessor<TextureSidecar>
 {
@@ -32,8 +20,6 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar>
     private readonly Func<TextureWrap> _defaultWrap;
 
     /// <summary>Initializes the built-in texture processor.</summary>
-    /// <param name="defaultFilter">Reads the current builder default filter.</param>
-    /// <param name="defaultWrap">Reads the current builder default wrap mode.</param>
     internal TextureProcessor(Func<TextureFilter> defaultFilter, Func<TextureWrap> defaultWrap)
     {
         ArgumentNullException.ThrowIfNull(defaultFilter);

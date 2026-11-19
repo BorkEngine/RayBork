@@ -1,10 +1,9 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// Produces frame timing from a <see cref="TimeProvider"/>. The clock is tick-thread affine and is
-/// not thread-safe: <see cref="Start"/>, <see cref="BeginTick"/>, and <see cref="Time"/> must be
-/// used from the owning tick thread. The clock does not allocate after construction.
-/// </summary>
+/// <summary>Produces frame timing from a <see cref="TimeProvider"/>.</summary>
+/// <remarks>
+/// The clock is tick-thread affine, not thread-safe, and allocation-free after construction.
+/// </remarks>
 internal sealed class EngineClock
 {
     private const int FPS_WINDOW_CAPACITY = 2048;
@@ -22,10 +21,7 @@ internal sealed class EngineClock
     private int _fpsCount;
     private bool _started;
 
-    /// <summary>
-    /// Initializes a clock that measures elapsed time with <paramref name="timeProvider"/> and clamps
-    /// each tick delta to <paramref name="maxDeltaTime"/> seconds.
-    /// </summary>
+    /// <summary>Initializes a clock with a per-tick delta clamp, in seconds.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="timeProvider"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="maxDeltaTime"/> is not finite or is not greater than zero.
@@ -46,10 +42,7 @@ internal sealed class EngineClock
         _maxDeltaTime = maxDeltaTime;
     }
 
-    /// <summary>
-    /// Gets the live elapsed seconds since <see cref="Start"/>, including time spent in asynchronous
-    /// setup. Returns zero before the clock is started.
-    /// </summary>
+    /// <summary>Gets the elapsed seconds since <see cref="Start"/>, or zero before it.</summary>
     internal double Time
     {
         get
@@ -62,9 +55,7 @@ internal sealed class EngineClock
         }
     }
 
-    /// <summary>
-    /// Records the start timestamp. A clock can be started exactly once.
-    /// </summary>
+    /// <summary>Records the start timestamp; a clock can be started once.</summary>
     /// <exception cref="InvalidOperationException">The clock was already started.</exception>
     internal void Start()
     {
@@ -78,10 +69,7 @@ internal sealed class EngineClock
         _started = true;
     }
 
-    /// <summary>
-    /// Returns the timing for the next tick. The first tick has zero deltas and a zero FPS; later
-    /// ticks measure the raw interval since the previous call.
-    /// </summary>
+    /// <summary>Returns the next tick's timing; the first tick has zero deltas.</summary>
     /// <exception cref="InvalidOperationException"><see cref="Start"/> has not been called.</exception>
     internal TickTime BeginTick()
     {

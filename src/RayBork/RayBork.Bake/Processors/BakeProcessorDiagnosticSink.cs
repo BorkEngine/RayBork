@@ -2,9 +2,7 @@ using RayBork.Bake.Diagnostics;
 
 namespace RayBork.Bake.Processors;
 
-/// <summary>
-/// Adapts a processor's or validator's diagnostic calls into the bake diagnostic bag.
-/// </summary>
+/// <summary>Adapts processor and validator diagnostics into the bake diagnostic bag.</summary>
 internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics
 {
     private readonly string _ownerName;
@@ -13,12 +11,7 @@ internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics
     private readonly string _defaultCode;
     private readonly BakeDiagnostics _diagnostics;
 
-    /// <summary>Initializes a source or validator diagnostic sink.</summary>
-    /// <param name="ownerName">The processor or validator name.</param>
-    /// <param name="sourcePath">The diagnostic source path.</param>
-    /// <param name="assetPath">The canonical asset path, when known.</param>
-    /// <param name="defaultCode">The code used when a caller supplies an empty code.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
+    /// <summary>Initializes a sink; a blank code falls back to the default code.</summary>
     internal BakeProcessorDiagnosticSink(
         string ownerName,
         string sourcePath,

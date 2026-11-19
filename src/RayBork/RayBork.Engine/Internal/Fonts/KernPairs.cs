@@ -1,19 +1,10 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The horizontal glyph pairs of a version 0 <c>kern</c> table.
-/// </summary>
+/// <summary>The horizontal glyph pairs of a version 0 <c>kern</c> table.</summary>
 /// <remarks>
-/// <para>
-/// Only horizontal, non-minimum, non-cross-stream format 0 subtables contribute; other subtable
-/// versions, formats, and coverage flags are skipped. A pair declared by more than one applicable
-/// subtable takes the value of the last subtable that declares it.
-/// </para>
-/// <para>
-/// Pairs are sorted into one key array at construction, so a lookup is a binary search that
-/// allocates nothing. Values are in font units. The instance is immutable and safe to read from any
-/// thread.
-/// </para>
+/// Only horizontal format 0 subtables contribute, and the last applicable subtable wins a
+/// duplicate pair. Lookups are binary searches over one sorted key array; values are in font units
+/// and the instance is immutable.
 /// </remarks>
 internal sealed class KernPairs
 {
@@ -30,13 +21,6 @@ internal sealed class KernPairs
     }
 
     /// <summary>Parses the horizontal format 0 kerning pairs of a <c>kern</c> table.</summary>
-    /// <param name="kern">The complete <c>kern</c> table bytes.</param>
-    /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
-    /// <returns>The pair lookup, or <see langword="null"/> when no supported pairs contribute.</returns>
-    /// <exception cref="FontFormatException">An applicable subtable is malformed.</exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The table declares more than <see cref="MAX_PAIR_COUNT"/> pairs.
-    /// </exception>
     internal static KernPairs? TryParse(ReadOnlyMemory<byte> kern, int glyphCount)
     {
         SfntReader reader = new(kern.Span, "the 'kern' table");
@@ -170,10 +154,7 @@ internal sealed class KernPairs
         return new KernPairs(keys, values);
     }
 
-    /// <summary>Looks up one horizontal pair.</summary>
-    /// <param name="leftGlyphId">The left glyph identifier.</param>
-    /// <param name="rightGlyphId">The right glyph identifier.</param>
-    /// <param name="value">The kerning adjustment in font units, or zero.</param>
+    /// <summary>Finds one horizontal pair and returns its adjustment in font units.</summary>
     /// <returns><see langword="true"/> when the table declares the pair.</returns>
     internal bool TryGet(int leftGlyphId, int rightGlyphId, out int value)
     {

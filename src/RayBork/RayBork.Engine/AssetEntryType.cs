@@ -1,42 +1,30 @@
 namespace RayBork;
 
-/// <summary>
-/// The asset type identifier stored in a pack index entry.
-/// </summary>
+/// <summary>The payload kind stored in a pack index entry.</summary>
 /// <remarks>
-/// <para>
-/// A loader is selected by its registered CLR type, and the catalog validates that the entry was
-/// baked with the entry type the loader accepts; the entry type is the compatibility check.
-/// <see cref="Raw"/> entries are opaque payloads read through <see cref="IAssetCatalog.LoadData"/>;
-/// <see cref="Data"/> entries carry MessagePack custom data for a type registered with
-/// <see cref="RayBorkAppBuilder.WithAssetType{T}"/>; every other value carries the descriptor for
-/// the matching built-in engine asset format.
-/// </para>
-/// <para>
-/// The numeric values are part of the RAYBORKP v1 wire format and never change within pack major
-/// version 1.
-/// </para>
+/// <see cref="Raw"/> payloads are opaque. <see cref="Data"/> payloads carry MessagePack data for a
+/// type registered with <see cref="RayBorkAppBuilder.WithAssetType{T}"/>.
 /// </remarks>
 public enum AssetEntryType : ushort
 {
     /// <summary>An opaque payload with no descriptor.</summary>
     Raw = 0,
 
-    /// <summary>A mesh descriptor entry.</summary>
+    /// <summary>A mesh descriptor.</summary>
     Mesh = 1,
 
-    /// <summary>A model descriptor entry.</summary>
+    /// <summary>A model descriptor.</summary>
     Model = 2,
 
-    /// <summary>A texture descriptor entry.</summary>
+    /// <summary>A texture descriptor.</summary>
     Texture = 3,
 
-    /// <summary>A shader descriptor entry.</summary>
+    /// <summary>A shader descriptor.</summary>
     Shader = 4,
 
-    /// <summary>A font descriptor entry.</summary>
+    /// <summary>A font descriptor.</summary>
     Font = 5,
 
-    /// <summary>A MessagePack custom-data entry.</summary>
+    /// <summary>A MessagePack custom-data payload.</summary>
     Data = 6,
 }

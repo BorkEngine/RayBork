@@ -5,25 +5,11 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The bindless combined-image-sampler table that backs the fixed <c>RayBorkTextures[2048]</c> array
-/// in every geometry shader.
+/// The bindless combined-image-sampler table behind the fixed <c>RayBorkTextures[2048]</c> array.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Slot 0 always holds a renderer-created 1x1 white texture, so a <see langword="null"/> texture
-/// binding and the default model draw sample white without a shader branch. Texture uploads reserve
-/// the lowest free slot after their GPU image and view exist, write the descriptor into every frame
-/// descriptor set, and hand the slot to the texture resource. The slot is released when the texture
-/// resource is destroyed, which already waits for frame idleness, so a reused slot is never
-/// referenced by an in-flight frame.
-/// </para>
-/// <para>
-/// The table is created once per backend and re-initialized after a device recreation: <see
-/// cref="Reset"/> releases the white texture and every slot before the old device is destroyed, and
-/// <see cref="Initialize"/> creates the new white texture after the new device, descriptor state, and
-/// frame resources exist. The GPU asset bridge re-uploads every live texture after the recreation, so
-/// each one reserves a fresh slot before frames resume. Every member is render-thread only.
-/// </para>
+/// Slot 0 holds a renderer-created 1x1 white texture. A slot is released only after frame idleness,
+/// so a reused slot is never referenced by an in-flight frame.
 /// </remarks>
 internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
 {
@@ -47,11 +33,7 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
     private bool _initialized;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes the table for a maximum capacity. No GPU object exists until <see cref="Initialize"/>.
-    /// </summary>
-    /// <param name="capacity">The maximum number of slots, including the white slot.</param>
-    /// <param name="logger">The renderer logger for white-texture diagnostics.</param>
+    /// <summary>Initializes the table for a maximum capacity; no GPU object exists yet.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is zero.</exception>
     internal VulkanBindlessTextureTable(uint capacity, ILogger logger)
@@ -71,19 +53,12 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
     /// <summary>Gets the white fallback image, for diagnostics and tests.</summary>
     internal Image WhiteImage => _whiteImage;
 
-    /// <summary>Gets the white fallback image view, for diagnostics and tests.</summary>
+    /// <summary>Gets the white fallback view, for diagnostics and tests.</summary>
     internal ImageView WhiteView => _whiteView;
 
-    /// <summary>
-    /// Creates the white fallback texture and writes slot 0 into every frame descriptor set.
-    /// </summary>
-    /// <param name="device">The current logical device.</param>
-    /// <param name="descriptors">The shared descriptor state.</param>
-    /// <param name="frameResources">The frame resources that own the descriptor sets.</param>
-    /// <exception cref="InvalidOperationException">The table is already initialized or disposed.</exception>
-    /// <exception cref="GraphicsException">
-    /// The white texture could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates the white texture and writes slot 0 into every frame set.</summary>
+    /// <exception cref="InvalidOperationException">Already initialized or disposed.</exception>
+    /// <exception cref="GraphicsException">Creation failed (<c>RB3001</c>).</exception>
     internal void Initialize(
         VulkanDevice device,
         VulkanDescriptorState descriptors,
@@ -116,10 +91,7 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
         _initialized = true;
     }
 
-    /// <summary>
-    /// Tries to reserve a texture slot. The caller writes the image descriptor and then stores the
-    /// slot on the texture resource.
-    /// </summary>
+    /// <summary>Tries to reserve a texture slot above the white slot.</summary>
     /// <param name="slot">The reserved slot, or <c>0</c> when the table is full.</param>
     /// <returns><see langword="true"/> when a slot was reserved.</returns>
     /// <exception cref="InvalidOperationException">The table is not initialized.</exception>
@@ -129,12 +101,7 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
         return _allocator.TryAllocate(out slot);
     }
 
-    /// <summary>
-    /// Writes one texture's image view and sampler into a reserved slot in every frame set.
-    /// </summary>
-    /// <param name="slot">The reserved slot.</param>
-    /// <param name="view">The texture image view.</param>
-    /// <param name="sampler">The sampler for the texture's state.</param>
+    /// <summary>Writes a view and sampler into a reserved slot in every frame set.</summary>
     /// <exception cref="InvalidOperationException">The table is not initialized.</exception>
     internal void WriteTexture(uint slot, ImageView view, Sampler sampler)
     {
@@ -142,17 +109,10 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
         _descriptors!.WriteBindlessTexture(_frameResources!.DescriptorSets, slot, view, sampler);
     }
 
-    /// <summary>
-    /// Releases one texture slot. The texture resource calls it after frame idleness has retired every
-    /// frame that could reference the slot.
-    /// </summary>
-    /// <param name="slot">The slot to release.</param>
+    /// <summary>Releases one slot once no in-flight frame can reference it.</summary>
     internal void Release(uint slot) => _allocator.Release(slot);
 
-    /// <summary>
-    /// Releases every slot and destroys the white texture. The caller has waited for the device to
-    /// idle and calls it before destroying the descriptor state and the logical device.
-    /// </summary>
+    /// <summary>Releases every slot and destroys the white texture before device teardown.</summary>
     internal void Reset()
     {
         _allocator.Reset();
@@ -162,9 +122,7 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
         _frameResources = null;
     }
 
-    /// <summary>
-    /// Releases every slot and destroys the white texture. The call is idempotent.
-    /// </summary>
+    /// <summary>Releases the table. The call is idempotent.</summary>
     public void Dispose()
     {
         if (_disposed)

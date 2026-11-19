@@ -7,20 +7,13 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// Runs one game: it opens the window, starts the tick and render threads, runs the
-/// <see cref="IGame"/> callbacks, and joins every thread before <see cref="Run"/> returns.
+/// Runs one game: opens the window, starts the tick and render threads, runs the <see cref="IGame"/>
+/// callbacks, and joins every thread before <see cref="Run"/> returns.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="Run"/> is main-thread only because SDL3 and the window require the process main
-/// thread; the engine documents the rule but does not enforce it. An app runs at most once. Dispose
-/// the app after <see cref="Run"/> returns to release the app object.
-/// </para>
-/// <para>
-/// <see cref="RequestExit"/> and <see cref="IsRunning"/> are safe from any thread.
-/// <see cref="Dispose"/> from the tick thread throws <see cref="InvalidOperationException"/> instead
-/// of deadlocking; call it from another thread.
-/// </para>
+/// <see cref="Run"/> is main-thread only because SDL3 and the window need the process main thread; an app
+/// runs at most once, before <see cref="Dispose"/>. <see cref="RequestExit"/> and <see cref="IsRunning"/>
+/// are thread-safe, while <see cref="Dispose"/> on the tick thread throws instead of deadlocking.
 /// </remarks>
 public sealed class RayBorkApp : IDisposable
 {
@@ -60,14 +53,7 @@ public sealed class RayBorkApp : IDisposable
     private bool _runStarted;
     private bool _runCompleted;
 
-    /// <summary>
-    /// Initializes the app. The builder is the only public way to create one.
-    /// </summary>
-    /// <param name="configuration">The validated configuration.</param>
-    /// <param name="platformFactory">The platform factory used by <see cref="Run"/>.</param>
-    /// <param name="rendererBackendFactory">The renderer backend factory used by <see cref="Run"/>.</param>
-    /// <param name="timeProvider">The time provider for the engine clock.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Initializes the app; the builder is the only public way to create one.</summary>
     internal RayBorkApp(
         AppConfiguration configuration,
         PlatformFactory platformFactory,
@@ -88,62 +74,35 @@ public sealed class RayBorkApp : IDisposable
     }
 
     /// <summary>
-    /// Gets whether <see cref="Run"/> is executing. It is <see langword="true"/> from the start of
-    /// the call, including during startup, until the call returns. Safe to read from any thread.
+    /// Gets whether <see cref="Run"/> is executing, including startup, until it returns.
     /// </summary>
     public bool IsRunning => _isRunning;
 
-    /// <summary>
-    /// Gets whether the app was disposed. Safe to read from any thread.
-    /// </summary>
+    /// <summary>Gets whether the app was disposed; thread-safe.</summary>
     public bool IsDisposed => _isDisposed;
 
-    /// <summary>
-    /// Gets the validated configuration. Used by tests.
-    /// </summary>
+    /// <summary>Gets the validated configuration; used by tests.</summary>
     internal AppConfiguration Configuration => _configuration;
 
-    /// <summary>
-    /// Gets the status holder that <see cref="EngineContext.Info"/> and
-    /// <see cref="EngineContext.Stats"/> read. The render thread writes it.
-    /// </summary>
+    /// <summary>Gets the status holder the context reads; the render thread writes it.</summary>
     internal RenderStatus RenderStatus => _renderStatus;
 
-    /// <summary>
-    /// Gets the tick thread, or <see langword="null"/> before <see cref="Run"/>. Read it after
-    /// <see cref="Run"/> returns to observe that the thread has exited.
-    /// </summary>
+    /// <summary>Gets the tick thread, or <see langword="null"/> before <see cref="Run"/>.</summary>
     internal Thread? TickThread => _tickRunner?.Thread;
 
-    /// <summary>
-    /// Gets the app-lifetime camera recording service, or <see langword="null"/> before the service is
-    /// created. Used by tests to observe the camera and primitive asset wiring.
-    /// </summary>
+    /// <summary>Gets the camera service, or <see langword="null"/> before it is created.</summary>
     internal CameraService? Cameras => _cameraService;
 
-    /// <summary>
-    /// Gets the render thread, or <see langword="null"/> before <see cref="Run"/>.
-    /// </summary>
+    /// <summary>Gets the render thread, or <see langword="null"/> before <see cref="Run"/>.</summary>
     internal Thread? RenderThread => _renderLoop?.Thread;
 
-    /// <summary>
-    /// Gets the tick thread name, or <see langword="null"/> before <see cref="Run"/>.
-    /// </summary>
+    /// <summary>Gets the tick thread name, or <see langword="null"/> before <see cref="Run"/>.</summary>
     internal string? TickThreadName => TickThread?.Name;
 
-    /// <summary>
-    /// Gets the render thread name, or <see langword="null"/> before <see cref="Run"/>.
-    /// </summary>
+    /// <summary>Gets the render thread name, or <see langword="null"/> before <see cref="Run"/>.</summary>
     internal string? RenderThreadName => RenderThread?.Name;
 
-    /// <summary>
-    /// Runs the app until <see cref="RequestExit"/>, a window close request, or a failure, then joins
-    /// the tick and render threads before returning.
-    /// </summary>
-    /// <remarks>
-    /// Call it on the process main thread. It is legal to call it only once per app and only before
-    /// <see cref="Dispose"/>.
-    /// </remarks>
+    /// <summary>Runs the app until an exit is requested, the window closes, or a failure occurs.</summary>
     /// <exception cref="InvalidOperationException"><see cref="Run"/> was already called.</exception>
     /// <exception cref="ObjectDisposedException">The app was disposed.</exception>
     /// <exception cref="GameException">A game callback threw.</exception>
@@ -183,20 +142,13 @@ public sealed class RayBorkApp : IDisposable
         }
     }
 
-    /// <summary>
-    /// Requests a graceful exit after the current tick. The request is idempotent, is safe from any
-    /// thread, and is honored when it arrives before <see cref="Run"/>.
-    /// </summary>
+    /// <summary>Requests a graceful exit after the current tick.</summary>
     public void RequestExit() => _exitRequested = true;
 
     /// <summary>
-    /// Stops a running app and waits for <see cref="Run"/> to complete. Idempotent.
+    /// Stops a running app and waits for <see cref="Run"/>; idempotent. Throws on the tick thread instead
+    /// of deadlocking.
     /// </summary>
-    /// <remarks>
-    /// Dispose runs are supported from another thread, but calling it on the tick thread throws
-    /// <see cref="InvalidOperationException"/> because waiting for the tick thread to finish from
-    /// inside a game callback would deadlock.
-    /// </remarks>
     /// <exception cref="InvalidOperationException">Called on the tick thread.</exception>
     public void Dispose()
     {
@@ -277,17 +229,9 @@ public sealed class RayBorkApp : IDisposable
     }
 
     /// <summary>
-    /// Runs one app lifetime after the logger factory exists and returns the failure it ended with.
+    /// Runs one app lifetime and returns its failure, or <see langword="null"/> for a graceful exit; the
+    /// caller owns the default logger factory.
     /// </summary>
-    /// <param name="configuration">The app configuration.</param>
-    /// <param name="loggerFactory">
-    /// The factory that creates the app logger. The caller owns it when it is the default factory.
-    /// </param>
-    /// <returns>The failure that stopped the run, or <see langword="null"/> for a graceful exit.</returns>
-    /// <remarks>
-    /// An unexpected logger, cleanup, or final-log exception is not converted to a failure here; it
-    /// propagates to the caller, whose <c>finally</c> still disposes the default logger factory.
-    /// </remarks>
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -609,24 +553,16 @@ public sealed class RayBorkApp : IDisposable
     }
 
     /// <summary>
-    /// Preloads the engine's built-in default assets before <see cref="IGame.Setup"/> runs.
+    /// Preloads the built-in default assets before <see cref="IGame.Setup"/>; blocking is safe, and a
+    /// missing built-in is an <see cref="AssetLoadException"/>.
     /// </summary>
-    /// <remarks>
-    /// The tick thread has not started yet, so blocking the main thread on the loads is safe: the
-    /// loader and the render thread service the reads and uploads. <see cref="EngineDefaults.LoadAsync"/>
-    /// already reports a missing or corrupt built-in default as an <see cref="AssetLoadException"/>.
-    /// </remarks>
     private static EngineDefaults LoadEngineDefaults(IAssetCatalog assets) =>
         EngineDefaults.LoadAsync(assets).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Builds the engine-owned primitive meshes and materials before <see cref="IGame.Setup"/> runs.
+    /// Builds the engine-owned primitive meshes and materials before <see cref="IGame.Setup"/>; blocking is
+    /// safe, and a missing built-in is an <see cref="AssetLoadException"/>.
     /// </summary>
-    /// <remarks>
-    /// The tick thread has not started yet, so blocking the main thread on the loads is safe: the
-    /// loader and the render thread service the reads and uploads. A missing or corrupt built-in is
-    /// reported as an <see cref="AssetLoadException"/> by <see cref="PrimitiveAssets.LoadAsync"/>.
-    /// </remarks>
     [SuppressMessage(
         "Reliability",
         "CA2000",
@@ -636,14 +572,9 @@ public sealed class RayBorkApp : IDisposable
         PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Loads the engine-owned SSAO shader variants and blue-noise texture before <see cref="IGame.Setup"/>
-    /// runs.
+    /// Loads the engine-owned SSAO shader variants and blue-noise texture before <see cref="IGame.Setup"/>;
+    /// blocking is safe, and a missing built-in is an <see cref="AssetLoadException"/>.
     /// </summary>
-    /// <remarks>
-    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
-    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
-    /// <see cref="AssetLoadException"/> by <see cref="SsaoAssets.LoadAsync"/>.
-    /// </remarks>
     [SuppressMessage(
         "Reliability",
         "CA2000",
@@ -653,13 +584,9 @@ public sealed class RayBorkApp : IDisposable
         SsaoAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Loads the engine-owned bloom pyramid shader programs before <see cref="IGame.Setup"/> runs.
+    /// Loads the engine-owned bloom pyramid shader programs before <see cref="IGame.Setup"/>; blocking is
+    /// safe, and a missing built-in is an <see cref="AssetLoadException"/>.
     /// </summary>
-    /// <remarks>
-    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
-    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
-    /// <see cref="AssetLoadException"/> by <see cref="BloomAssets.LoadAsync"/>.
-    /// </remarks>
     [SuppressMessage(
         "Reliability",
         "CA2000",
@@ -982,10 +909,7 @@ public sealed class RayBorkApp : IDisposable
         return failure ?? exception;
     }
 
-    /// <summary>
-    /// Bridges <see cref="EngineContext"/> to the app exit flag without exposing the internal
-    /// <see cref="IAppControl"/> on the public app type.
-    /// </summary>
+    /// <summary>Bridges <see cref="EngineContext"/> to the app exit flag.</summary>
     private sealed class ExitControl : IAppControl
     {
         private readonly RayBorkApp _app;

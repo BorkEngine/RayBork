@@ -3,22 +3,12 @@ using System.Text;
 
 namespace RayBork.Bake.Fonts;
 
-/// <summary>
-/// Validates the sfnt container and table directory of a TTF or OTF face.
-/// </summary>
+/// <summary>Validates the sfnt container and table directory of a TTF or OTF face.</summary>
 /// <remarks>
-/// <para>
-/// The accepted magic values are <c>0x00010000</c> and <c>true</c> for TrueType outlines, and
-/// <c>OTTO</c> for CFF outlines. A TrueType Collection (<c>ttcf</c>) is rejected because the pack
-/// stores one face. The declared format is derived from the container, not the source extension.
-/// </para>
-/// <para>
-/// Every table directory record must lie inside the file. A TrueType face must contain <c>head</c>,
-/// <c>maxp</c>, <c>hhea</c>, <c>hmtx</c>, <c>cmap</c>, and <c>glyf</c>; a CFF face replaces
-/// <c>glyf</c> with <c>CFF </c> or <c>CFF2</c>. The validator reports a <c>CFF2</c> outline source so
-/// the processor can reject it: the runtime resolves TrueType <c>glyf</c> and CFF 1.0 outlines only.
-/// It does not parse glyphs or tables beyond their bounds.
-/// </para>
+/// Accepted magic values are <c>0x00010000</c> and <c>true</c> for TrueType and <c>OTTO</c> for
+/// CFF, while <c>ttcf</c> is rejected. Every directory record must lie inside the file; all
+/// faces need <c>head</c>, <c>maxp</c>, <c>hhea</c>, <c>hmtx</c>, and <c>cmap</c>, plus
+/// <c>glyf</c> for TrueType or <c>CFF </c>/<c>CFF2</c> for CFF.
 /// </remarks>
 internal static class SfntValidator
 {
@@ -30,10 +20,6 @@ internal static class SfntValidator
     private const int TABLE_RECORD_LENGTH = 16;
 
     /// <summary>Validates a complete face byte array.</summary>
-    /// <param name="face">The original face bytes.</param>
-    /// <param name="format">The container format, <c>ttf</c> or <c>otf</c>.</param>
-    /// <param name="cff2">Whether the face carries a <c>CFF2</c> table.</param>
-    /// <param name="reason">The failure reason when the face is invalid.</param>
     /// <returns><see langword="true"/> when the container and table directory are valid.</returns>
     internal static bool TryValidate(
         ReadOnlySpan<byte> face,

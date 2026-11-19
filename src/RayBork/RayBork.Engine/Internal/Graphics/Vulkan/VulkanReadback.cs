@@ -3,22 +3,12 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Single-pixel readback probes and the full-image render-target color copy used by GPU tests and the
-/// public render texture readback.
-/// </summary>
+/// <summary>Readback probes for GPU tests and the public render texture readback.</summary>
 /// <remarks>
-/// <para>
-/// The single-pixel probes are diagnostics, not a renderer path: each call creates its own command pool,
-/// staging buffer, and fence, submits one copy, and waits for the GPU. The full-image color read uses the
-/// same temporary objects for one copy of the target's resolved color image. Both stall the render thread
-/// and must never be used per frame. Every temporary object is destroyed in a <c>finally</c> block so a
-/// failed probe cannot leak.
-/// </para>
-/// <para>
-/// The caller passes a device and scene target, swapchain, or runtime target from a single backend and
-/// runs on that backend's render thread. Nothing here is thread-safe.
-/// </para>
+/// Each probe creates its own command pool, staging buffer, and fence and stalls the render thread, so it
+/// is never part of the frame path; call one only after the frame's last use completed. Every temporary
+/// object is destroyed in a <c>finally</c> block, so a failed probe cannot leak. Nothing here is
+/// thread-safe.
 /// </remarks>
 internal static unsafe class VulkanReadback
 {
@@ -28,22 +18,7 @@ internal static unsafe class VulkanReadback
     private const uint PRESENTED_FLOAT_PIXEL_BYTES = 8;
     private const uint PRESENTED_BYTE_PIXEL_BYTES = 4;
 
-    /// <summary>
-    /// Reads one resolved linear scene color pixel.
-    /// </summary>
-    /// <param name="device">The device that owns the scene target.</param>
-    /// <param name="target">The scene target to read.</param>
-    /// <param name="x">The pixel column, in pixels from the left edge.</param>
-    /// <param name="y">The pixel row, in pixels from the top edge.</param>
-    /// <param name="r">The linear red component.</param>
-    /// <param name="g">The linear green component.</param>
-    /// <param name="b">The linear blue component.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The pixel lies outside the target extent.
-    /// </exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created or the copy failed. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Reads one resolved linear scene color pixel.</summary>
     internal static void ReadSceneColorPixel(
         VulkanDevice device,
         VulkanRenderTarget target,
@@ -72,27 +47,11 @@ internal static unsafe class VulkanReadback
         b = (float)BitConverter.ToHalf(pixel, 4);
     }
 
-    /// <summary>
-    /// Reads one reverse-Z scene depth pixel from the resolved depth image.
-    /// </summary>
+    /// <summary>Reads one reverse-Z scene depth pixel from the resolved depth image.</summary>
     /// <remarks>
-    /// A multisampled scene target resolves its depth attachment into the single-sample depth image the
-    /// probe reads; a single-sample target uses its depth attachment directly. The probe transitions
-    /// the image out of the layout the renderer recorded and back, so the caller runs it after the frame
-    /// completed.
+    /// A multisampled target resolves its depth attachment into this image; the probe restores the recorded
+    /// layout, so call it after the frame completed.
     /// </remarks>
-    /// <param name="device">The device that owns the scene target.</param>
-    /// <param name="target">The scene target to read.</param>
-    /// <param name="x">The pixel column, in pixels from the left edge.</param>
-    /// <param name="y">The pixel row, in pixels from the top edge.</param>
-    /// <param name="depth">The stored depth value.</param>
-    /// <exception cref="InvalidOperationException">The target has no depth attachment.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The pixel lies outside the target extent.
-    /// </exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created or the copy failed. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static void ReadSceneDepthPixel(
         VulkanDevice device,
         VulkanRenderTarget target,
@@ -122,28 +81,10 @@ internal static unsafe class VulkanReadback
         depth = BitConverter.ToSingle(pixel, 0);
     }
 
-    /// <summary>
-    /// Reads one resolved linear color pixel from a runtime render target.
-    /// </summary>
+    /// <summary>Reads one resolved linear color pixel from a runtime render target.</summary>
     /// <remarks>
-    /// The probe transitions the resolved color image out of its current layout and back, so the caller
-    /// runs it after the frame completed. An sRGB target returns the linear value the sampling shader
-    /// sees; the raw stored bytes are decoded with the sRGB transfer function.
+    /// An sRGB target returns the linear value the sampling shader sees, decoded from the stored bytes.
     /// </remarks>
-    /// <param name="device">The device that owns the target.</param>
-    /// <param name="target">The render target to read.</param>
-    /// <param name="x">The pixel column, in pixels from the left edge.</param>
-    /// <param name="y">The pixel row, in pixels from the top edge.</param>
-    /// <param name="r">The linear red component.</param>
-    /// <param name="g">The linear green component.</param>
-    /// <param name="b">The linear blue component.</param>
-    /// <exception cref="NotSupportedException">
-    /// The target color format is not one of the supported render-target color formats.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">The pixel lies outside the target extent.</exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created or the copy failed. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static void ReadRenderTargetColorPixel(
         VulkanDevice device,
         VulkanRenderTarget target,
@@ -201,35 +142,12 @@ internal static unsafe class VulkanReadback
     /// buffer and returns its raw bytes.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The copy uses a dedicated transient command pool, command buffer, staging buffer, and fence. It
-    /// transitions the resolved color image from the layout the target tracker recorded to
-    /// <c>TRANSFER_SRC_OPTIMAL</c>, copies the full extent with tightly packed rows, and transitions the
-    /// image back to the same layout in the same submission. The tracker state is unchanged, so a later
-    /// frame samples or writes the target exactly as before.
-    /// </para>
-    /// <para>
-    /// The caller waits for the target's last-use frame fence before it calls this method. The returned
-    /// bytes are decoded by <see cref="RenderTextureReadbackConverter"/>; this helper performs no
-    /// format conversion, tone mapping, or origin flip.
-    /// </para>
+    /// The copy transitions the image to <c>TRANSFER_SRC_OPTIMAL</c> and restores the recorded layout in
+    /// the same submission, so the tracker state is unchanged. The bytes stay raw for
+    /// <see cref="RenderTextureReadbackConverter"/> to decode, and only <c>R16G16B16A16_SFLOAT</c> and
+    /// 8-bit RGBA targets are supported. A never-written target has no defined layout and yields opaque
+    /// black.
     /// </remarks>
-    /// <param name="device">The device that owns the target.</param>
-    /// <param name="target">The render target whose resolved color image is read.</param>
-    /// <returns>The tightly packed staging bytes in top-left row order.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The target has no defined resolved color layout. A never-written target has no content to copy,
-    /// and Vulkan cannot restore the undefined layout after a transition; the backend returns its
-    /// opaque-black default instead.
-    /// </exception>
-    /// <exception cref="NotSupportedException">
-    /// The target color format is not one of the supported render-target color formats.
-    /// </exception>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created, the copy failed, or the image is too large for one host
-    /// buffer. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static byte[] ReadRenderTargetColorImage(
         VulkanDevice device,
         VulkanRenderTarget target
@@ -287,52 +205,14 @@ internal static unsafe class VulkanReadback
         );
     }
 
-    /// <summary>
-    /// Reads one pixel from the swapchain image a submitted frame rendered, decoded to display-linear
-    /// values.
-    /// </summary>
+    /// <summary>Reads one presented swapchain pixel, decoded to display-linear values.</summary>
     /// <remarks>
-    /// <para>
-    /// The probe waits for the device to idle, transitions the acquired image from
-    /// <c>PRESENT_SRC_KHR</c> to <c>TRANSFER_SRC_OPTIMAL</c>, copies one texel, transitions it back,
-    /// and leaves the image in the presentation layout. The all-commands stage masks make the
-    /// transition valid after the frame's render pass, whose final layout is <c>PRESENT_SRC_KHR</c>.
-    /// </para>
-    /// <para>
-    /// The caller must call the probe after <see cref="Vulkan12Backend.Submit"/> and before
-    /// <see cref="Vulkan12Backend.Present"/>, passing
-    /// <see cref="Vulkan12Backend.PendingPresentImageIndex"/>. Once <c>vkQueuePresentKHR</c> runs, the
-    /// presentation engine owns the image and a layout transition is no longer valid.
-    /// </para>
-    /// <para>
-    /// A half-float scRGB image returns scRGB-linear values without a transfer function. An
-    /// <c>_SRGB</c> image returns the hardware-decoded linear values. A <c>_UNORM</c> image returns
-    /// the manual sRGB encode the present shader wrote, decoded to linear, so both 8-bit paths
-    /// return the same display-linear value.
-    /// </para>
-    /// <para>
-    /// This is a diagnostic probe for GPU tests: it stalls the device and is never part of the frame
-    /// path.
-    /// </para>
+    /// Call it after <see cref="Vulkan12Backend.Submit"/> and before <see cref="Vulkan12Backend.Present"/>
+    /// with <see cref="Vulkan12Backend.PendingPresentImageIndex"/>: once presented, the image belongs to
+    /// the presentation engine and a layout transition is invalid. A half-float scRGB image returns
+    /// scRGB-linear values; an <c>_SRGB</c> or <c>_UNORM</c> image returns display-linear values. The
+    /// swapchain must have been created with transfer-source usage.
     /// </remarks>
-    /// <param name="device">The device that owns the swapchain.</param>
-    /// <param name="swapchain">The swapchain the backend renders to.</param>
-    /// <param name="imageIndex">The submitted frame's swapchain image index.</param>
-    /// <param name="x">The pixel column, in pixels from the left edge.</param>
-    /// <param name="y">The pixel row, in pixels from the top edge.</param>
-    /// <param name="r">The display-linear red component.</param>
-    /// <param name="g">The display-linear green component.</param>
-    /// <param name="b">The display-linear blue component.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// The image index or the pixel lies outside the swapchain.
-    /// </exception>
-    /// <exception cref="NotSupportedException">
-    /// The surface did not advertise transfer-source usage, so the swapchain images cannot be copied.
-    /// </exception>
-    /// <exception cref="GraphicsException">
-    /// The swapchain format is not a supported presented-color format, or a Vulkan object could not
-    /// be created or the copy failed. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
     internal static void ReadPresentedColorPixel(
         VulkanDevice device,
         VulkanSwapchain swapchain,

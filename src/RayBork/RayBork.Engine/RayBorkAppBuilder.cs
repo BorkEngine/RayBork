@@ -8,10 +8,8 @@ namespace RayBork;
 /// Configures and builds a <see cref="RayBorkApp"/>.
 /// </summary>
 /// <remarks>
-/// The builder is single-use and is not thread-safe: configure it before <see cref="Build()"/> and do
-/// not touch it afterwards. <see cref="Build()"/> validates the configuration only; it does not
-/// initialize SDL, create a window, or create the logger factory. Those happen in
-/// <see cref="RayBorkApp.Run"/>.
+/// Single-use and not thread-safe: configure before <see cref="Build()"/>. <see cref="Build()"/> only
+/// validates; SDL, the window, and the logger factory are created in <see cref="RayBorkApp.Run"/>.
 /// </remarks>
 public sealed class RayBorkAppBuilder
 {
@@ -55,19 +53,13 @@ public sealed class RayBorkAppBuilder
     private bool _built;
 
     /// <summary>
-    /// Initializes a new builder with the default configuration: a <c>1280x720</c>, non-resizable
-    /// window titled <c>RayBork</c>, a <c>0.25</c> second delta clamp, an uncapped tick loop, and the
-    /// default ZLogger console factory filtered at <see cref="LogLevel.Information"/>.
+    /// Initializes a builder with the defaults: a <c>1280x720</c> non-resizable window titled
+    /// <c>RayBork</c>, a <c>0.25</c> second delta clamp, uncapped ticks, and Information logging.
     /// </summary>
     public RayBorkAppBuilder() { }
 
-    /// <summary>
-    /// Sets the game whose callbacks run on the tick thread.
-    /// </summary>
-    /// <param name="game">The game to run.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the game whose callbacks run on the tick thread.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="game"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithGame(IGame game)
     {
         ThrowIfBuilt();
@@ -76,14 +68,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the initial window title.
-    /// </summary>
-    /// <param name="title">The title. It must not be empty or whitespace.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="title"/> is <c>null</c>.</exception>
+    /// <summary>Sets the initial window title; it must not be empty or whitespace.</summary>
     /// <exception cref="ArgumentException"><paramref name="title"/> is empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithTitle(string title)
     {
         ThrowIfBuilt();
@@ -100,16 +86,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the initial client size in logical units.
-    /// </summary>
-    /// <param name="width">The client width. It must be positive.</param>
-    /// <param name="height">The client height. It must be positive.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="width"/> or <paramref name="height"/> is zero or negative.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <summary>Sets the initial client size in logical units; both dimensions must be positive.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is zero or negative.</exception>
     public RayBorkAppBuilder WithSize(int width, int height)
     {
         ThrowIfBuilt();
@@ -120,12 +98,7 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets whether the window can be resized by the user.
-    /// </summary>
-    /// <param name="resizable">Whether the window is resizable.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <summary>Sets whether the window can be resized by the user.</summary>
     public RayBorkAppBuilder WithResizable(bool resizable = true)
     {
         ThrowIfBuilt();
@@ -133,15 +106,10 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the clamp applied to the per-tick delta time.
-    /// </summary>
-    /// <param name="seconds">The clamp in seconds. It must be finite and greater than zero.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the per-tick delta clamp, in seconds; it must be finite and positive.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="seconds"/> is not finite or is not greater than zero.
+    /// <paramref name="seconds"/> is not finite or not greater than zero.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithMaxDeltaTime(double seconds)
     {
         ThrowIfBuilt();
@@ -159,18 +127,13 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Adds one user asset pack. Packs mount after the built-in pack in call order, and a later pack
-    /// shadows an earlier pack for the same canonical path.
+    /// Adds one user asset pack after the built-in pack; later packs shadow earlier ones.
     /// </summary>
     /// <param name="path">
-    /// The pack path. It must not be empty or whitespace. Relative paths resolve against
-    /// <see cref="AppContext.BaseDirectory"/> when the app starts; <see cref="Build()"/> does not open
-    /// the file.
+    /// The pack path; relative paths resolve against <see cref="AppContext.BaseDirectory"/> when the app
+    /// starts, not when <see cref="Build()"/> runs.
     /// </param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithAssetsPack(string path)
     {
         ThrowIfBuilt();
@@ -179,15 +142,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Adds user asset packs in order. Each pack mounts after the built-in pack and after the earlier
-    /// packs, so the last pack that contains a path wins.
-    /// </summary>
-    /// <param name="paths">The pack paths. Every path must be non-empty.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException">The array or one of its elements is <c>null</c>.</exception>
+    /// <summary>Adds user asset packs in order; the last pack containing a path wins.</summary>
     /// <exception cref="ArgumentException">An element is empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithAssetsPacks(params string[] paths)
     {
         ThrowIfBuilt();
@@ -202,22 +158,12 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Registers a custom data type for <see cref="IAssetCatalog.Load{T}"/>. The type must carry a
-    /// compiled <c>[GenerateShape]</c>; the runtime never scans assemblies or uses reflection. The
-    /// payload is a MessagePack <see cref="AssetEntryType.Data"/> entry, deserialized through the
-    /// compiled shape. The same type must be registered with the bake independently.
+    /// Registers a custom data type for <see cref="IAssetCatalog.Load{T}"/> from its compiled
+    /// <c>[GenerateShape]</c> MessagePack shape; register it with the bake independently. Registering the
+    /// same type again is a no-op, but combining it with <see cref="WithAssetLoader{T}"/> throws.
     /// </summary>
-    /// <remarks>
-    /// The type is idempotent: registering it again is a no-op. Registering it with
-    /// <see cref="WithAssetLoader{T}"/> as well is an <see cref="InvalidOperationException"/> because
-    /// a type may have only one registration. Use <see cref="WithAssetLoader{T}"/> instead when the
-    /// payload is not a MessagePack custom-data entry.
-    /// </remarks>
     /// <typeparam name="T">The custom data type to register.</typeparam>
-    /// <returns>This builder.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The builder already built an app, or the type already has a different registration.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The type already has a different registration.</exception>
     public RayBorkAppBuilder WithAssetType<T>()
         where T : IShapeable<T>
     {
@@ -247,30 +193,16 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Registers a custom asset type and the loader that creates its instances for
-    /// <see cref="IAssetCatalog.Load{T}"/>. The type does not need a compiled <c>[GenerateShape]</c>.
+    /// Registers a custom asset type and its loader; no compiled <c>[GenerateShape]</c> is needed.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The loader produces a fresh caller-owned value for every load; the catalog does not cache the
-    /// result. The synchronous part of the loader runs on the dedicated <c>RayBork.Asset</c> loader
-    /// thread, so it must not block (no <c>.Result</c> or <c>.Wait()</c>) and must not call SDL,
-    /// Vulkan, or tick-thread APIs. One instance serves concurrent loads, so it must be stateless or
-    /// thread-safe.
-    /// </para>
-    /// <para>
-    /// Each type may be registered only once; a second registration of the same type is an
-    /// <see cref="InvalidOperationException"/>. Built-in engine asset types are already registered by
-    /// the engine, so registering one fails at <see cref="Build()"/>.
-    /// </para>
+    /// Each load produces a fresh caller-owned value. The synchronous loader part runs on the dedicated
+    /// <c>RayBork.Asset</c> thread, so it must not block or call SDL, Vulkan, or tick-thread APIs; one
+    /// instance serves concurrent loads, so it must be stateless or thread-safe. A type registers
+    /// once; built-in types are already registered and fail at <see cref="Build()"/>.
     /// </remarks>
     /// <typeparam name="T">The custom asset type to register.</typeparam>
-    /// <param name="loader">The loader that creates instances of <typeparamref name="T"/>.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="loader"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The builder already built an app, or <typeparamref name="T"/> is already registered.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The type is already registered.</exception>
     public RayBorkAppBuilder WithAssetLoader<T>(IAssetLoader<T> loader)
     {
         ThrowIfBuilt();
@@ -286,14 +218,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the presentation mode requested from the renderer.
-    /// </summary>
-    /// <param name="mode">A defined <see cref="PresentMode"/> value. The default is
-    /// <see cref="PresentMode.Mailbox"/>.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the requested presentation mode.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithPresentMode(PresentMode mode = PresentMode.Mailbox)
     {
         ThrowIfBuilt();
@@ -311,18 +237,9 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Sets the requested MSAA sample count.
+    /// Sets the MSAA sample count; the renderer uses the highest supported count up to it.
     /// </summary>
-    /// <param name="sampleCount">
-    /// The requested sample count. It must be positive. Unsupported but positive counts are accepted
-    /// here; the renderer selects the highest supported count that does not exceed the request. The
-    /// default is <c>4</c>.
-    /// </param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="sampleCount"/> is zero or negative.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sampleCount"/> is zero or negative.</exception>
     public RayBorkAppBuilder WithMSAA(int sampleCount = 4)
     {
         ThrowIfBuilt();
@@ -331,16 +248,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the startup tone mapping applied by the present pass. The mode is fixed for the app
-    /// lifetime; <see cref="EngineContext.Tonemapping"/> changes the exposure, AgX white, and AgX
-    /// contrast at runtime.
-    /// </summary>
-    /// <param name="mode">A defined <see cref="TonemappingMode"/> value. The default is
-    /// <see cref="TonemappingMode.AgX"/>.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the startup tone-mapping mode, fixed for the app lifetime.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX)
     {
         ThrowIfBuilt();
@@ -358,14 +267,9 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Sets the initial runtime exposure applied before tone mapping. The game can change it while it
-    /// runs through <see cref="EngineContext.Tonemapping"/>.
+    /// Sets the initial exposure in stops; <c>0</c> is neutral and <c>+1</c> doubles linear exposure.
     /// </summary>
-    /// <param name="ev">The exposure in stops. It must be finite; <c>0</c> is neutral and <c>+1</c>
-    /// doubles linear exposure.</param>
-    /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ev"/> is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithExposure(float ev = 0f)
     {
         ThrowIfBuilt();
@@ -379,18 +283,9 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Sets the initial AgX white that the runtime tone mapping maps to the display maximum. The game
-    /// can change it while it runs through <see cref="EngineContext.Tonemapping"/>.
+    /// Sets the initial AgX white mapped to the display maximum; at least <c>2</c>, default <c>16.29</c>.
     /// </summary>
-    /// <param name="white">
-    /// The scene-linear white before the display headroom scaling. It must be finite and at least
-    /// <c>2</c>. The default is <c>16.29</c>.
-    /// </param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="white"/> is not finite or is less than <c>2</c>.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Not finite or less than <c>2</c>.</exception>
     public RayBorkAppBuilder WithAgxWhite(float white = AgxToneMap.DEFAULT_AGX_WHITE)
     {
         ThrowIfBuilt();
@@ -407,17 +302,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the initial AgX curve contrast used by the runtime tone mapping. The game can change it
-    /// while it runs through <see cref="EngineContext.Tonemapping"/>.
-    /// </summary>
-    /// <param name="contrast">The curve contrast. It must be finite and at least <c>1</c>. The default
-    /// is <c>1.25</c>.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="contrast"/> is not finite or is less than <c>1</c>.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <summary>Sets the initial AgX curve contrast; at least <c>1</c>, default <c>1.25</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Not finite or less than <c>1</c>.</exception>
     public RayBorkAppBuilder WithAgxContrast(float contrast = AgxToneMap.DEFAULT_AGX_CONTRAST)
     {
         ThrowIfBuilt();
@@ -435,14 +321,10 @@ public sealed class RayBorkAppBuilder
     }
 
     /// <summary>
-    /// Sets the tick cap. In FIFO presentation mode the display refresh paces the tick loop first: a
-    /// lower cap still sleeps longer, and a cap above the refresh has no effect. Mailbox and Immediate
-    /// presentation leave the tick decoupled, so the cap sets its cadence directly.
+    /// Sets the tick cap, or zero for an uncapped loop. FIFO paces by refresh (a lower cap still sleeps),
+    /// while Mailbox and Immediate apply the cap directly.
     /// </summary>
-    /// <param name="framesPerSecond">The cap, or zero for an uncapped loop. It must not be negative.</param>
-    /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="framesPerSecond"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithTargetFps(int framesPerSecond)
     {
         ThrowIfBuilt();
@@ -451,13 +333,7 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets whether the graphics validation layer is requested. It defaults to enabled in Debug
-    /// builds and disabled in Release builds.
-    /// </summary>
-    /// <param name="enabled">Whether validation is requested.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <summary>Sets the graphics validation request; enabled by default in Debug builds.</summary>
     public RayBorkAppBuilder WithValidation(bool enabled = true)
     {
         ThrowIfBuilt();
@@ -465,13 +341,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the window state applied at startup.
-    /// </summary>
-    /// <param name="state">A defined <see cref="WindowState"/> value.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the window state applied at startup.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="state"/> is not a defined value.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithWindowState(WindowState state)
     {
         ThrowIfBuilt();
@@ -488,13 +359,7 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Supplies a caller-owned logger factory. The app uses it but never disposes it.
-    /// </summary>
-    /// <param name="loggerFactory">The factory. It must not be <c>null</c>.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <summary>Supplies a caller-owned logger factory that the app never disposes.</summary>
     public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
         ThrowIfBuilt();
@@ -503,14 +368,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the minimum level of the default logger factory. It has no effect when a caller-owned
-    /// factory is supplied.
-    /// </summary>
-    /// <param name="level">A defined <see cref="LogLevel"/> value.</param>
-    /// <returns>This builder.</returns>
+    /// <summary>Sets the default logger level; ignored with a caller factory.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> is not a defined value.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
     public RayBorkAppBuilder WithLogLevel(LogLevel level)
     {
         ThrowIfBuilt();
@@ -527,13 +386,8 @@ public sealed class RayBorkAppBuilder
         return this;
     }
 
-    /// <summary>
-    /// Validates the configuration and creates the app.
-    /// </summary>
-    /// <returns>An app that has not run yet.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// No game was supplied, or the builder already built an app.
-    /// </exception>
+    /// <summary>Validates the configuration and creates an app that has not run yet.</summary>
+    /// <exception cref="InvalidOperationException">No game was supplied.</exception>
     public RayBorkApp Build()
     {
         return Build(
@@ -543,18 +397,8 @@ public sealed class RayBorkAppBuilder
         );
     }
 
-    /// <summary>
-    /// Validates the configuration and creates the app with substituted platform and renderer
-    /// factories and time provider. Used by tests to avoid SDL, the GPU device, and the wall clock.
-    /// </summary>
-    /// <param name="platformFactory">The platform factory.</param>
-    /// <param name="rendererBackendFactory">The renderer backend factory.</param>
-    /// <param name="timeProvider">The time provider for the engine clock.</param>
-    /// <returns>An app that has not run yet.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// No game was supplied, or the builder already built an app.
-    /// </exception>
+    /// <summary>Validates and creates the app with injected factories and clock; used by tests.</summary>
+    /// <exception cref="InvalidOperationException">No game was supplied.</exception>
     internal RayBorkApp Build(
         PlatformFactory platformFactory,
         RendererBackendFactory rendererBackendFactory,

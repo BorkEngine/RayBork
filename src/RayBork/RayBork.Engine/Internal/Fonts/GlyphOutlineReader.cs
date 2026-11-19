@@ -2,38 +2,22 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// Resolves TrueType <c>glyf</c> glyphs through the <c>loca</c> offset table.
-/// </summary>
+/// <summary>Resolves TrueType <c>glyf</c> glyphs through the <c>loca</c> offset table.</summary>
 /// <remarks>
-/// <para>
-/// Simple glyphs decode their end points, repeat-compressed flags, and x/y deltas into contours with
-/// explicit quadratic segments; consecutive off-curve points produce the implied on-curve midpoint,
-/// a contour without an on-curve point gets the implied start point, and every contour is closed.
-/// Composite glyphs apply each component's translation and optional 2x2 transform, concatenate the
-/// component contours in component order, and reject reference cycles as malformed. Valid outlines
-/// that exceed a defensive parser limit — more than <see cref="MAX_COMPOSITE_DEPTH"/> composite
-/// levels, more than <see cref="MAX_POINTS_PER_GLYPH"/> source points, or more than
-/// <see cref="MAX_COMPONENT_RESOLUTIONS"/> component resolutions including empty leaves — raise
-/// <see cref="FontUnsupportedException"/> because the face is valid but outside the supported size.
-/// The point and component budgets are checked before the point arrays or the fanout work grow.
-/// Point-matched component arguments are also a valid font feature outside the supported subset.
-/// </para>
-/// <para>
-/// The reader is immutable and safe to read from any thread. Each resolution allocates only the
-/// returned contour and segment arrays, the per-glyph point scratch arrays, and a fixed 16-entry
-/// active-glyph stack.
-/// </para>
+/// Simple and composite glyphs resolve to closed font-unit contours, with implied on-curve midpoints
+/// and component transforms applied. A valid outline beyond <see cref="MAX_COMPOSITE_DEPTH"/> levels,
+/// <see cref="MAX_POINTS_PER_GLYPH"/> points, or <see cref="MAX_COMPONENT_RESOLUTIONS"/> resolutions
+/// raises <see cref="FontUnsupportedException"/>; the instance is immutable and thread-safe.
 /// </remarks>
 internal sealed class GlyphOutlineReader
 {
     /// <summary>The maximum number of nested composite levels a glyph may resolve.</summary>
     internal const int MAX_COMPOSITE_DEPTH = 16;
 
-    /// <summary>The maximum number of source points one resolved glyph may carry.</summary>
+    /// <summary>The maximum source-point count per resolved glyph.</summary>
     internal const int MAX_POINTS_PER_GLYPH = 20000;
 
-    /// <summary>The maximum number of composite component resolutions one glyph may perform.</summary>
+    /// <summary>The maximum composite component resolution count per glyph.</summary>
     internal const int MAX_COMPONENT_RESOLUTIONS = 4096;
 
     private const int GLYPH_HEADER_LENGTH = 10;
@@ -61,14 +45,7 @@ internal sealed class GlyphOutlineReader
     private readonly int _glyphCount;
     private readonly bool _longLoca;
 
-    /// <summary>Initializes a TrueType glyph reader and validates the whole <c>loca</c> table.</summary>
-    /// <param name="glyf">The complete <c>glyf</c> table bytes.</param>
-    /// <param name="loca">The complete <c>loca</c> table bytes.</param>
-    /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
-    /// <param name="longLoca"><see langword="true"/> for 32-bit <c>loca</c> entries.</param>
-    /// <exception cref="FontFormatException">
-    /// The <c>loca</c> table is too short, its offsets decrease, or an offset reaches past <c>glyf</c>.
-    /// </exception>
+    /// <summary>Initializes a reader over a face and rejects a malformed <c>loca</c> table.</summary>
     internal GlyphOutlineReader(
         ReadOnlyMemory<byte> glyf,
         ReadOnlyMemory<byte> loca,
@@ -113,17 +90,7 @@ internal sealed class GlyphOutlineReader
         }
     }
 
-    /// <summary>Resolves one glyph's stored bounds and outline.</summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
-    /// <returns>The resolved glyph in font units.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    /// <exception cref="FontFormatException">The glyph data is malformed or has a reference cycle.</exception>
-    /// <exception cref="FontUnsupportedException">
-    /// The glyph is valid but exceeds a supported limit: point-matched composite component
-    /// arguments, more than <see cref="MAX_COMPOSITE_DEPTH"/> composite levels, more than
-    /// <see cref="MAX_POINTS_PER_GLYPH"/> points, or more than
-    /// <see cref="MAX_COMPONENT_RESOLUTIONS"/> component resolutions.
-    /// </exception>
+    /// <summary>Resolves one glyph's stored bounds and font-unit outline.</summary>
     internal FontGlyph ReadGlyph(int glyphId)
     {
         if ((uint)glyphId >= (uint)_glyphCount)
@@ -144,10 +111,7 @@ internal sealed class GlyphOutlineReader
             ? loca.ReadUInt32(index * LOCA_LONG_ENTRY_LENGTH)
             : loca.ReadUInt16(index * LOCA_SHORT_ENTRY_LENGTH) * 2L;
 
-    /// <summary>
-    /// The mutable state of one glyph resolution. It is created per call, so the reader itself stays
-    /// immutable and concurrent resolutions share no state.
-    /// </summary>
+    /// <summary>The per-call mutable state of one glyph resolution.</summary>
     private sealed class GlyphResolution
     {
         private readonly GlyphOutlineReader _reader;

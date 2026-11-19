@@ -2,40 +2,15 @@ using System.Numerics;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// One recorded draw call: a mesh/shader-program/state snapshot with one or more instance transforms.
-/// </summary>
+/// <summary>One recorded draw call: a mesh, shader program, state, and instance transforms.</summary>
 /// <remarks>
-/// <para>
-/// The record is a value snapshot. It owns a pooled world-matrix buffer, a pooled instance-uniform
-/// template, and pooled shared and per-instance texture-binding buffers, so the render thread never
-/// reads a live game object or a mutable list. The tick thread fills a record only while its frame slot
-/// is recording; after the packet is sealed the record is read-only, and the slot reuses the same
-/// buffers on its next acquisition. The read accessors below are the internal seam for the renderer and
-/// the batch planner.
-/// </para>
-/// <para>
-/// The instance-uniform template starts at instance offset
-/// <see cref="ShaderAbiLayout.INSTANCE_HEADER_SIZE"/>: copying it to instance-record offset 96
-/// reproduces the shader cursor or bake-default data. Texture index slots stay zero in the template;
-/// the renderer resolves them from the record's texture references and writes the bindless indices at
-/// <see cref="ShaderAbiLayout.TEXTURE_INDEX_START"/>.
-/// </para>
-/// <para>
-/// A record carries either one shared texture-binding set for every instance
-/// (<see cref="SetShaderState"/>) or one binding set per instance
-/// (<see cref="SetPerInstanceShaderState(Shader)"/>). The two forms are mutually exclusive; a
-/// per-instance set is what lets text draws batch different glyph textures into one instanced draw.
-/// Neither form adds engine-asset references: the recorder retains every referenced texture in the
-/// frame's retention set.
-/// </para>
+/// A value snapshot that owns pooled matrix, uniform-template, and texture-binding buffers, so the
+/// render thread never reads a live game object. The tick thread fills a record while its frame slot
+/// records; the packet seals it read-only, and the slot reuses the same buffers on its next acquisition.
 /// </remarks>
 internal sealed class RenderDrawRecord
 {
-    /// <summary>
-    /// The largest per-instance binding count a template byte count can describe without overflowing a
-    /// 32-bit multiplication.
-    /// </summary>
+    /// <summary>Largest per-instance binding count whose template bytes fit a 32-bit count.</summary>
     private const int MAX_TEXTURE_BINDING_COUNT = int.MaxValue / ShaderAbiLayout.TEXTURE_INDEX_SIZE;
 
     private EngineAsset? _mesh;
@@ -51,7 +26,7 @@ internal sealed class RenderDrawRecord
     private int _instanceTextureBindingLength;
     private bool _sharedTextureStateDeclared;
 
-    /// <summary>Gets the mesh asset. It is retained by the frame's retention set until the frame ends.</summary>
+    /// <summary>Gets the mesh asset, retained by the frame's retention set until the frame ends.</summary>
     /// <exception cref="InvalidOperationException">The record was reset.</exception>
     internal EngineAsset Mesh =>
         _mesh
@@ -59,16 +34,18 @@ internal sealed class RenderDrawRecord
             "The draw record has no mesh; it was reset or never recorded."
         );
 
-    /// <summary>Gets the mesh primitive topology.</summary>
+    /// <summary>Gets the mesh topology.</summary>
     internal PrimitiveTopology Topology { get; private set; }
 
-    /// <summary>Gets the mesh-space bounds used for frustum culling.</summary>
+    /// <summary>Gets the mesh-space bounds used for culling.</summary>
     internal BoundingBox MeshBounds { get; private set; }
 
-    /// <summary>Gets the mesh index count, used for triangle statistics.</summary>
+    /// <summary>Gets the mesh index count.</summary>
     internal int IndexCount { get; private set; }
 
-    /// <summary>Gets the internal shader program asset. It is retained by the frame's retention set until the frame ends.</summary>
+    /// <summary>
+    /// Gets the internal shader program, retained by the frame's retention set until the frame ends.
+    /// </summary>
     /// <exception cref="InvalidOperationException">The record was reset.</exception>
     internal EngineAsset Program =>
         _program
@@ -76,17 +53,12 @@ internal sealed class RenderDrawRecord
             "The draw record has no shader program; it was reset or never recorded."
         );
 
-    /// <summary>Gets the effective render state of this draw.</summary>
+    /// <summary>Gets the effective render state.</summary>
     internal RenderState RenderState { get; private set; }
 
-    /// <summary>
-    /// Gets whether the draw rasterizes its triangles with the polygon-mode-line state instead of
-    /// filling them.
-    /// </summary>
+    /// <summary>Gets whether the draw rasterizes its triangles as lines instead of filling them.</summary>
     /// <remarks>
-    /// The flag is part of the batch key and the geometry pipeline key, so a wireframe draw never
-    /// merges with a filled draw over the same mesh, program, and render state. It is internal to the
-    /// draw record: <see cref="RenderState"/> stays the public depth, culling, and blending contract.
+    /// Part of the batch and geometry pipeline keys, so it never merges with a filled draw.
     /// </remarks>
     internal bool Wireframe { get; private set; }
 
@@ -94,10 +66,11 @@ internal sealed class RenderDrawRecord
     internal Color Tint { get; private set; }
 
     /// <summary>
-    /// Gets the normalized UV rectangle written to every instance of this draw: <c>X</c> and <c>Y</c>
-    /// are the texture-space origin and <c>Z</c> and <c>W</c> are the size. Draws that do not sample a
-    /// sub-rectangle record <c>(0, 0, 1, 1)</c>.
+    /// Gets the normalized UV rectangle: origin in <c>X</c> and <c>Y</c>, size in <c>Z</c> and <c>W</c>.
     /// </summary>
+    /// <remarks>
+    /// Draws that sample no sub-rectangle keep the full-texture default <c>(0, 0, 1, 1)</c>.
+    /// </remarks>
     internal Vector4 UvRect { get; private set; }
 
     /// <summary>Gets the number of recorded instances.</summary>
@@ -108,62 +81,37 @@ internal sealed class RenderDrawRecord
         _instanceTemplate.AsSpan(0, _instanceTemplateLength);
 
     /// <summary>
-    /// Gets the world matrices in recording order, one per instance. The matrix already includes the
-    /// model part's local transform; it maps mesh space to world space.
+    /// Gets one mesh-space-to-world matrix per instance, in recording order, including the model's local
+    /// transform.
     /// </summary>
     internal ReadOnlySpan<Matrix4x4> GetWorldMatrices() => _worldMatrices.AsSpan(0, _instanceCount);
 
     /// <summary>
-    /// Gets the shared per-texture object in shader sidecar declaration order. A <see langword="null"/>
-    /// entry uses the built-in white fallback.
+    /// Gets the shared texture bindings in declaration order; a <see langword="null"/> entry uses white.
     /// </summary>
     internal ReadOnlySpan<Texture?> GetTextureBindings() =>
         _textureBindings.AsSpan(0, _textureCount);
 
-    /// <summary>
-    /// Gets whether this draw carries one texture-binding set per instance instead of one shared set.
-    /// </summary>
+    /// <summary>Gets whether each instance carries its own texture set instead of one shared set.</summary>
     /// <remarks>
-    /// When this is <see langword="true"/>, <see cref="GetTextureBindings"/> is empty and the renderer
-    /// reads the per-instance set from <see cref="GetInstanceTextureBindings"/>. The flag is not part of
-    /// the batch key: per-instance bindings never split or join a batch.
+    /// When set, <see cref="GetTextureBindings"/> is empty and the renderer reads
+    /// <see cref="GetInstanceTextureBindings"/>; the flag is not part of the batch key.
     /// </remarks>
     internal bool HasPerInstanceTextureBindings => _instanceTextureBindingCount > 0;
 
-    /// <summary>
-    /// Gets the number of texture bindings each instance carries, or <c>0</c> for a draw that uses the
-    /// shared set.
-    /// </summary>
+    /// <summary>Gets the bindings each instance carries, or <c>0</c> for a shared-set draw.</summary>
     internal int TextureBindingCount => _instanceTextureBindingCount;
 
     /// <summary>
-    /// Gets the flat per-instance texture objects in instance-major order:
-    /// <c>instance * TextureBindingCount + bindingIndex</c>. Empty for a shared-set draw.
+    /// Gets the flat per-instance textures in instance-major order:
+    /// <c>instance * TextureBindingCount + bindingIndex</c>; empty for a shared-set draw.
     /// </summary>
-    /// <remarks>
-    /// The span has exactly <c>InstanceCount * TextureBindingCount</c> entries for a per-instance draw.
-    /// Each rendered instance reads its own contiguous run, so instance 0's bindings are followed by
-    /// instance 1's and so on.
-    /// </remarks>
+    /// <remarks>Exactly <c>InstanceCount * TextureBindingCount</c> entries for a per-instance draw.</remarks>
     internal ReadOnlySpan<Texture?> GetInstanceTextureBindings() =>
         _instanceTextureBindings.AsSpan(0, _instanceTextureBindingLength);
 
-    /// <summary>
-    /// Starts a new record and resets its per-draw values. Called only with a record rented from the
-    /// recording frame packet.
-    /// </summary>
-    /// <param name="mesh">The mesh asset.</param>
-    /// <param name="topology">The mesh topology.</param>
-    /// <param name="meshBounds">The mesh-space bounds.</param>
-    /// <param name="indexCount">The mesh index count.</param>
-    /// <param name="program">The internal shader program asset.</param>
-    /// <param name="renderState">The effective render state.</param>
-    /// <param name="tint">The linear tint.</param>
-    /// <param name="wireframe">
-    /// Whether to rasterize the triangles as lines instead of filling them. <c>false</c> draws the
-    /// regular filled geometry.
-    /// </param>
-    /// <exception cref="ArgumentNullException">A required argument is <c>null</c>.</exception>
+    /// <summary>Starts a new record and resets its per-draw values.</summary>
+    /// <remarks>Requires a record rented from the recording frame packet.</remarks>
     internal void Begin(
         EngineAsset mesh,
         PrimitiveTopology topology,
@@ -195,22 +143,11 @@ internal sealed class RenderDrawRecord
         _sharedTextureStateDeclared = false;
     }
 
-    /// <summary>
-    /// Copies the shader cursor instance template and shared texture bindings into the record.
-    /// </summary>
-    /// <param name="instanceTemplate">
-    /// The shader's captured per-instance uniform data, without the 96-byte instance header.
-    /// </param>
-    /// <param name="textureBindings">The captured texture objects in declaration order.</param>
+    /// <summary>Copies the instance template and shared texture bindings into the record.</summary>
     /// <remarks>
-    /// This declares the shared form, even when <paramref name="textureBindings"/> is empty. A record
-    /// that already carries a per-instance set rejects this shared setter, and the record is left
-    /// unchanged.
+    /// Declares the shared form even when the bindings are empty, and is mutually exclusive with the
+    /// per-instance form; a rejected call leaves the record unchanged.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// The record already carries a per-instance set; see
-    /// <see cref="SetPerInstanceShaderState(Shader)"/>.
-    /// </exception>
     internal void SetShaderState(
         ReadOnlySpan<byte> instanceTemplate,
         ReadOnlySpan<Texture?> textureBindings
@@ -239,53 +176,15 @@ internal sealed class RenderDrawRecord
     }
 
     /// <summary>
-    /// Copies the material's captured instance template and declares that every instance of this draw
-    /// carries its own texture-binding set, one texture per binding the material's program declares.
+    /// Captures a material's template and declares one texture-binding set per instance.
     /// </summary>
-    /// <param name="material">
-    /// The material whose cursor snapshot and declared texture bindings the record captures. It must not
-    /// be disposed, and its program must be the program the record began with.
-    /// </param>
     /// <remarks>
-    /// <para>
-    /// A text draw records one instance per glyph and binds that glyph's bindless texture here, so
-    /// glyphs with different textures still form one instanced draw. The template and the binding count
-    /// both come from the material, so a count that disagrees with the template cannot be recorded. The
-    /// material's program must be the program the record began with; a different program would write
-    /// another program's ABI into this pipeline's layout.
-    /// </para>
-    /// <para>
-    /// The per-instance form changes only which texture each instance samples. The MSDF program samples
-    /// the whole glyph texture and does not consume <see cref="UvRect"/>: one glyph is one padded
-    /// texture sampled <c>0..1</c>, with the padding part of the glyph quad. <see cref="UvRect"/> stays
-    /// the general per-instance sub-rectangle field for textured-quad shaders such as the billboard
-    /// material, and text leaves it at the default <c>(0, 0, 1, 1)</c>.
-    /// </para>
-    /// <para>
-    /// The set is filled instance by instance through <see cref="BeginInstanceTextureBindings"/>. The
-    /// buffer is pooled and reused across frames exactly like the shared binding buffer, so filling it
-    /// allocates nothing after warm-up. <see cref="BeginInstances"/>, this setter, and
-    /// <see cref="Reset"/> clear it, so a pooled record never keeps a texture alive and stale bindings
-    /// are never written into a frame.
-    /// </para>
-    /// <para>
-    /// Frame retention stays the recorder's job: the record stores the texture objects but acquires no
-    /// engine reference, so the recorder must add every per-instance texture to the frame's retention
-    /// set exactly as it does for a shared binding.
-    /// </para>
-    /// <para>
-    /// A record uses either this per-instance form or the shared <see cref="SetShaderState"/> form.
-    /// Declaring one after the other throws <see cref="InvalidOperationException"/> and leaves the record
-    /// unchanged.
-    /// </para>
+    /// The material's program must be the record's program, and the per-instance form is exclusive
+    /// with the shared form; a rejected call leaves the record unchanged. Textures are stored but not
+    /// retained, so the recorder adds them to the frame's retention set. The pooled binding buffer is
+    /// cleared by <see cref="BeginInstances"/>, <see cref="SetPerInstanceShaderState(Shader)"/>, and
+    /// <see cref="Reset"/>.
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="material"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The material was disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The material's program declares no texture bindings, the material's program is not the record's
-    /// program (including a record that has not begun), or the record already declared the shared form.
-    /// The record is left unchanged.
-    /// </exception>
     internal void SetPerInstanceShaderState(Shader material)
     {
         ArgumentNullException.ThrowIfNull(material);
@@ -312,28 +211,12 @@ internal sealed class RenderDrawRecord
     }
 
     /// <summary>
-    /// Copies a raw instance template and declares a per-instance texture set of
-    /// <paramref name="textureBindingCount"/> bindings.
+    /// Copies a raw instance template and declares a per-instance texture set of the given size.
     /// </summary>
-    /// <param name="instanceTemplate">
-    /// The per-instance uniform data without the 96-byte instance header. It must carry one 32-bit
-    /// texture index slot per binding, starting at
-    /// <see cref="ShaderAbiLayout.TEXTURE_INDEX_START"/>.
-    /// </param>
-    /// <param name="textureBindingCount">The number of texture bindings each instance carries.</param>
     /// <remarks>
-    /// The low-level form of <see cref="SetPerInstanceShaderState(Shader)"/>. Engine recorders pass the
-    /// material so the template and the count cannot disagree; this overload exists so a recorder that
-    /// already holds a template snapshot, and the record unit tests, can exercise the validation. Every
-    /// check runs before the record changes, so a rejected call leaves it untouched.
+    /// Low-level form of <see cref="SetPerInstanceShaderState(Shader)"/>; every check runs before the
+    /// record changes, so a rejected call leaves it untouched.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="textureBindingCount"/> is not positive or exceeds the index-slot byte count.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The template is too small to hold one index slot per binding, or the record already declared the
-    /// shared form.
-    /// </exception>
     internal void SetPerInstanceShaderState(
         ReadOnlySpan<byte> instanceTemplate,
         int textureBindingCount
@@ -375,34 +258,17 @@ internal sealed class RenderDrawRecord
         UpdateInstanceTextureBindings();
     }
 
-    /// <summary>
-    /// Sets the normalized UV rectangle written to every instance of this draw.
-    /// </summary>
-    /// <param name="uvRect">
-    /// The texture-space origin in <c>X</c> and <c>Y</c> and the size in <c>Z</c> and <c>W</c>. The
-    /// default full-texture rectangle is <c>(0, 0, 1, 1)</c>.
-    /// </param>
-    /// <remarks>
-    /// The rectangle is per-instance data, so it never splits or joins a batch. A shader that samples a
-    /// texture reads it as <c>rbInstance.UvRect</c>; the built-in mesh shader computes
-    /// <c>UvRect.xy + uv * UvRect.zw</c>. Only the billboard source-rectangle overloads set a
-    /// sub-rectangle; every other draw keeps the full-texture default.
-    /// </remarks>
+    /// <summary>Sets the normalized UV rectangle written to every instance of this draw.</summary>
+    /// <remarks>Per-instance data, so it never splits or joins a batch.</remarks>
     internal void SetUvRect(Vector4 uvRect) => UvRect = uvRect;
 
     /// <summary>
-    /// Ensures room for <paramref name="count"/> instances, marks them recorded, and returns the buffer
-    /// the recorder fills with mesh-space-to-world matrices.
+    /// Marks <paramref name="count"/> instances recorded and returns the writable world-matrix buffer.
     /// </summary>
-    /// <param name="count">The number of instances to record.</param>
-    /// <returns>The writable matrix buffer, exactly <paramref name="count"/> entries long.</returns>
     /// <remarks>
-    /// Declaring the instances also clears the per-instance texture buffer and resizes it to
-    /// <c>count * TextureBindingCount</c> entries, so call this before
-    /// <see cref="BeginInstanceTextureBindings"/> and fill the textures afterwards. A second call
-    /// discards any bindings filled after the previous one.
+    /// Also clears and resizes the per-instance texture buffer, so call it before
+    /// <see cref="BeginInstanceTextureBindings"/> and fill the textures afterwards.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
     internal Span<Matrix4x4> BeginInstances(int count)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
@@ -416,29 +282,13 @@ internal sealed class RenderDrawRecord
         return _worldMatrices.AsSpan(0, count);
     }
 
-    /// <summary>
-    /// Returns the writable flat per-instance texture buffer for a draw recorded with
-    /// <see cref="SetPerInstanceShaderState(Shader)"/>, in instance-major order:
-    /// <c>instance * TextureBindingCount + bindingIndex</c>.
-    /// </summary>
+    /// <summary>Gets the writable flat per-instance texture buffer, in instance-major order.</summary>
     /// <remarks>
-    /// <para>
-    /// Call it after <see cref="BeginInstances"/> declared the instances: the returned span is exactly
-    /// <c>InstanceCount * TextureBindingCount</c> entries long and is cleared before it is handed out.
-    /// The buffer is pooled with the record, so a warm record's call allocates nothing, and a later
-    /// <see cref="BeginInstances"/>, <see cref="SetPerInstanceShaderState(Shader)"/>, or
-    /// <see cref="Reset"/> invalidates the span and clears the buffer.
-    /// </para>
-    /// <para>
-    /// Filling this buffer does not retain the textures. The recorder must add each one to the frame's
-    /// retention set, exactly as it does for a shared binding, so the texture and its bindless slot stay
-    /// alive until the render thread releases the frame slot.
-    /// </para>
+    /// Call after <see cref="BeginInstances"/>: the span is <c>InstanceCount * TextureBindingCount</c>
+    /// entries long and cleared first. It is pooled with the record, and a later
+    /// <see cref="BeginInstances"/> or <see cref="Reset"/> clears and invalidates it. Filling it does
+    /// not retain the textures; the recorder must add each to the frame's retention set.
     /// </remarks>
-    /// <returns>The writable per-instance texture buffer.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The record has no per-instance set, or no instances were recorded yet.
-    /// </exception>
     internal Span<Texture?> BeginInstanceTextureBindings()
     {
         if (!HasPerInstanceTextureBindings)
@@ -460,10 +310,7 @@ internal sealed class RenderDrawRecord
         return _instanceTextureBindings.AsSpan(0, _instanceTextureBindingLength);
     }
 
-    /// <summary>
-    /// Releases the asset references and clears both texture-binding buffers and the counts for reuse by
-    /// a later frame.
-    /// </summary>
+    /// <summary>Releases asset references and clears both binding buffers for reuse.</summary>
     internal void Reset()
     {
         _mesh = null;
@@ -497,14 +344,7 @@ internal sealed class RenderDrawRecord
         _instanceTemplateLength = instanceTemplate.Length;
     }
 
-    /// <summary>
-    /// Resizes and clears the per-instance texture buffer for the current instance and binding counts.
-    /// </summary>
-    /// <remarks>
-    /// The buffer is cleared so a reused record never exposes a texture from an earlier draw, and the
-    /// length is recomputed so the writable span always matches the recorded instances. Both callers
-    /// validate their own arguments first, so a rejected call cannot reach here.
-    /// </remarks>
+    /// <summary>Resizes and clears the per-instance texture buffer for the recorded counts.</summary>
     private void UpdateInstanceTextureBindings()
     {
         int length =

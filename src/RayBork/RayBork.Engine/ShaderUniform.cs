@@ -1,8 +1,4 @@
 namespace RayBork;
 
-/// <summary>
-/// One reflected shader uniform.
-/// </summary>
-/// <param name="Name">The GLSL uniform name.</param>
-/// <param name="Type">The reflected value type.</param>
+/// <summary>A reflected shader uniform.</summary>
 public readonly record struct ShaderUniform(string Name, ShaderUniformType Type);

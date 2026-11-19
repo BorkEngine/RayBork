@@ -4,26 +4,13 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The per-frame-in-flight GPU resources of the geometry path: one growable host-visible frame storage
-/// buffer, one growable host-visible instance storage buffer, and one descriptor set per slot.
+/// The per-frame-in-flight geometry resources: a frame storage buffer, an instance storage buffer, and
+/// one descriptor set per frame slot.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The renderer waits for a slot's fence before it records into that slot, so the slot's buffers and
-/// descriptor set are never referenced by an in-flight frame when they grow. The frame buffer holds an
-/// array of 256-byte <see cref="ShaderAbiFrame"/> blocks, one per camera pass, selected by the
-/// <c>passIndex</c> push constant; the instance buffer holds fixed-stride <c>RayBorkInstance</c>
-/// records indexed by <c>gl_InstanceIndex</c>. Both buffers are mapped once and stay mapped for their
-/// lifetime. The frame block is a storage buffer rather than a dynamically offset uniform buffer
-/// because the geometry set layout also carries the update-after-bind texture array, and Vulkan forbids
-/// dynamic uniform buffers in a set layout that has an update-after-bind binding.
-/// </para>
-/// <para>
-/// Each buffer is bounded by the smaller of the device's storage-buffer range and its maximum (64 MiB
-/// for instances, 16 MiB for frame blocks); a frame that needs more is a fatal <c>RB3001</c> failure
-/// rather than a dropped draw. The buffers, memory, and sets are destroyed before the descriptor state
-/// and the device. Every member is render-thread only and the call is not thread-safe.
-/// </para>
+/// A slot's buffers and descriptors are rewritten only after its fence is waited, so growth never disturbs
+/// an in-flight frame; both buffers stay mapped for their lifetime. Each buffer is bounded by the smaller
+/// of the device storage-buffer range and 64 MiB (instances) or 16 MiB (frame blocks).
 /// </remarks>
 internal sealed unsafe class VulkanFrameResources : IDisposable
 {
@@ -73,25 +60,13 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
         _descriptorSets = new DescriptorSet[FRAMES_IN_FLIGHT];
     }
 
-    /// <summary>
-    /// Gets the frame descriptor sets in slot order.
-    /// </summary>
+    /// <summary>Gets the frame descriptor sets in slot order.</summary>
     internal DescriptorSet[] DescriptorSets => _descriptorSets;
 
-    /// <summary>
-    /// Gets the instance storage-buffer bound in bytes.
-    /// </summary>
+    /// <summary>Gets the instance storage-buffer bound in bytes.</summary>
     internal ulong MaxInstanceBytes => _maxInstanceBytes;
 
-    /// <summary>
-    /// Creates the per-slot buffers, memory, and descriptor sets.
-    /// </summary>
-    /// <param name="device">The device that owns the resources.</param>
-    /// <param name="descriptors">The shared descriptor state.</param>
-    /// <returns>The created frame resources.</returns>
-    /// <exception cref="GraphicsException">
-    /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
-    /// </exception>
+    /// <summary>Creates the per-slot buffers, memory, and descriptor sets.</summary>
     internal static VulkanFrameResources Create(
         VulkanDevice device,
         VulkanDescriptorState descriptors
@@ -129,24 +104,13 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
     }
 
     /// <summary>
-    /// Ensures one frame slot's frame storage buffer holds a block for every camera pass and rewrites
-    /// the slot's frame descriptor when the buffer grows.
+    /// Ensures one slot's frame storage buffer holds a 256-byte block for every camera pass, growing it and
+    /// rewriting the slot's descriptor when needed.
     /// </summary>
     /// <remarks>
-    /// The caller has already waited for the slot's fence, so recreating the frame buffer and
-    /// rewriting the slot's descriptor set cannot disturb an in-flight frame that references them. The
-    /// geometry set layout also carries the update-after-bind texture array, which forbids a
-    /// dynamically offset uniform buffer in the same set, so the pass index is a push constant and the
-    /// frame records form a storage-buffer array.
+    /// The caller has already waited for the slot's fence, and a pass index is a push constant because the
+    /// set layout also carries the update-after-bind texture array.
     /// </remarks>
-    /// <param name="slotIndex">The frame slot index.</param>
-    /// <param name="passCount">The number of camera passes the frame records.</param>
-    /// <param name="frameIndex">The frame index, for fatal diagnostics.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="passCount"/> is negative.</exception>
-    /// <exception cref="GraphicsException">
-    /// The frame needs more frame-block bytes than the storage-buffer bound. The diagnostic code is
-    /// <c>RB3001</c>.
-    /// </exception>
     internal void EnsureFrameCapacity(int slotIndex, int passCount, long frameIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -182,22 +146,9 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
     }
 
     /// <summary>
-    /// Ensures one frame slot can hold the frame's instance records and writes the slot's buffer
-    /// descriptors when the instance buffer grows.
+    /// Ensures one slot holds the frame's instance records, including any per-batch alignment, and rewrites
+    /// its instance descriptor when the buffer grows.
     /// </summary>
-    /// <remarks>
-    /// The caller has already waited for the slot's fence, so recreating the instance buffer and
-    /// rewriting the slot's descriptor set cannot disturb an in-flight frame that references them.
-    /// </remarks>
-    /// <param name="slotIndex">The frame slot index.</param>
-    /// <param name="instanceBytes">
-    /// The instance-record bytes the frame needs, including any per-batch alignment.
-    /// </param>
-    /// <param name="frameIndex">The frame index, for fatal diagnostics.</param>
-    /// <exception cref="GraphicsException">
-    /// The frame needs more instance bytes than the storage-buffer bound. The diagnostic code is
-    /// <c>RB3001</c>.
-    /// </exception>
     internal void EnsureSlot(int slotIndex, ulong instanceBytes, long frameIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -234,15 +185,7 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets one camera pass's 256-byte frame block in the slot's mapped buffer.
-    /// </summary>
-    /// <param name="slotIndex">The frame slot index.</param>
-    /// <param name="passIndex">The camera pass index inside the frame.</param>
-    /// <returns>The writable block.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="passIndex"/> lies outside the slot's frame buffer.
-    /// </exception>
+    /// <summary>Gets one camera pass's 256-byte frame block in the slot's mapped buffer.</summary>
     internal Span<byte> GetFrameBlockSpan(int slotIndex, int passIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -261,14 +204,7 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
         return new Span<byte>(slot.FrameMapped + byteOffset, FRAME_BLOCK_SIZE);
     }
 
-    /// <summary>
-    /// Gets a writable range of the slot's mapped instance buffer.
-    /// </summary>
-    /// <param name="slotIndex">The frame slot index.</param>
-    /// <param name="byteOffset">The byte offset of the range.</param>
-    /// <param name="byteLength">The range length in bytes.</param>
-    /// <returns>The writable range.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The range lies outside the slot's buffer.</exception>
+    /// <summary>Gets a writable range of the slot's mapped instance buffer.</summary>
     internal Span<byte> GetInstanceSpan(int slotIndex, ulong byteOffset, ulong byteLength)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -285,11 +221,7 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
         return new Span<byte>(slot.InstanceMapped + byteOffset, checked((int)byteLength));
     }
 
-    /// <summary>
-    /// Gets the slot's frame descriptor set.
-    /// </summary>
-    /// <param name="slotIndex">The frame slot index.</param>
-    /// <returns>The descriptor set.</returns>
+    /// <summary>Gets the slot's frame descriptor set.</summary>
     internal DescriptorSet GetDescriptorSet(int slotIndex)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -297,8 +229,8 @@ internal sealed unsafe class VulkanFrameResources : IDisposable
     }
 
     /// <summary>
-    /// Unmaps and destroys every buffer, memory allocation, and descriptor set. The call is
-    /// idempotent and must run before the descriptor state and the logical device are destroyed.
+    /// Unmaps and destroys every slot buffer and memory allocation. The call is idempotent and must run
+    /// before the descriptor state and the logical device are destroyed.
     /// </summary>
     public void Dispose()
     {

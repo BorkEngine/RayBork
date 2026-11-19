@@ -3,34 +3,21 @@ using PolyType;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The single Nerdbank.MessagePack serializer used for pack descriptors and custom data.
-/// </summary>
+/// <summary>The MessagePack serializer shared by pack descriptors and custom data.</summary>
 /// <remarks>
-/// The serializer is immutable and thread-safe, so one instance is shared. It has no reflection
-/// resolver: every packed type carries a source-generated shape, which is what keeps the loader
-/// Native AOT compatible.
+/// The serializer is immutable and thread-safe, and it resolves every packed type through a
+/// source-generated shape, so the loader stays Native AOT compatible.
 /// </remarks>
 internal static class AssetSerialization
 {
     private static readonly MessagePackSerializer _serializer = new();
 
-    /// <summary>
-    /// Serializes a shaped value.
-    /// </summary>
-    /// <typeparam name="T">The shaped value type.</typeparam>
-    /// <param name="value">The value to serialize.</param>
-    /// <returns>The MessagePack bytes.</returns>
+    /// <summary>Serializes a shaped value to MessagePack bytes.</summary>
     internal static byte[] Serialize<T>(T value)
         where T : IShapeable<T> => _serializer.Serialize(value);
 
-    /// <summary>
-    /// Deserializes a shaped value from a payload.
-    /// </summary>
-    /// <typeparam name="T">The shaped value type.</typeparam>
-    /// <param name="payload">The complete MessagePack payload.</param>
-    /// <returns>The deserialized value.</returns>
-    /// <exception cref="InvalidOperationException">The payload deserialized to <see langword="null"/>.</exception>
+    /// <summary>Deserializes a shaped value from a complete MessagePack payload.</summary>
+    /// <exception cref="InvalidOperationException">The payload contains no value.</exception>
     internal static T Deserialize<T>(ReadOnlyMemory<byte> payload)
         where T : IShapeable<T>
     {

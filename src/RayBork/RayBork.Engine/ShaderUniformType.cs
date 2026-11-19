@@ -1,11 +1,9 @@
 namespace RayBork;
 
-/// <summary>
-/// The reflected value type of a shader uniform.
-/// </summary>
+/// <summary>The reflected value type of a shader uniform.</summary>
 public enum ShaderUniformType
 {
-    /// <summary>A single 32-bit float.</summary>
+    /// <summary>A 32-bit float.</summary>
     Float = 0,
 
     /// <summary>A 32-bit signed integer.</summary>

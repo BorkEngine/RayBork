@@ -2,24 +2,17 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace RayBork.Internal;
 
-/// <summary>
-/// The immutable registry of asset type registrations captured when the app was built.
-/// </summary>
+/// <summary>The immutable registry of asset type registrations built with the app.</summary>
 /// <remarks>
-/// The registry is built once in the catalog constructor and never changes afterwards, so every
-/// member is thread-safe and may be called without a lock. Registrations are keyed by the registered
-/// CLR type, and a type may appear only once.
+/// The registry is built once in the catalog constructor and never changes, so every member is
+/// thread-safe. Registrations are keyed by CLR type and each type may appear only once.
 /// </remarks>
 internal sealed class AssetTypeRegistry
 {
     private readonly Dictionary<Type, AssetTypeRegistration> _registrations;
 
-    /// <summary>
-    /// Initializes a registry from the configured registrations.
-    /// </summary>
-    /// <param name="registrations">The registrations in registration order.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="registrations"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">A registered asset type appears more than once.</exception>
+    /// <summary>Initializes a registry from the configured registrations.</summary>
+    /// <exception cref="InvalidOperationException">A type is registered twice.</exception>
     internal AssetTypeRegistry(IReadOnlyList<AssetTypeRegistration> registrations)
     {
         ArgumentNullException.ThrowIfNull(registrations);
@@ -36,30 +29,17 @@ internal sealed class AssetTypeRegistry
         }
     }
 
-    /// <summary>
-    /// Gets the number of registered asset types.
-    /// </summary>
+    /// <summary>Gets the number of registered asset types.</summary>
     internal int Count => _registrations.Count;
 
-    /// <summary>
-    /// Tests whether an asset type is registered.
-    /// </summary>
-    /// <param name="assetType">The CLR asset type to test.</param>
-    /// <returns><see langword="true"/> when the type is registered.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
+    /// <summary>Tests whether an asset type is registered.</summary>
     internal bool Contains(Type assetType)
     {
         ArgumentNullException.ThrowIfNull(assetType);
         return _registrations.ContainsKey(assetType);
     }
 
-    /// <summary>
-    /// Tries to get the registration for an asset type.
-    /// </summary>
-    /// <param name="assetType">The CLR asset type to look up.</param>
-    /// <param name="registration">The matching registration, or <see langword="null"/> when absent.</param>
-    /// <returns><see langword="true"/> when the type is registered.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
+    /// <summary>Tries to get the registration for an asset type.</summary>
     internal bool TryGet(
         Type assetType,
         [NotNullWhen(true)] out AssetTypeRegistration? registration
@@ -69,15 +49,8 @@ internal sealed class AssetTypeRegistry
         return _registrations.TryGetValue(assetType, out registration);
     }
 
-    /// <summary>
-    /// Gets the registration for an asset type.
-    /// </summary>
-    /// <param name="assetType">The CLR asset type to look up.</param>
-    /// <returns>The matching registration.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
-    /// <exception cref="NotSupportedException">
-    /// The type is not registered for loading.
-    /// </exception>
+    /// <summary>Gets the registration for an asset type.</summary>
+    /// <exception cref="NotSupportedException">The type is not registered.</exception>
     internal AssetTypeRegistration Get(Type assetType)
     {
         if (TryGet(assetType, out AssetTypeRegistration? registration))

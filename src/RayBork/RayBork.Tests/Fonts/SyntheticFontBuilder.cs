@@ -29,16 +29,8 @@ internal readonly struct SyntheticTableRecord
     internal int Length { get; }
 }
 
-/// <summary>
-/// Builds deterministic, structurally valid sfnt faces for the font parser tests.
-/// </summary>
-/// <remarks>
-/// The builder writes the offset table and a sorted table directory, the required
-/// <c>head</c>/<c>maxp</c>/<c>hhea</c>/<c>hmtx</c>/<c>cmap</c> tables, <c>loca</c>/<c>glyf</c> for
-/// TrueType faces, and optional <c>kern</c> and <c>GPOS</c> tables. Checksums are zero because the
-/// parser does not validate them. Tests mutate the returned bytes through
-/// <see cref="FindTable"/> for the corrupt-input cases.
-/// </remarks>
+/// <summary>Builds deterministic, structurally valid sfnt faces for font parser tests.</summary>
+/// <remarks>Checksums are zero because the parser does not validate them.</remarks>
 internal sealed class SyntheticFontBuilder
 {
     private const int HEAD_LENGTH = 54;

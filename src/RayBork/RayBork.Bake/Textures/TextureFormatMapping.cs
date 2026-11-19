@@ -1,23 +1,13 @@
 namespace RayBork.Bake.Textures;
 
-/// <summary>
-/// Maps the channel and compression choice to the concrete texture format.
-/// </summary>
+/// <summary>Maps the channel and compression choice to the concrete texture format.</summary>
 /// <remarks>
-/// <see cref="TextureChannelType.Rgba"/> is authored color and uses the sRGB transfer function unless
-/// the caller asks for linear storage; <see cref="TextureChannelType.Rgb"/>,
-/// <see cref="TextureChannelType.Rg"/>, and <see cref="TextureChannelType.R"/> are linear data
-/// layouts. RayBork has no uncompressed two-channel format, so <see cref="TextureChannelType.Rg"/>
-/// always maps to BC5.
+/// <see cref="TextureChannelType.Rgba"/> uses sRGB storage unless linear is requested; the other
+/// channel types are linear. <see cref="TextureChannelType.Rg"/> always maps to BC5.
 /// </remarks>
 internal static class TextureFormatMapping
 {
     /// <summary>Maps a channel type and compression mode to the concrete format.</summary>
-    /// <param name="channelType">The channel type.</param>
-    /// <param name="compression">The compression mode.</param>
-    /// <param name="isSrgb">Whether an <see cref="TextureChannelType.Rgba"/> texture is sRGB.</param>
-    /// <returns>The concrete format.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A value is not a defined enum member.</exception>
     internal static TextureFormat Map(
         TextureChannelType channelType,
         TextureCompression compression,
@@ -51,9 +41,6 @@ internal static class TextureFormatMapping
     }
 
     /// <summary>Gets whether both values are defined enum members.</summary>
-    /// <param name="channelType">The channel type.</param>
-    /// <param name="compression">The compression mode.</param>
-    /// <returns><see langword="true"/> when both values are defined.</returns>
     internal static bool IsDefined(
         TextureChannelType channelType,
         TextureCompression compression

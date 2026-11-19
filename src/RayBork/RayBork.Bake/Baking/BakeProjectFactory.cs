@@ -6,18 +6,10 @@ using RayBork.Bake.Processors;
 
 namespace RayBork.Bake.Baking;
 
-/// <summary>
-/// Validates a builder-side <see cref="BakeProjectDefinition"/> into the immutable project the pipeline
-/// consumes.
-/// </summary>
+/// <summary>Validates the builder configuration into the immutable project.</summary>
 internal static class BakeProjectFactory
 {
     /// <summary>Validates a definition and creates the project.</summary>
-    /// <param name="definition">The builder-side configuration.</param>
-    /// <param name="projectRootOverride">The command-line project root, or <see langword="null"/>.</param>
-    /// <param name="diagnostics">The diagnostic bag.</param>
-    /// <param name="project">The created project, when successful.</param>
-    /// <returns><see langword="true"/> when the configuration is valid.</returns>
     internal static bool TryCreate(
         BakeProjectDefinition definition,
         string? projectRootOverride,

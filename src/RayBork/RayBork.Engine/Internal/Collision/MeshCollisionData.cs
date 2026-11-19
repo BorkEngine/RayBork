@@ -6,23 +6,12 @@ namespace RayBork.Internal;
 /// The immutable mesh-space triangle BVH that accelerates ray/mesh collision queries.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="MeshCollisionBuilder"/> creates one instance per mesh from a geometry snapshot. The
-/// node array is a full binary tree: node zero is the root, a leaf stores a range of the triangle-id
-/// array, and an internal node stores the adjacent indices of its two children. The triangle ids are
-/// canonical triangle positions: a triangle list counts groups of three indices, and a triangle strip
-/// counts the sliding windows whose first two indices are swapped on odd ids.
-/// </para>
-/// <para>
-/// An instance is immutable after construction. Queries allocate nothing beyond a <c>stackalloc</c>
-/// traversal stack, take no locks, and are safe to call from any thread. The builder and the
-/// packed-payload decoder are the only producers; the constructor validates every array so a corrupt
-/// decoded payload is rejected with <see cref="ArgumentException"/> before a query can see it.
-/// </para>
+/// Node zero roots a full binary tree; a leaf stores a triangle-id range and an internal node the
+/// adjacent child indices. The structure is immutable and its queries are allocation-free.
 /// </remarks>
 internal sealed class MeshCollisionData
 {
-    /// <summary>The deepest node level the builder creates; every node at this depth is a leaf.</summary>
+    /// <summary>The deepest node level; every node at this depth is a leaf.</summary>
     internal const int MAX_DEPTH = 64;
 
     private const int TRAVERSAL_STACK_CAPACITY = 2 * (MAX_DEPTH + 1);
@@ -33,20 +22,12 @@ internal sealed class MeshCollisionData
     private readonly int _triangleCount;
 
     /// <summary>
-    /// Initializes one collision structure from freshly built arrays. The constructor takes ownership
-    /// of <paramref name="nodes"/> and <paramref name="triangleIds"/> without copying them.
+    /// Initializes one structure from the given arrays and takes ownership without copying.
     /// </summary>
-    /// <param name="nodes">The binary tree in breadth-independent build order; node zero is the root.</param>
-    /// <param name="triangleIds">The canonical triangle ids in leaf range order.</param>
-    /// <param name="topology">The triangle topology that describes the mesh indices.</param>
-    /// <param name="triangleCount">
-    /// The canonical triangle count, including degenerate triangles that the builder omitted.
-    /// </param>
     /// <exception cref="ArgumentNullException">An array is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">
-    /// The topology is not a triangle topology, the tree shape is inconsistent, an index is out of
-    /// range, a triangle id is outside the canonical range, a node is deeper than
-    /// <see cref="MAX_DEPTH"/>, or a bound is non-finite or inverted.
+    /// The topology is not triangular, the tree is inconsistent or too deep, an index or triangle
+    /// id is out of range, or a bound is non-finite or inverted.
     /// </exception>
     internal MeshCollisionData(
         MeshCollisionNode[] nodes,
@@ -138,30 +119,27 @@ internal sealed class MeshCollisionData
         _triangleCount = triangleCount;
     }
 
-    /// <summary>Gets the nodes of the binary tree; node zero is the root.</summary>
+    /// <summary>The binary tree nodes; node zero is the root.</summary>
     internal ReadOnlySpan<MeshCollisionNode> Nodes => _nodes;
 
-    /// <summary>Gets the canonical triangle ids in leaf range order.</summary>
+    /// <summary>The canonical triangle ids in leaf range order.</summary>
     internal ReadOnlySpan<int> TriangleIds => _triangleIds;
 
-    /// <summary>Gets the triangle topology of the mesh that produced the structure.</summary>
+    /// <summary>The triangle topology of the mesh that produced the structure.</summary>
     internal PrimitiveTopology Topology => _topology;
 
     /// <summary>
-    /// Gets the canonical triangle count, including degenerate triangles that the builder omitted
-    /// from the tree.
+    /// The canonical triangle count, including degenerate triangles the builder omitted.
     /// </summary>
     internal int TriangleCount => _triangleCount;
 
-    /// <summary>Gets the mesh-space bounds of the root node.</summary>
+    /// <summary>The mesh-space bounds of the root node.</summary>
     internal BoundingBox Bounds => _nodes[0].Bounds;
 
     /// <summary>
-    /// Gets the canonical triangle count that an index list of the given topology describes.
+    /// The canonical triangle count for an index list, including degenerate triangles; zero for
+    /// other topologies.
     /// </summary>
-    /// <param name="topology">The primitive topology.</param>
-    /// <param name="indexCount">The number of 32-bit indices.</param>
-    /// <returns>The number of triangle windows, including degenerate triangles; zero for a non-triangle topology.</returns>
     internal static int GetTriangleCount(PrimitiveTopology topology, int indexCount) =>
         topology switch
         {
@@ -171,19 +149,10 @@ internal sealed class MeshCollisionData
         };
 
     /// <summary>
-    /// Gets the three vertex indices of one canonical triangle. A triangle strip swaps the first two
-    /// indices on an odd triangle id, matching the builder and the brute-force query.
+    /// Gets the three vertex indices of one canonical triangle; a strip swaps the first two on an
+    /// odd id.
     /// </summary>
-    /// <param name="topology">The primitive topology.</param>
-    /// <param name="indices">The mesh's 32-bit indices.</param>
-    /// <param name="triangleId">The canonical triangle position.</param>
-    /// <param name="index0">The first vertex index.</param>
-    /// <param name="index1">The second vertex index.</param>
-    /// <param name="index2">The third vertex index.</param>
-    /// <returns>
-    /// <c>true</c> when <paramref name="triangleId"/> describes a whole triangle in
-    /// <paramref name="indices"/>; otherwise <c>false</c>.
-    /// </returns>
+    /// <returns><c>true</c> when <paramref name="triangleId"/> is a whole triangle.</returns>
     internal static bool TryGetTriangleIndices(
         PrimitiveTopology topology,
         ReadOnlySpan<uint> indices,
@@ -238,20 +207,9 @@ internal sealed class MeshCollisionData
     }
 
     /// <summary>
-    /// Finds the nearest triangle of the structure that a mesh-space ray hits.
+    /// Finds the nearest triangle a mesh-space ray hits; a miss reports -1 and zero distance, and
+    /// ties keep the lowest canonical triangle id.
     /// </summary>
-    /// <param name="meshRay">The ray in mesh space.</param>
-    /// <param name="vertices">The mesh vertices.</param>
-    /// <param name="indices">The mesh's 32-bit indices.</param>
-    /// <param name="triangleId">The canonical id of the nearest triangle, or -1 on a miss.</param>
-    /// <param name="distance">The mesh-space ray parameter of the nearest hit, or zero on a miss.</param>
-    /// <returns><c>true</c> when the ray hits a triangle; otherwise <c>false</c>.</returns>
-    /// <remarks>
-    /// The traversal visits the nearer child first and stops descending into a node whose entry is
-    /// farther than the best hit found so far. A miss or a non-finite ray allocates no managed memory
-    /// and returns <c>false</c>. Ties keep the lowest canonical triangle id, matching the brute-force
-    /// scan order.
-    /// </remarks>
     internal bool TryFindNearest(
         Ray meshRay,
         ReadOnlySpan<Vertex> vertices,
@@ -262,15 +220,7 @@ internal sealed class MeshCollisionData
 
     /// <summary>
     /// Finds the nearest triangle and reports how many triangle intersections the traversal tested.
-    /// The count exists for deterministic test assertions; normal callers use the shorter overload.
     /// </summary>
-    /// <param name="meshRay">The ray in mesh space.</param>
-    /// <param name="vertices">The mesh vertices.</param>
-    /// <param name="indices">The mesh's 32-bit indices.</param>
-    /// <param name="triangleId">The canonical id of the nearest triangle, or -1 on a miss.</param>
-    /// <param name="distance">The mesh-space ray parameter of the nearest hit, or zero on a miss.</param>
-    /// <param name="triangleTests">The number of triangle intersections the traversal tested.</param>
-    /// <returns><c>true</c> when the ray hits a triangle; otherwise <c>false</c>.</returns>
     internal bool TryFindNearest(
         Ray meshRay,
         ReadOnlySpan<Vertex> vertices,

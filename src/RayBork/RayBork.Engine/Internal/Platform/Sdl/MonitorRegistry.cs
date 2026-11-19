@@ -1,9 +1,6 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// One display snapshot supplied by the platform. <see cref="DisplayId"/> is the SDL3 display id
-/// used to keep the public index stable.
-/// </summary>
+/// <summary>One display snapshot supplied by the platform.</summary>
 internal readonly record struct MonitorInfo(
     uint DisplayId,
     string Name,
@@ -13,17 +10,10 @@ internal readonly record struct MonitorInfo(
     int RefreshRate
 );
 
-/// <summary>
-/// Assigns stable process-lifetime monitor indices to SDL3 display ids and keeps the current
-/// snapshot of the connected monitors.
-/// </summary>
+/// <summary>Keeps the connected monitor snapshot with stable process-lifetime indices.</summary>
 /// <remarks>
-/// An index is allocated the first time a display id is seen and is never reused: removing a display
-/// removes it from <see cref="Monitors"/> but keeps its index reserved, so a reconnected display gets
-/// its old index back. The snapshot arrays are replaced, never mutated, so a caller may hold one
-/// across a refresh. The registry is main-thread only and its instance state is not synchronized;
-/// <see cref="ContainsMonitorIndex"/> is the pure exception because it reads only a caller-supplied
-/// snapshot and holds no registry state.
+/// Indices are allocated once and never reused; snapshot arrays are replaced, never mutated. The
+/// registry is main-thread only.
 /// </remarks>
 internal sealed class MonitorRegistry
 {
@@ -35,25 +25,16 @@ internal sealed class MonitorRegistry
     private uint _primaryDisplayId;
     private int _nextIndex;
 
-    /// <summary>
-    /// Gets the snapped monitors ordered by their stable index.
-    /// </summary>
+    /// <summary>Gets the snapshot of monitors ordered by stable index.</summary>
     internal IReadOnlyList<Monitor> Monitors => _monitors;
 
-    /// <summary>
-    /// Gets the number of connected monitors.
-    /// </summary>
+    /// <summary>Gets the number of connected monitors.</summary>
     internal int Count => _monitors.Length;
 
-    /// <summary>
-    /// Gets the SDL3 display id reported as primary by the platform.
-    /// </summary>
+    /// <summary>Gets the SDL3 display id reported as primary.</summary>
     internal uint PrimaryDisplayId => _primaryDisplayId;
 
-    /// <summary>
-    /// Replaces the monitor snapshot, allocating stable indices for display ids that were not seen
-    /// before.
-    /// </summary>
+    /// <summary>Replaces the snapshot and allocates indices for new display ids.</summary>
     internal void Update(IReadOnlyList<MonitorInfo> monitors, uint primaryDisplayId)
     {
         ArgumentNullException.ThrowIfNull(monitors);
@@ -102,10 +83,7 @@ internal sealed class MonitorRegistry
         _monitors = next;
     }
 
-    /// <summary>
-    /// Gets the monitor for a display id, falling back to the primary monitor and then the first
-    /// connected monitor.
-    /// </summary>
+    /// <summary>Gets a monitor by display id, falling back to primary then first.</summary>
     internal Monitor GetCurrent(uint displayId)
     {
         if (displayId != 0 && _byDisplayId.TryGetValue(displayId, out Monitor monitor))
@@ -123,13 +101,8 @@ internal sealed class MonitorRegistry
             : new Monitor(0, string.Empty, default, default, DEFAULT_DPI_SCALE, 0);
     }
 
-    /// <summary>
-    /// Gets whether a monitor snapshot contains a stable monitor index. Pure snapshot helper: it
-    /// reads only <paramref name="monitors"/> and holds no registry state, so a caller that owns the
-    /// snapshot may invoke it from any thread. An index is absent when its display was removed, and
-    /// stable indices can have gaps, so the snapshot count is not a valid upper bound for a monitor
-    /// index.
-    /// </summary>
+    /// <summary>Gets whether a snapshot contains a stable index; any-thread helper.</summary>
+    /// <remarks>Indices can have gaps, so the snapshot count is not an upper bound.</remarks>
     internal static bool ContainsMonitorIndex(IReadOnlyList<Monitor> monitors, int monitorIndex)
     {
         ArgumentNullException.ThrowIfNull(monitors);
@@ -144,9 +117,7 @@ internal sealed class MonitorRegistry
         return false;
     }
 
-    /// <summary>
-    /// Looks up the SDL3 display id for a stable monitor index.
-    /// </summary>
+    /// <summary>Looks up the SDL3 display id for a stable monitor index.</summary>
     internal bool TryGetDisplayId(int monitorIndex, out uint displayId)
     {
         foreach (KeyValuePair<uint, Monitor> pair in _byDisplayId)

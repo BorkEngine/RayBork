@@ -4,50 +4,13 @@ using Microsoft.Extensions.Logging;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The app's runtime asset catalog: it mounts the built-in pack and the configured user packs,
-/// resolves the visible entry for a path, and loads engine assets and registered values on one
-/// dedicated loader thread.
+/// The runtime asset catalog that mounts packs, resolves visible entries, and loads assets on one
+/// loader thread.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Mounting is atomic and happens in <see cref="Start"/>: the built-in pack is opened first, then the
-/// user packs in call order, and the visible stack is published only after every pack validated.
-/// Later packs shadow earlier packs for the same canonical path. A failed mount disposes the packs it
-/// opened, starts no loader thread, and throws <see cref="AssetPackException"/>.
-/// </para>
-/// <para>
-/// <see cref="Load{T}"/>, <see cref="LoadData"/>, and <see cref="Exists"/> are thread-safe. Engine
-/// assets are cached by <c>(canonical path, engine asset type)</c>, coalesced while the first load is
-/// in flight, and reference-counted. The shared load uses the catalog stop token, never a caller
-/// token, so one canceled waiter leaves the other waiters and the created resource intact. When every
-/// waiter cancels before acquiring a reference the created asset is destroyed and removed from the
-/// cache. Every other registered type is loaded by an <see cref="IAssetLoader{T}"/> and returned as a
-/// fresh caller-owned value; custom values and <see cref="LoadData"/> payloads are never cached.
-/// <see cref="Shader"/> and <see cref="Model"/> are registered loaders, not catalog special cases:
-/// <c>Load&lt;Shader&gt;</c> resolves the cached internal <see cref="ShaderProgram"/> and returns a
-/// new material over it for every call, and <c>Load&lt;Model&gt;</c> resolves the shared cached part
-/// meshes and programs and returns a new model wrapper with its own materials per call.
-/// </para>
-/// <para>
-/// The loader thread only reads and decompresses pack payloads, runs the synchronous part of the
-/// registered loaders, and starts GPU uploads; it never calls SDL, Vulkan, or a tick-thread API and
-/// never waits for a GPU copy. An engine load is deferred: while its upload is in flight the loader
-/// keeps serving the next queued request, so custom data and <see cref="LoadData"/> do not wait behind
-/// a GPU upload. A registered loader must not block: a nested load it requests through its
-/// <see cref="AssetLoadContext"/> is queued on the same loader thread. <see cref="Stop"/> cancels and
-/// joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>, forces every
-/// cached asset to dispose, and releases the pack mappings. It runs before the frame ring completes so
-/// the render thread can still service the queued GPU destructions.
-/// </para>
-/// <para>
-/// The catalog also owns the app's <see cref="ProceduralAssetService"/>, the app-lifetime
-/// <see cref="GlyphGenerationService"/>, and the <see cref="IGlyphTextureFactory"/> over the
-/// procedural bridge. A <see cref="Font"/> is a CPU-only engine asset: its decode parses the face and
-/// creates a glyph pipeline, but it queues no GPU upload and its glyph textures are created on demand
-/// later. Procedural assets are never cached or resolved by this catalog; the service only borrows the
-/// same GPU upload bridge. The reserved <c>_procedural</c> path prefix is reported as missing instead
-/// of resolving a pack entry.
-/// </para>
+/// Mounting is atomic and later packs shadow earlier ones on the same canonical path.
+/// Engine assets are cached by canonical path and type, coalesced, and reference-counted; other
+/// values are caller-owned and never cached.
 /// </remarks>
 internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
 {
@@ -57,10 +20,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     /// <summary>The logger category for catalog diagnostics.</summary>
     internal const string LOGGER_CATEGORY = "RayBork.Asset";
 
-    /// <summary>
-    /// The maximum number of queued or in-flight loader requests. The bound is a backstop against a
-    /// stopped loader, not a normal concurrency limit.
-    /// </summary>
+    /// <summary>The queued/in-flight request bound, a backstop against a stopped loader.</summary>
     internal const int MAX_PENDING_LOADS = 2048;
 
     private const string BUILT_IN_DISPLAY_PATH = "<built-in>";
@@ -88,18 +48,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     private bool _stopRequested;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a catalog without mounting any pack.
-    /// </summary>
-    /// <param name="loggerFactory">The app logger factory.</param>
-    /// <param name="bridge">The GPU asset bridge serviced by the render loop.</param>
-    /// <param name="builtInPack">The built-in pack bytes; empty means the built-in pack has no entries.</param>
-    /// <param name="userPackPaths">
-    /// The user pack paths in mount order. Relative paths resolve against
-    /// <see cref="AppContext.BaseDirectory"/> when the catalog starts.
-    /// </param>
-    /// <param name="assetTypes">The user asset type registrations; the built-in registrations are added by the catalog.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <summary>Creates a catalog without mounting a pack.</summary>
+    /// <remarks>
+    /// Empty built-in bytes add no entry; relative user pack paths resolve against
+    /// <see cref="AppContext.BaseDirectory"/> at start.
+    /// </remarks>
     internal AssetCatalog(
         ILoggerFactory loggerFactory,
         GpuAssetBridge bridge,
@@ -124,9 +77,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
         _registry = new AssetTypeRegistry([.. BuiltInAssetLoaders.CreateDefault(), .. assetTypes]);
     }
 
-    /// <summary>
-    /// Gets the loader thread, or <see langword="null"/> before <see cref="Start"/> and after it failed.
-    /// </summary>
+    /// <summary>Gets the loader thread, or <see langword="null"/> until started.</summary>
     internal Thread? LoaderThread
     {
         get
@@ -139,16 +90,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// The service shares the app's GPU upload bridge but never enters this catalog's cache, so a
-    /// procedural asset cannot shadow or be shadowed by a pack path.
-    /// </remarks>
+    /// <remarks>The service uses the app's upload bridge but never the catalog cache.</remarks>
     ProceduralAssetService IProceduralAssetProvider.ProceduralAssets => _proceduralAssets;
 
-    /// <summary>
-    /// Gets the app-lifetime glyph generation service. The catalog starts it with the loader and stops
-    /// it before the procedural asset service during shutdown.
-    /// </summary>
+    /// <summary>Gets the app-lifetime glyph generation service.</summary>
     internal GlyphGenerationService GlyphService => _glyphService;
 
     /// <inheritdoc/>
@@ -164,23 +109,15 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Path and type validation happen synchronously; pack lookup, descriptor decoding, and the GPU
-    /// upload complete asynchronously on the loader thread.
+    /// Path and type validation throw synchronously; loading runs on the loader thread.
     /// </remarks>
     public Task<T> Load<T>(string path, CancellationToken cancellationToken = default) =>
         LoadCore<T>(path, chain: null, cancellationToken);
 
     /// <summary>
-    /// Normalizes the path, resolves the registered strategy for <typeparamref name="T"/>, and starts
-    /// the load. A nested load carries the chain that requested it.
+    /// Resolves the registration for <typeparamref name="T"/> and starts the load.
     /// </summary>
-    /// <typeparam name="T">The requested asset type.</typeparam>
-    /// <param name="path">The caller-supplied path.</param>
-    /// <param name="chain">
-    /// The chain of loads that requested this load, or <see langword="null"/> for a top-level load.
-    /// </param>
-    /// <param name="cancellationToken">The caller cancellation token.</param>
-    /// <returns>The load task.</returns>
+    /// <remarks>A nested load carries the chain that requested it.</remarks>
     internal Task<T> LoadCore<T>(string path, LoadChain? chain, CancellationToken cancellationToken)
     {
         string canonical = AssetPath.Normalize(path);
@@ -236,19 +173,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     }
 
     /// <summary>
-    /// Mounts the built-in pack and every configured user pack, starts the glyph generation service,
-    /// publishes the visible stack, and starts the loader thread.
+    /// Mounts every pack, publishes the visible stack, and starts the loader thread.
     /// </summary>
-    /// <remarks>
-    /// The glyph generation service starts before the loader thread, so a font loaded from
-    /// <see cref="IGame.Setup"/> can enqueue glyph generation. A failed mount starts neither thread.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">The catalog was already started.</exception>
-    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
-    /// <exception cref="AssetPackException">
-    /// A pack is missing, unreadable, truncated, has an unsupported format, or has an invalid index.
-    /// The catalog leaves no pack mounted and starts no loader thread.
-    /// </exception>
+    /// <remarks>A failed mount leaves no pack mounted and starts no thread.</remarks>
     internal void Start()
     {
         lock (_gate)
@@ -336,16 +263,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     }
 
     /// <summary>
-    /// Stops the glyph generation service and the loader, fails every pending load, releases every
-    /// cached engine asset, and disposes the mounted packs. Idempotent. Runs before the frame ring
-    /// completes so the render thread still services the queued GPU destructions.
+    /// Stops the loader and glyph service, fails pending loads, releases cached assets and packs.
+    /// Idempotent.
     /// </summary>
-    /// <remarks>
-    /// The glyph generation service stops before the procedural asset service and before the cached
-    /// assets are force-disposed: its font thread must not still be generating for a pipeline the
-    /// catalog is about to dispose. The render thread still services the GPU upload bridge at this
-    /// point, so an in-flight glyph upload completes or observes the stop token.
-    /// </remarks>
     /// <exception cref="InvalidOperationException">Called on the loader thread.</exception>
     internal void Stop()
     {
@@ -662,16 +582,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
     }
 
     /// <summary>
-    /// Decodes one engine asset on the loader thread, starts its GPU upload when the format has one, and
-    /// constructs the public asset when the upload completes or immediately for a CPU-only asset.
+    /// Decodes one engine asset, starts its upload, and constructs the public asset.
     /// </summary>
     /// <remarks>
-    /// The method returns an incomplete task while a GPU copy runs, so the loader can serve the next
-    /// queued request. A format may decode without an upload; <see cref="Font"/> is CPU-only, so its
-    /// load skips the bridge entirely. The upload uses the catalog stop token, never a caller token, so
-    /// one canceled waiter never cancels the shared load. A stop or a failure removes the pending cache
-    /// entry, runs the format's CPU-only release exactly once, and destroys the just-created GPU
-    /// resource before the task faults.
+    /// Returns an incomplete task while a GPU copy runs, so the loader serves the next request. It
+    /// uses the catalog stop token; a failure removes the entry and releases decoded state.
     /// </remarks>
     private async Task<object> LoadEngineObjectAsync<T>(
         EngineCacheEntry entry,
@@ -887,14 +802,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
         return AwaitWorkAsync<T>(workItem, cancellationToken);
     }
 
-    /// <summary>
-    /// Loads one registered value asset on the loader thread through its loader.
-    /// </summary>
+    /// <summary>Loads one registered value on the loader thread.</summary>
     /// <remarks>
-    /// The caller token is linked to the catalog stop token for the duration of the load. Stop
-    /// cancellation is reported as <see cref="ObjectDisposedException"/>, while caller cancellation
-    /// stays an <see cref="OperationCanceledException"/> so the work item completes as canceled
-    /// instead of faulted.
+    /// Stop cancellation surfaces as <see cref="ObjectDisposedException"/>; caller cancellation
+    /// stays an <see cref="OperationCanceledException"/>.
     /// </remarks>
     private async Task<object> LoadCustomObjectAsync<T>(
         VisibleAsset descriptorEntry,
@@ -1034,11 +945,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
 
     private readonly record struct AssetKey(string Path, Type AssetType);
 
-    /// <summary>
-    /// One cached engine asset, its pending coalesced load, and its owner-reference bookkeeping. A
-    /// successful commit acquires one owner reference per waiter registered at that moment, so a waiter
-    /// that disposes immediately cannot invalidate the object another waiter is about to receive.
-    /// </summary>
+    /// <summary>One cached engine asset, its coalesced load, and its owner references.</summary>
     private sealed class EngineCacheEntry
     {
         internal EngineCacheEntry(AssetKey key) => Key = key;
@@ -1058,14 +965,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider
         internal bool Disposed;
     }
 
-    /// <summary>
-    /// One queued loader request. The completion task never runs user code inline on the loader thread.
-    /// </summary>
+    /// <summary>One queued loader request; its completion never runs user code inline.</summary>
     /// <remarks>
     /// The work returns a task so a GPU upload can stay pending while the loader dequeues the next
-    /// request. A completed work task completes the item inline; an incomplete one stays in the
-    /// catalog's pending set until its continuation completes the item and removes it. That keeps the
-    /// queue bound and <see cref="Stop"/> correct for deferred loads while the loader thread continues.
+    /// request; an incomplete item stays pending until its continuation removes it.
     /// </remarks>
     private sealed class AssetLoaderWorkItem
     {

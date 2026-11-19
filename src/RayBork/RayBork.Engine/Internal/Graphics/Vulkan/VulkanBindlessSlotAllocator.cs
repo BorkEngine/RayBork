@@ -1,24 +1,17 @@
 namespace RayBork.Internal;
 
-/// <summary>
-/// The pure slot allocator behind <see cref="VulkanBindlessTextureTable"/>.
-/// </summary>
+/// <summary>The pure slot allocator behind <see cref="VulkanBindlessTextureTable"/>.</summary>
 /// <remarks>
-/// Slot 0 is reserved for the renderer's white fallback texture and is always live once
-/// <see cref="ReserveWhiteSlot"/> runs. Allocations take the lowest free slot so a frame's indices
-/// are deterministic. The allocator owns no GPU object and is not thread-safe; the render thread
-/// calls it while it services texture uploads and destructions.
+/// Slot 0 is reserved for the white fallback and allocations take the lowest free slot. The render
+/// thread owns it and it is not thread-safe.
 /// </remarks>
 internal sealed class VulkanBindlessSlotAllocator
 {
     private readonly bool[] _used;
     private int _liveCount;
 
-    /// <summary>
-    /// Initializes an allocator with a fixed capacity.
-    /// </summary>
-    /// <param name="capacity">The number of slots, including the reserved white slot.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is zero.</exception>
+    /// <summary>Initializes an allocator with a fixed capacity, including the white slot.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Invalid capacity.</exception>
     internal VulkanBindlessSlotAllocator(uint capacity)
     {
         ArgumentOutOfRangeException.ThrowIfZero(capacity);
@@ -40,9 +33,7 @@ internal sealed class VulkanBindlessSlotAllocator
     /// <summary>Gets the number of live slots, including the reserved white slot.</summary>
     internal int LiveCount => _liveCount;
 
-    /// <summary>
-    /// Reserves slot 0 for the renderer's white fallback texture. Idempotent.
-    /// </summary>
+    /// <summary>Reserves slot 0 for the white fallback. The call is idempotent.</summary>
     internal void ReserveWhiteSlot()
     {
         if (_used[0])
@@ -54,9 +45,7 @@ internal sealed class VulkanBindlessSlotAllocator
         _liveCount++;
     }
 
-    /// <summary>
-    /// Tries to allocate the lowest free texture slot.
-    /// </summary>
+    /// <summary>Tries to allocate the lowest free slot above slot 0.</summary>
     /// <param name="slot">The allocated slot, or <c>0</c> when the table is full.</param>
     /// <returns><see langword="true"/> when a slot was allocated.</returns>
     internal bool TryAllocate(out uint slot)
@@ -78,11 +67,8 @@ internal sealed class VulkanBindlessSlotAllocator
         return false;
     }
 
-    /// <summary>
-    /// Releases one texture slot. Releasing the white slot, an out-of-range slot, or an unused slot is
-    /// a no-op.
-    /// </summary>
-    /// <param name="slot">The slot to release.</param>
+    /// <summary>Releases one slot.</summary>
+    /// <remarks>The white slot, an unused slot, or an out-of-range slot is ignored.</remarks>
     internal void Release(uint slot)
     {
         if (slot == 0 || slot >= (uint)_used.Length || !_used[slot])
@@ -94,9 +80,7 @@ internal sealed class VulkanBindlessSlotAllocator
         _liveCount--;
     }
 
-    /// <summary>
-    /// Releases every slot including the white slot. Used before a device recreation.
-    /// </summary>
+    /// <summary>Releases every slot, including the white slot, before a device recreation.</summary>
     internal void Reset()
     {
         Array.Clear(_used);
